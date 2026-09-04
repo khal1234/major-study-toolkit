@@ -1,0 +1,6 @@
+# 표준 라이브러리 외에 실제로 import되는 서드파티 패키지만 적는다(전수 확인은 안 됨 — grep 기반).
+# 버전은 고정하지 않았다 — 필요하면 각자 환경에서 잠근다.
+
+PyMuPDF        # import fitz — PDF 렌더링(extract_textbook.py 등)
+pdfplumber     # 교재 PDF 텍스트 추출
+fonttools[woff]  # 웹폰트 서브셋 생성(font_subset.py)

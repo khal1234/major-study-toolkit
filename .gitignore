@@ -1,0 +1,146 @@
+# 저작권·원본 자료: 저장소와 배포에 절대 포함하지 않는다.
+**/*.pdf
+**/*.epub
+**/*.mobi
+/raw_data/
+/raw-data/
+/교재/
+/Cengel/
+/Moran/
+
+# 교재 추출물(pdftotext 산출물)도 원문이다 — 절대 커밋 금지.
+# 원칙은 리포 밖 임시 폴더에서 작업하는 것이고, 이건 실수를 막는 안전망이다.
+*_raw.txt
+*-raw.txt
+*.extract.txt
+/extract/
+/추출/
+# ★ 2026-07-20 실측: 위 5개 패턴은 실제로 쓰는 파일명과 하나도 안 맞았다.
+#   (cengel_ch1.txt · moran_probs.txt · ch3_twocol.txt 등이 전부 통과했다.)
+#   AGENTS.md는 "교재 추출물은 .gitignore로 막힌다"고 적어놨는데 PDF만 막혀 있었다.
+cengel_*.txt
+moran_*.txt
+*_twocol.txt
+*_scan.txt
+*_probs.txt
+# data/ 아래는 .json·.md만 있으면 된다 — 추출 텍스트가 흘러들어올 유일한 착지점이라 통째로 막는다.
+data/**/*.txt
+
+# 자격 증명·개인 설정
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*
+*secret*
+*token*
+
+# 에이전트/도구별 개인 메모리와 로컬 상태
+# .claude 전체를 무시하면 guard 훅·공유 설정이 버전관리 밖이라 worktree/다른 세션에
+# 전파되지 않는다(2026-07-25). 훅·공유 설정·launch는 추적하고, 로컬 전용만 무시한다.
+# 이 규칙이면 `.claude/SUBJECT.md`도 무시 대상이 아니라 그대로 추적된다(main에는 올리지 않는다 —
+# sync_common의 NEVER_SYNC가 스테이징에서 뺀다).
+/.claude/settings.local.json
+/.claude/hooks/__pycache__/
+/.claude/**/__pycache__/
+# 훅의 세션 로컬 상태(편집 횟수·거부 로그·로드 이력·트레이스). `.claude/hooks`가 sync_common의
+# SYNC_PATHS라 무시하지 않으면 한 세션의 상태가 main을 거쳐 **전 과목에 퍼진다**.
+#
+# ★ 열거하지 않고 dot 접두 전체를 무시한다 (2026-07-28, 세 번째 누수 뒤 뒤집음).
+#   `.edit_counts.json` → `.*.state.json` → `.*.log` 로 **파일이 샐 때마다 패턴을 하나씩 덧댔고**,
+#   그때마다 다음 훅이 만든 파일(`.denials.json`)이 또 샜다. 원인은 빠뜨린 게 아니라
+#   **열거(denylist)라 새 파일이 기본 추적**이라는 구조다. 추적해야 할 훅 파일은 전부 `*.py`라
+#   dot 으로 시작하지 않으므로, 기본값을 안전한 쪽으로 뒤집는 것이 맞다.
+#   기계 잠금: test_checks.py::test_permission_event_hooks 가 훅들이 실제로 쓰는 경로를
+#   모듈 상수에서 읽어 `git check-ignore` 로 대조한다 — 새 훅이 로그를 추가해도 걸린다.
+/.claude/hooks/.*
+# 루프 재예약 감시의 깃발(tools/wakeup_guard.py). 갈래마다 따로 켜고 끄는 **세션 로컬 상태**라
+# 커밋하면 한 워크트리의 «루프 중» 이 merge 를 타고 전 과목으로 퍼진다.
+# ★ 2026-08-26 실측: 옛 이름(`.claude/shutdown-timer.json`)은 독스트링이 «.gitignore 안» 이라고
+#   적어 놓고도 **어느 패턴에도 안 걸렸다**(`git check-ignore` exit 1). 위 dot 규칙은
+#   `.claude/hooks/` 아래만 덮는데 이 깃발은 `.claude/` 바로 아래라서다 — 이름을 옮기면서 닫는다.
+/.claude/wakeup-guard.json
+/.codex/
+/.codex-audit/
+/.agents/
+/review-artifacts/
+
+# 빌드 산출물은 Netlify에서 재생성한다.
+# ★ 이 파일은 공통이다(sync_common의 SYNC_PATHS). 그래서 **모든 과목**을 여기 나열한다 —
+#   브랜치마다 자기 과목만 적으면 새 과목이 생길 때 그 브랜치에서만 통과하고 나머지는
+#   등록 검사(test_subject_registration_is_complete)에서 깨진다(2026-07-28 dynamics 실측).
+#   과목을 추가하면 guard_bash.SUBJECT_BY_BRANCH·build_site.SUBJECT_CONFIG·
+#   serve_site.vbs 와 함께 여기도 한 줄 추가할 것 — 그 검사가 네 곳을 한꺼번에 본다.
+/site/열역학/
+/site/공학수학 1/
+/site/동역학/
+/site/기계재료/
+/site/고체역학/
+/site/기계공작법/
+/site/유체역학/
+/site/응용열역학/
+/site/응용고체역학/
+/site/전기전자공학기초 및 실험/
+/site/공학수학 2/
+/site/행복한 삶과 가족/
+# ★ 홈도 **빌드 산출물**이다 (2026-08-15). `render.build_home` 이 만드는데 추적되고 있어서,
+#   빌드를 돌릴 때마다 «수정됨» 으로 뜨고 갈래마다 다른 내용이 커밋됐다. 실제로 걸린 자리:
+#   `verify_all` 이 일곱 갈래를 처음 빌드하자 전부 더러워져 `--merge-all` 이 건너뛰었다.
+#   배포 번들의 홈은 `deploy_all` 이 따로 만든다 — 이 파일은 **로컬 전용**이다.
+/site/index.html
+# 전 과목이 공유하는 뷰어 자산(viewer.<해시>.css|js) — 템플릿에서 빌드가 뽑아 쓴다.
+# **과목이 아니다.** 위 목록은 과목마다 한 줄인데 이건 하나뿐이라, 과목을 추가해도 여기는 안 는다.
+/site/_assets/
+/site/기계요소설계/
+/site/시스템제어/
+/site/계측공학/
+/site/수치해석/
+/site/열전달/
+/site/응용유체역학/
+/site/진동공학/
+/site/스마트생산시스템/
+/site/품질 및 신뢰성공학개론/
+# 통합 배포 번들(tools/deploy_all.py가 각 과목 site/를 모으는 곳) — 로컬 산출물이라 커밋 안 함.
+/dist/
+
+# 로컬 검수 기준선: 공개 배포와 Git 이력에는 포함하지 않는다.
+data/**/.review-snapshot/
+
+# 교재 지문(tools/audit_problem_originality.py --build 산출물).
+# ★ 원문이 아니라 n-gram SHA256 해시라 **원문을 복원할 수 없다** — 저작권상으로는 커밋해도
+#   안전하다. 여기서 빼는 이유는 크기다(챕터당 수 MB). 없으면 `--build` 로 다시 만든다.
+data/**/.textbook-fingerprint/
+
+# 운영체제·Python 임시 파일
+.DS_Store
+Thumbs.db
+__pycache__/
+*.py[cod]
+
+# Local Netlify folder
+.netlify
+.vercel
+
+# Claude 일회용 스크립트 (커밋 안 함)
+tools/scratch/
+
+# 백업 목적지와 작업 폴더 (tools/backup_bundle.py).
+# 목적지 경로는 **기계마다 다른 사실**이라 공통 코드·이력에 두지 않는다.
+/backup-dest.txt
+
+# 저점 점검 면제 (tools/check_floor.py). 무엇을 면제하느냐는 **갈래마다 다른 사실**이다 —
+# main 은 과목이 아니라 `.claude/SUBJECT.md` 가 없고, 과목 워크트리에는 있다.
+# 커밋하면 그 면제가 merge 를 타고 과목 갈래로 가서 **거기서 봐야 할 항목을 조용히 덮는다.**
+# (위 backup-dest.txt 와 같은 자리 — 사실이 갈래마다 다르면 이력에 두지 않는다.)
+/저점-면제.txt
+/.backup-staging/
+
+# 로컬 서버 접속 로그 (tools/serve_site.vbs 산출물)
+# 2026-07-26: 런처가 포트별 로그(serve_site-8801.log 등)로 갈라졌는데 여기만 옛 이름이라
+# 새 로그가 untracked로 떠다녔다 — 패턴으로 넓힌다(옛 이름도 패턴에 덮인다).
+tools/serve_site*.log
+
+# 2026-09-02: watch_and_build 런처(완전 분리된 백그라운드 감시기, b1f098d6)도 같은 부류다 —
+# untracked 로그가 main 워크트리에 남아 다른 과목 세션의 sync_common 반영을 막았다(medesign 실사고).
+tools/watch_and_build*.log

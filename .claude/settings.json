@@ -1,0 +1,294 @@
+{
+  "env": {
+    "//": "ENABLE_PROMPT_CACHING_1H — 캐시 수명은 구독 한도 안에서는 이미 1시간이라 지금은 아무 일도 안 한다. 사용량 크레딧을 쓰는 구간에서만 발동한다(그때 기본이 5분으로 떨어진다). 근거: code.claude.com/docs/en/costs",
+    "ENABLE_PROMPT_CACHING_1H": "1",
+    "//PYTHONUTF8": "콘솔 코드페이지가 949(CP949)일 때 $CLAUDE_PROJECT_DIR(한글 경로 포함)가 훅 command 문자열에서 깨져 python.exe 에 잘못된 경로로 전달될 수 있다. PYTHONUTF8=1 로 파이썬을 코드페이지 무관하게 만든다.",
+    "PYTHONUTF8": "1"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_bash.py\"",
+            "timeout": 10,
+            "statusMessage": "실행 규율 가드"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/gate_rerun_guard.py\"",
+            "timeout": 10,
+            "statusMessage": "게이트 재실행 가드"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/bulk_apply_guard.py\"",
+            "timeout": 15,
+            "statusMessage": "대량 적용은 깨끗한 트리에서만"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_write.py\"",
+            "timeout": 10,
+            "statusMessage": "쓰기 경계 가드"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/common_guard.py\"",
+            "timeout": 10,
+            "statusMessage": "공통 코어 편집 경고"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/permission_gate.py\"",
+            "timeout": 10,
+            "statusMessage": "승인창 게이트(guard 판정 재사용)"
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/permission_log.py\"",
+            "timeout": 10,
+            "statusMessage": "거부 부류 기록"
+          }
+        ]
+      }
+    ],
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/instructions_log.py\"",
+            "timeout": 10,
+            "statusMessage": "지침 로드 기록"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/common_guard.py\"",
+            "timeout": 10,
+            "statusMessage": "공통 코어 신선도 확인"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/session_brief.py\"",
+            "timeout": 10,
+            "statusMessage": "이 세션이 선 자리(갈래·과목·열린 인박스)"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/shared_sync_check.py\"",
+            "timeout": 10,
+            "statusMessage": "공용 시스템 변경 확인"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/cost_brief.py\"",
+            "timeout": 30,
+            "statusMessage": "세션 비용 — 자기 과거보다 나빠졌을 때만"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/insights_due.py\"",
+            "timeout": 10,
+            "statusMessage": "달마다 도는 것이 밀렸나 — 밀렸을 때만"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/weekly_due.py\"",
+            "timeout": 10,
+            "statusMessage": "주마다 도는 게이트 점검이 밀렸나 — 밀렸을 때만"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/tools/audit_dropped_input.py\"",
+            "timeout": 20,
+            "statusMessage": "지난 세션에 답 못 받고 끝난 말이 있나"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/common_guard.py\"",
+            "timeout": 10,
+            "statusMessage": "공통 코어 신선도 확인(매 턴)"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/review_baseline_due.py\"",
+            "timeout": 10,
+            "statusMessage": "「봤다」 신호에 기준선 확인"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/narration_due.py\"",
+            "timeout": 10,
+            "statusMessage": "지난 턴 중계 수 — 넘겼을 때만"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/tools/wakeup_guard.py\" tick",
+            "timeout": 15,
+            "statusMessage": "루프 재예약 감시(루프 모드일 때만 · PC 는 안 끈다)"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/open_items.py\"",
+            "timeout": 10,
+            "statusMessage": "인박스에 열린 항목 — 있을 때만"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/tools/check_narration.py\" --last-turn",
+            "timeout": 10,
+            "statusMessage": "이번 턴 진행 중계 — 상한 넘겼을 때만"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/tools/audit_session_conduct.py\" --last-turn",
+            "timeout": 10,
+            "statusMessage": "규칙 문서만 자라고 원장은 안 움직였나 — 걸렸을 때만"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/sync_disposition_due.py\"",
+            "timeout": 10,
+            "statusMessage": "나루 변경 알림에 가져왔다/안가져왔다가 아직 안 남았나"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "//공개판-기본값": "이 파일은 공개판의 **보수적 기본값**이다 — defaultMode 를 안 켜고 allow 목록도 읽기 전용 수준으로만 둔다. 원작자가 실제로 쓰던 폭넓은 자동 승인 설정(defaultMode: auto + 넓은 Bash/Edit/Write allow)은 .claude/settings.auto-example.json 에 예시로 분리해 뒀다 — 필요하면 내용을 이 파일로 복사해 쓰되, 그 순간부터의 위험은 사용하는 사람이 진다.",
+    "ask": [],
+    "allow": [
+      "Glob",
+      "Grep",
+      "Bash(ls)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(sed -n *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+      "Bash(git log)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch)",
+      "Bash(git branch -a)",
+      "Bash(git remote -v)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(rm -r *)",
+      "Bash(rm -f *)",
+      "Bash(sh -c *)",
+      "Bash(bash -c *)",
+      "Bash(eval *)",
+      "Bash(cmd)",
+      "Bash(cmd *)",
+      "Bash(cmd.exe)",
+      "Bash(cmd.exe *)",
+      "Bash(xargs)",
+      "Bash(xargs *)",
+      "Bash(find * -exec*)",
+      "Bash(find * -delete*)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git reset --hard *)",
+      "Bash(git push*force*)",
+      "Bash(git push*-f)",
+      "Bash(git push*-f *)",
+      "Bash(git reset*hard*)",
+      "Bash(git clean*-f*)",
+      "Bash(git branch*-D*)",
+      "Bash(git clean -f *)",
+      "Bash(curl * | bash)",
+      "Bash(wget * | bash)",
+      "Bash(printenv)",
+      "Bash(printenv *)",
+      "Bash(echo $*KEY*)",
+      "Bash(echo $*SECRET*)",
+      "Read(**/.env*)",
+      "Edit(**/.env*)",
+      "Write(**/.env*)",
+      "Read(**/.ssh/**)",
+      "Read(**/.aws/**)",
+      "Read(**/.gnupg/**)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
+      "Edit(<교재 폴더 절대경로>/**)",
+      "Write(<교재 폴더 절대경로>/**)",
+      "Bash(git clean *-f*)",
+      "Bash(git clean *-x*)",
+      "Bash(git clean *-d*)",
+      "Bash(git reset --hard*)",
+      "Bash(git reset *--hard*)",
+      "Bash(git checkout -- *)",
+      "Bash(git checkout . *)",
+      "Bash(git restore *)",
+      "Bash(git stash drop*)",
+      "Bash(git stash clear*)",
+      "Bash(rm -rf .git*)",
+      "Bash(rm -r .git*)",
+      "Bash(*rm* *.git/*)",
+      "Bash(git reflog expire*)",
+      "Bash(git gc *--prune*)",
+      "Bash(git filter-branch*)",
+      "Bash(git filter-repo*)",
+      "Bash(git push *--force*)",
+      "Bash(git push *-f*)",
+      "Bash(git push *--mirror*)",
+      "Bash(git push *--delete*)",
+      "Bash(*deploy_prebuilt*)",
+      "Bash(netlify deploy*)",
+      "Bash(*vercel deploy*)",
+      "Bash(vercel deploy*)"
+    ],
+    "additionalDirectories": [
+      "<교재 폴더 절대경로 예시>",
+      "<이 리포의 .bare 경로>",
+      "<공용 시스템 폴더 경로(선택)>"
+    ]
+  }
+}

@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>열역학 · 수증기 표</title>
+<style>
+  :root{
+    --paper:#f6f3ec; --paper-raised:#fffdf8; --ink:#20242b; --sub:#6b6558;
+    --blue:#2c4a66; --blue-soft:#e6ecf1; --copper:#b85f28; --copper-soft:#f3e2d3;
+    --line:#ded6c2; --line-strong:#c9bfa5; --code-bg:#ece6d6;
+    --shadow:0 1px 2px rgba(32,36,43,.06),0 6px 18px -8px rgba(32,36,43,.14);
+    --head-row-height:42px;
+  }
+  :root[data-theme="dark"]{
+    --paper:#14171b; --paper-raised:#1b1f24; --ink:#e9e4d8; --sub:#a39c8a;
+    --blue:#8fb3d1; --blue-soft:#1f2c37; --copper:#e2915a; --copper-soft:#332318;
+    --line:#31363d; --line-strong:#3d444d; --code-bg:#20252b;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -12px rgba(0,0,0,.55);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --paper:#14171b; --paper-raised:#1b1f24; --ink:#e9e4d8; --sub:#a39c8a;
+      --blue:#8fb3d1; --blue-soft:#1f2c37; --copper:#e2915a; --copper-soft:#332318;
+      --line:#31363d; --line-strong:#3d444d; --code-bg:#20252b;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -12px rgba(0,0,0,.55);
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0; padding:0; max-width:100%; overflow-x:hidden;}
+  [hidden]{display:none!important;}
+  body{
+    min-width:0; background:var(--paper); color:var(--ink);
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  button{font:inherit;}
+  a:focus-visible,button:focus-visible,tr:focus-visible{outline:2px solid var(--copper); outline-offset:2px;}
+  .shell{width:min(100%,1400px); margin:0 auto; padding:34px 24px 72px; min-width:0;}
+  .topline{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:8px;}
+  .eyebrow{font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--sub); font-weight:700;}
+  h1{font-family:"Nanum Myeongjo","Noto Serif KR","Batang",Georgia,serif; font-size:32px; letter-spacing:0; margin:0;}
+  .metadata{margin-top:9px; color:var(--sub); font-size:13px;}
+  .source{margin-top:2px; color:var(--sub); font-size:12px;}
+  .tabs{
+    position:sticky; top:0; z-index:20; display:flex; gap:5px; margin:26px 0 20px;
+    padding:10px 0; overflow-x:auto; background:var(--paper); border-bottom:1px solid var(--line);
+    scrollbar-width:thin;
+  }
+  .tab-button{
+    flex:none; min-height:44px; padding:9px 14px; border:1px solid transparent; border-radius:8px;
+    background:none; color:var(--sub); cursor:pointer; font-size:13px; font-weight:700;
+  }
+  .tab-button:hover{color:var(--ink); background:var(--paper-raised);}
+  .tab-button.active{color:var(--copper); background:var(--copper-soft); border-color:var(--copper);}
+  .table-panel{min-width:0;}
+  .panel-heading{display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:10px;}
+  .panel-heading h2{font-family:"Nanum Myeongjo","Noto Serif KR","Batang",Georgia,serif; font-size:20px; margin:0;}
+  .panel-note{font-size:12px; color:var(--sub); margin:0;}
+  .table-scroll{width:100%; max-width:100%; overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--paper-raised); box-shadow:var(--shadow); overscroll-behavior-x:contain;}
+  .data-table{width:max-content; min-width:100%; border-collapse:separate; border-spacing:0; font-variant-numeric:tabular-nums; font-size:12.5px;}
+  .data-table th,.data-table td{height:44px; padding:9px 12px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); text-align:right; white-space:nowrap;}
+  .data-table th:last-child,.data-table td:last-child{border-right:0;}
+  .data-table tbody tr:last-child td{border-bottom:0;}
+  .data-table thead th{position:sticky; z-index:4; background:var(--blue-soft); color:var(--blue); font-weight:700; text-align:center;}
+  .data-table thead tr:first-child th{top:0; height:var(--head-row-height);}
+  .data-table thead tr:nth-child(2) th{top:var(--head-row-height); height:var(--head-row-height);}
+  .data-table tbody tr{cursor:pointer;}
+  .data-table tbody tr:hover td{background:var(--blue-soft);}
+  .data-table tbody tr.selected td{background:var(--copper-soft); color:var(--ink);}
+  /* ★★ **세로(열)도 고를 수 있다** (신설 2026-08-19, 사용자: [사용자 발화 인용 생략]). 표를 읽는 동작이 실제로 둘이라서다 — 아는 값으로 **줄**을 찾고,
+     읽을 성질로 **칸**을 따라 내려간다. 가로만 고를 수 있으면 그 절반만 도와주는 셈이다.
+     · 고르는 자리는 **머리글**이다 — 본문 셀 클릭은 이미 줄 선택이 쓰고 있고, 한 클릭에
+       두 뜻을 얹으면 어느 쪽이 켜졌는지 사람이 못 가린다.
+     · 묶음 머리글(비체적·엔탈피 …)을 누르면 그 아래 칸이 **함께** 켜진다. 표가 그렇게 묶여
+       있으니 고르는 단위도 그래야 한다.
+     · 순서를 뒤에 둔다 — 줄 hover 보다 뒤여야 «칸을 켜 둔 채 줄을 훑는» 것이 보인다. */
+  .data-table thead th[data-cols]{cursor:pointer;}
+  .data-table tbody tr td.col-selected{background:var(--copper-soft); color:var(--ink);}
+  .data-table thead th.col-selected{background:var(--copper-soft); color:var(--copper);}
+  .data-table .sticky-first{position:sticky; left:0; z-index:3; background:var(--paper-raised); font-weight:700; color:var(--ink);}
+  .data-table thead .sticky-first{z-index:8; background:var(--blue-soft); color:var(--blue);}
+  .data-table tbody tr:hover .sticky-first{background:var(--blue-soft);}
+  .data-table tbody tr.selected .sticky-first{background:var(--copper-soft);}
+  .pressure-chips{display:flex; gap:6px; overflow-x:auto; padding:2px 0 10px; margin-bottom:8px; scrollbar-width:thin;}
+  .pressure-chip{
+    flex:none; min-height:44px; padding:8px 13px; border:1px solid var(--line-strong); border-radius:8px;
+    background:var(--paper-raised); color:var(--sub); cursor:pointer; font-size:12.5px; font-weight:700;
+  }
+  .pressure-chip:hover{border-color:var(--blue); color:var(--blue);}
+  .pressure-chip.active{border-color:var(--copper); background:var(--copper-soft); color:var(--copper);}
+  .pressure-nav{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:10px 0;}
+  .nav-button{min-height:44px; padding:9px 14px; border:1px solid var(--line-strong); border-radius:8px; background:var(--paper-raised); color:var(--ink); cursor:pointer; font-size:13px; font-weight:700;}
+  .nav-button:hover:not(:disabled){border-color:var(--copper); color:var(--copper);}
+  .nav-button:disabled{opacity:.35; cursor:default;}
+  .block-heading{font-family:"Nanum Myeongjo","Noto Serif KR","Batang",Georgia,serif; font-size:19px; font-weight:700; text-align:center;}
+  .sat-tag{display:inline-block; margin-left:7px; padding:2px 6px; border-radius:5px; background:var(--copper-soft); color:var(--copper); font-size:10px; font-weight:700; vertical-align:middle;}
+  @media (max-width:768px){
+    .shell{padding:24px 16px 56px;}
+    h1{font-size:28px;}
+    .panel-heading{display:block;}
+    .panel-note{margin-top:3px;}
+    .data-table th,.data-table td{padding:9px 10px;}
+  }
+  @media (max-width:420px){
+    .shell{padding:20px 12px 48px;}
+    .topline{align-items:flex-start;}
+    h1{font-size:25px;}
+    .metadata{font-size:12px;}
+    .pressure-nav{align-items:stretch; flex-wrap:wrap;}
+    .pressure-nav .block-heading{order:-1; width:100%; text-align:left; font-size:17px;}
+    .nav-button{flex:1;}
+  }
+</style>
+</head>
+<body>
+<main class="shell">
+  <!-- `data-tut-host` — 「설명 다시 보기」 버튼이 붙을 자리를 **이 화면이 선언한다**
+       (튜토리얼 층은 공유 조각이라 화면마다 다른 선택자를 알면 안 된다). -->
+  <div class="topline" data-tut-host>
+    <div class="eyebrow">전공정리 · 열역학 부록</div>
+  </div>
+  <h1>수증기 표</h1>
+  <div class="metadata" id="unitsLine"></div>
+  <div class="source">CoolProp 8.0.0 (IAPWS-95) 계산값 · 유효숫자 5자리</div>
+
+  <nav class="tabs" aria-label="수증기 표 종류">
+    <button class="tab-button active" data-table="saturation_T">포화 (온도 기준)</button>
+    <button class="tab-button" data-table="saturation_P">포화 (압력 기준)</button>
+    <button class="tab-button" data-table="superheated">과열증기</button>
+    <button class="tab-button" data-table="compressed_liquid">압축액</button>
+  </nav>
+  <section class="table-panel" id="tablePanel"></section>
+</main>
+
+<script>
+var STEAM = {{STEAM_JSON}};
+var activeTable = 'saturation_T';
+var activePressureIndex = 0;
+
+function esc(value){
+  return String(value).replace(/[&<>]/g,function(character){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;'}[character];
+  });
+}
+function textNumber(value){ return String(value); }
+function unitLine(){
+  var units = STEAM.units;
+  return 'T [' + units.T + '] · P [' + units.P + '] · v [' + units.v + '] · u [' + units.u + '] · h [' + units.h + '] · s [' + units.s + ']';
+}
+document.getElementById('unitsLine').textContent = unitLine();
+
+// ★ 열 번호를 **머리글에 박아 둔다**(`data-cols`). 클릭 때 표 구조(rowspan·colspan)를 거꾸로
+//   푸는 것보다 이쪽이 안전하다 — 머리를 만드는 자리에서는 어느 칸인지가 이미 정해져 있고,
+//   푸는 쪽에 두면 표 모양이 바뀔 때마다 그 계산이 조용히 어긋난다.
+function saturationHeader(firstLabel,secondLabel){
+  return '<thead><tr>' +
+    '<th class="sticky-first" rowspan="2" tabindex="0" data-cols="0">' + firstLabel + '</th>' +
+    '<th rowspan="2" tabindex="0" data-cols="1">' + secondLabel + '</th>' +
+    '<th colspan="2" tabindex="0" data-cols="2 3">비체적 m³/kg</th>' +
+    '<th colspan="3" tabindex="0" data-cols="4 5 6">내부에너지 kJ/kg</th>' +
+    '<th colspan="3" tabindex="0" data-cols="7 8 9">엔탈피 kJ/kg</th>' +
+    '<th colspan="3" tabindex="0" data-cols="10 11 12">엔트로피 kJ/(kg·K)</th>' +
+    '</tr><tr>' +
+    '<th tabindex="0" data-cols="2">f</th><th tabindex="0" data-cols="3">g</th>' +
+    '<th tabindex="0" data-cols="4">f</th><th tabindex="0" data-cols="5">fg</th><th tabindex="0" data-cols="6">g</th>' +
+    '<th tabindex="0" data-cols="7">f</th><th tabindex="0" data-cols="8">fg</th><th tabindex="0" data-cols="9">g</th>' +
+    '<th tabindex="0" data-cols="10">f</th><th tabindex="0" data-cols="11">fg</th><th tabindex="0" data-cols="12">g</th>' +
+    '</tr></thead>';
+}
+function simpleHeader(){
+  return '<thead><tr><th class="sticky-first" tabindex="0" data-cols="0">T (°C)</th><th tabindex="0" data-cols="1">v (m³/kg)</th><th tabindex="0" data-cols="2">u (kJ/kg)</th><th tabindex="0" data-cols="3">h (kJ/kg)</th><th tabindex="0" data-cols="4">s (kJ/(kg·K))</th></tr></thead>';
+}
+function rowHtml(row,isSaturated){
+  return '<tr tabindex="0">' + row.map(function(value,index){
+    var tag = isSaturated && index === 0 ? '<span class="sat-tag">포화</span>' : '';
+    return '<td' + (index === 0 ? ' class="sticky-first"' : '') + '>' + esc(textNumber(value)) + tag + '</td>';
+  }).join('') + '</tr>';
+}
+function saturationTableHtml(kind){
+  var table = STEAM[kind];
+  var temperatureBased = kind === 'saturation_T';
+  var heading = temperatureBased ? '포화수 표 · 온도 기준' : '포화수 표 · 압력 기준';
+  var firstLabel = temperatureBased ? 'T (°C)' : 'P (kPa)';
+  var secondLabel = temperatureBased ? 'P_sat (kPa)' : 'T_sat (°C)';
+  return '<div class="panel-heading"><h2>' + heading + '</h2><p class="panel-note">행을 탭하면 그 줄이, 열 머리를 탭하면 그 칸이 켜집니다 — 켜 둔 채로 훑으면 됩니다.</p></div>' +
+    '<div class="table-scroll"><table class="data-table">' + saturationHeader(firstLabel,secondLabel) +
+    '<tbody>' + table.rows.map(function(row){ return rowHtml(row,false); }).join('') + '</tbody></table></div>';
+}
+
+var saturationPressureByP = {};
+STEAM.saturation_P.rows.forEach(function(row){ saturationPressureByP[String(row[0])] = row[1]; });
+function saturationTemperatureForBlock(block){
+  var exact = saturationPressureByP[String(block.P)];
+  return exact === undefined ? block.rows[0][0] : exact;
+}
+function pressureChipHtml(block,index,unit){
+  var label = unit === 'MPa' ? textNumber(block.P / 1000) + ' MPa' : textNumber(block.P) + ' kPa';
+  return '<button class="pressure-chip' + (index === activePressureIndex ? ' active' : '') + '" data-pressure-index="' + index + '">' + esc(label) + '</button>';
+}
+function pressureNavHtml(block,position,blocks,unit,stateLabel){
+  var last = blocks.length - 1;
+  var pressureLabel = unit === 'MPa' ? textNumber(block.P / 1000) + ' MPa' : textNumber(block.P) + ' kPa';
+  return '<div class="pressure-nav ' + position + '">' +
+    '<button class="nav-button" data-pressure-step="-1"' + (activePressureIndex === 0 ? ' disabled' : '') + '>이전 압력</button>' +
+    '<div class="block-heading">P = ' + esc(pressureLabel) + ' (' + esc(stateLabel || 'T_sat = ' + textNumber(saturationTemperatureForBlock(block)) + ' °C') + ')</div>' +
+    '<button class="nav-button" data-pressure-step="1"' + (activePressureIndex === last ? ' disabled' : '') + '>다음 압력</button>' +
+    '</div>';
+}
+function superheatedHtml(){
+  var blocks = STEAM.superheated.blocks;
+  var block = blocks[activePressureIndex];
+  return '<div class="panel-heading"><h2>과열증기 표</h2><p class="panel-note">압력 블록을 선택하고 이웃 블록과 직접 비교하세요.</p></div>' +
+    '<div class="pressure-chips" aria-label="압력 블록">' + blocks.map(function(item,index){ return pressureChipHtml(item,index,'kPa'); }).join('') + '</div>' +
+    pressureNavHtml(block,'top',blocks,'kPa') +
+    '<div class="table-scroll"><table class="data-table">' + simpleHeader() + '<tbody>' +
+    block.rows.map(function(row,index){ return rowHtml(row,index === 0); }).join('') +
+    '</tbody></table></div>';
+}
+function compressedLiquidHtml(){
+  var blocks = STEAM.compressed_liquid.blocks;
+  var block = blocks[activePressureIndex];
+  var stateLabel = block.P < 22064 ? 'T < T_sat = ' + textNumber(saturationTemperatureForBlock(block)) + ' °C' : 'T ≤ 360 °C';
+  return '<div class="panel-heading"><h2>압축액 표</h2><p class="panel-note">같은 온도의 포화액 근사와 직접 비교하세요.</p></div>' +
+    '<div class="pressure-chips" aria-label="압력 블록">' + blocks.map(function(item,index){ return pressureChipHtml(item,index,'MPa'); }).join('') + '</div>' +
+    pressureNavHtml(block,'top',blocks,'MPa',stateLabel) +
+    '<div class="table-scroll"><table class="data-table">' + simpleHeader() + '<tbody>' +
+    block.rows.map(function(row){ return rowHtml(row,false); }).join('') +
+    '</tbody></table></div>';
+}
+function renderTable(){
+  var html = activeTable === 'superheated' ? superheatedHtml() : activeTable === 'compressed_liquid' ? compressedLiquidHtml() : saturationTableHtml(activeTable);
+  document.getElementById('tablePanel').innerHTML = html;
+  selectedColumns = {};        // 표가 바뀌면 비운다 — 표마다 몇 번째 칸이 무엇인지가 다르다
+}
+renderTable();
+
+// ★★ 세로(열) 고르기 — 켜진 칸을 표 전체에 다시 칠한다.
+//   상태는 **인덱스 집합 하나**이고 칠은 그 집합에서만 나온다. 셀에 직접 토글을 걸면
+//   새로 그린 표에서 상태가 사라져 «켜 놓았는데 안 켜진» 자리가 생긴다.
+var selectedColumns = {};
+function applySelectedColumns(){
+  var table = document.querySelector('.data-table');
+  if(!table) return;
+  [].forEach.call(table.querySelectorAll('tbody tr'), function(tr){
+    [].forEach.call(tr.children, function(cell,index){
+      cell.classList.toggle('col-selected', !!selectedColumns[index]);
+    });
+  });
+  [].forEach.call(table.querySelectorAll('thead th[data-cols]'), function(th){
+    var cols = th.getAttribute('data-cols').split(' ');
+    th.classList.toggle('col-selected', cols.every(function(col){ return !!selectedColumns[col]; }));
+  });
+}
+function toggleColumns(th){
+  var cols = th.getAttribute('data-cols').split(' ');
+  // 묶음 머리글은 **다 켜져 있을 때만** 끈다 — 반만 켜진 상태에서 누르면 나머지를 켜는 것이
+  // 사람이 기대하는 동작이다(부분 선택에서 누르면 꺼지는 토글은 매번 두 번 누르게 만든다).
+  var turnOn = !cols.every(function(col){ return !!selectedColumns[col]; });
+  cols.forEach(function(col){
+    if(turnOn) selectedColumns[col] = true; else delete selectedColumns[col];
+  });
+  applySelectedColumns();
+}
+
+document.querySelector('.tabs').addEventListener('click',function(event){
+  var button = event.target.closest('.tab-button');
+  if(!button) return;
+  activeTable = button.getAttribute('data-table');
+  activePressureIndex = 0;
+  document.querySelectorAll('.tab-button').forEach(function(item){ item.classList.toggle('active',item === button); });
+  renderTable();
+});
+document.getElementById('tablePanel').addEventListener('click',function(event){
+  var chip = event.target.closest('.pressure-chip');
+  if(chip){ activePressureIndex = Number(chip.getAttribute('data-pressure-index')); renderTable(); return; }
+  var nav = event.target.closest('.nav-button');
+  if(nav && !nav.disabled){
+    activePressureIndex += Number(nav.getAttribute('data-pressure-step'));
+    renderTable();
+    return;
+  }
+  var head = event.target.closest('thead th[data-cols]');
+  if(head){ toggleColumns(head); return; }
+  var row = event.target.closest('tbody tr');
+  if(row) row.classList.toggle('selected');
+});
+document.getElementById('tablePanel').addEventListener('keydown',function(event){
+  if(event.key !== 'Enter' && event.key !== ' ') return;
+  var head = event.target.closest('thead th[data-cols]');
+  if(head){ event.preventDefault(); toggleColumns(head); return; }
+  var row = event.target.closest('tbody tr');
+  if(row){
+    event.preventDefault();
+    row.classList.toggle('selected');
+  }
+});
+</script>
+
+<!-- ★★ 표 읽는 법 스포트라이트 (신설 2026-08-18) — 사용자: [사용자 발화 인용 생략]. 즉 설명이 붙을 자리는 챕터 본문이 아니라
+     **이 화면**이다.
+     ★ 무엇을 가리킬지는 `data/<과목>/tables/tutorial.json` 이 선언하고 빌드가 여기 넣는다 —
+       선언이 없으면 `null` 이고 아래 조각은 **DOM 을 하나도 안 만든다.** -->
+<script>
+window.TUTORIAL = {{TUTORIAL_JSON}};
+</script>
+<!--@part tutorial-->
+</body>
+</html>

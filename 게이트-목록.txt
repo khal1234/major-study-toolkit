@@ -1,0 +1,34 @@
+# 이 리포가 «게이트» 라고 부르는 것 — `명령조각 | 사유` (`tools/audit_session_cost.py` 가 읽는다).
+# **사유 없는 줄은 안 친다** (이 계통의 예외·면제 대장과 같은 판정선).
+#
+# ★ 왜 선언하나: 이름 어림(`GATE_HINTS`)은 **양쪽으로 틀린다.** 깎는 쪽 실측이 바로 여기였다 —
+#   이 리포의 **주 게이트인 `close_report.py` 는 이름에 hint 낱말이 하나도 없어 한 번도
+#   안 세어졌다.** 낱말을 더 넣으면 부풀림이 커지므로, 답은 **프로젝트가 자기 것을 선언**하는 것이다.
+# ★ `docs/` 에 두는 이유: 여기가 `sync_common.SYNC_PATHS` 라 **과목 갈래 전부가 같은 목록을 받는다**.
+#   (그 도구는 프로젝트 루트와 한 칸 아래를 함께 본다.)
+# ★ **고치는 도구는 게이트가 아니다** — `fix_*`·`gen_*`·`recolor_*` 는 여기 넣지 않는다.
+#   세면 «감수를 했다» 는 수가 부풀고, 부푼 수는 이 자를 도장으로 만든다.
+
+test_checks.py            | 회귀 게이트 — 이 리포에서 «고쳤다»의 정의(검사가 그 결함을 실제로 잡는가)
+build_site.py             | 빌드 내장 검사 — 데이터·삽화 규격을 error 로 막는다
+build_review.py           | 하이라이트 빌드 — 같은 빌드 검사를 그대로 태운다
+close_report.py           | 세션 닫기 게이트 — 빌드·회귀·잔량·strict 승격을 실제로 돌린다. ★ 이름에 hint 낱말이 없어 어림으로는 0회로 세어지던 자리
+verify_workorder.py       | 워크오더 수용 게이트 — exit 0 이 아니면 완료를 주장할 수 없다
+verify_thermo_answer.py   | 수치 독립 검산(절대 규칙 4) — 열역학
+verify_ode_answer.py      | 〃 공학수학
+verify_materials_answer.py| 〃 기계재료
+verify_solids_answer.py   | 〃 고체역학
+verify_dynamics_answer.py | 〃 동역학
+verify_steam_tables.py    | 증기표 값 독립 검산
+audit_orphan_checks.py    | 등록 안 된 도구·호출자 없는 검사 (close_report 가 부른다)
+audit_check_erosion.py    | 회귀 판정이 조용히 줄었는지 (지운 것이 diff 에 보이게)
+check_floor.py            | 저점 점검 — 바닥 방어가 문서가 아니라 **배선**됐는가
+audit_content.py          | 콘텐츠 사각지대 감사(빌드가 못 막는 것)
+audit_refs.py             | 절·삽화 id 참조 감사 — 깨진 내부 링크 0건이어야 한다
+audit_problem_originality.py | 독자성 — 교재와 12단어 연속 일치
+audit_problem_numbers.py  | 문항 번호·조건 대조
+audit_figure_balance.py   | 삽화 여백·균형·글자 위계 실측
+audit_conventions.py      | 표기 규약·카드 중복 감사
+audit_checks_load.py      | 이해도 점검 분포(상한을 정하기 전에 먼저 재는 자리)
+audit_path_names.py       | OS 간 파일 이름 충돌(대소문자·NFC/NFD) — 공개 전 점검
+scan_private.py           | 공개 전 개인정보 게이트 — 걸리면 exit 1
