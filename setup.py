@@ -94,7 +94,12 @@ def subject(name: str, slug: str, port: int, book: str | None, textbook_dir: str
         cmd += ["--pitfall-book", book]
     print("  빌드 등록:", " ".join(cmd[1:]))
     if not dry:
-        subprocess.run(cmd, check=True, cwd=ROOT)
+        r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        # register 끝의 「다음: sync_common」 은 옛 브랜치 구조용 안내라 여기선 필요 없다 — 뺀다.
+        print("\n".join("  " + ln for ln in r.stdout.splitlines() if ln.strip() and "sync_common" not in ln))
+        if r.returncode:
+            print(r.stderr)
+            raise SystemExit(r.returncode)
     if textbook_dir:
         sp = ROOT / ".claude/settings.json"
         s = json.loads(sp.read_text(encoding="utf-8"))

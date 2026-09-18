@@ -552,7 +552,8 @@ def main():
             if local_tree:
                 course_tree = local_tree
         except Exception as exc:                    # noqa: BLE001 — 어떤 이유든 빌드는 계속한다
-            print("[warn] 전 과목 트리 수집 실패, 자기 과목만 넣는다:", exc)
+            if not isinstance(exc, ModuleNotFoundError):   # 툴킷엔 deploy_all 이 없다 — 조용히 자기 과목만
+                print("[warn] 전 과목 트리 수집 실패, 자기 과목만 넣는다:", exc)
 
     # ★★ **홈은 로컬에서도 전 과목을 보여준다** (2026-08-15, 사용자 지적:
     #   *[발화 생략]*). 사이드바는 «이 과목만» 으로 좁혔지만
