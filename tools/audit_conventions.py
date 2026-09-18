@@ -11,7 +11,9 @@
     python tools/audit_conventions.py                 # 전 챕터
     python tools/audit_conventions.py --chapter=ch01  # 한 챕터
     python tools/audit_conventions.py --class=A       # 부류 하나만
+    python tools/audit_conventions.py --subject="과목" # SUBJECT 환경변수보다 우선
 """
+import argparse
 import json
 import os
 import re
@@ -33,11 +35,16 @@ from buildlib.checks_svg import (  # noqa: E402
 )
 from buildlib.checks_content import (  # noqa: E402
     horizontal_step_issues, mask_inline_math, sentence_endings, split_paragraphs, TONE_SKIP,
+    CARD_OVERLAP_MIN, CARD_OVERLAP_MIN_GRAMS, CARD_OVERLAP_GATE_MIN,
+    card_overlap_rows, card_overlap_score, card_overlap_verdict_hit,
+    card_overlap_verdicts as cc_card_overlap_verdicts,
 )
 
 
-def chapters(only=None):
+def chapters(only=None, subject_only=None):
     for subject in sorted(os.listdir(DATA)):
+        if subject_only is not None and subject != subject_only:
+            continue
         sub_dir = os.path.join(DATA, subject)
         if not os.path.isdir(sub_dir):
             continue
@@ -125,7 +132,7 @@ def audit_dash(figure_id, svg):
 
 
 # ── B. 글자 위계 — 캡션이 라벨보다 **너무** 작아지지 않았는가 ─────────────────
-# 2026-07-29 에 캡션을 라벨의 0.85배 이하로 일괄 축소했는데 사용자가 [사용자 발화 인용 생략] 로 되돌아왔다.
+# 2026-07-29 에 캡션을 라벨의 0.85배 이하로 일괄 축소했는데 사용자가 *[발화 생략]* 로 되돌아왔다.
 # 위계(제목 > 라벨 > 캡션)는 유지하되 **하한**을 본다. 화면 실효 px 로 잰다.
 TEXT_RE = re.compile(r"<text\b([^>]*)>(.*?)</text>", re.S)
 HANGUL = re.compile(r"[가-힣]")
@@ -158,7 +165,7 @@ def audit_text_scale(figure_id, svg):
 
 
 # ── E. 평문 자리에 남은 수식 흔적 ─────────────────────────────────────────────
-# 사용자: [사용자 발화 인용 생략] (2회 이상).
+# 사용자: *[발화 생략]* (2회 이상).
 PLAIN_MATH = [
     (re.compile(r"\)\s*/\s*\("), "괄호분수 `)/(` — 수식 렌더러로 옮길 것"),
     (re.compile(r"\b\d+\s*×\s*10\^"), "거듭제곱 `10^` 이 평문에 남음"),
@@ -184,7 +191,7 @@ SUB_BARE = re.compile(r"(?<![A-Za-z_^{])\b([A-Za-z]|rho|SG)(\d)\b")
 
 
 # ── I. 삽화 수식이 **산문 수식과 다른 조판** ──────────────────────────────────
-# 열린 날 2026-08-02(열역학) → 같은 부류가 동역학에도 그대로 있었다(사용자: [사용자 발화 인용 생략]).
+# 열린 날 2026-08-02(열역학) → 같은 부류가 동역학에도 그대로 있었다(사용자: *[발화 생략]*).
 #
 # ★ **왜 못 잡았나 — 규격은 생성기에만 있고 자가 없었다.** 2026-08-02 에 `svg_fraction`·
 #   `svg_math_line` 이 글꼴(등폭)·분수선 굵기·중심선·위첨자 조판을 산문에 맞춰 전부 바뀌었는데,
@@ -201,7 +208,7 @@ RELATION_MARKS = "=≈≠≤≥∫∑→"
 
 
 # ── J. 같은 식을 **어디는 수식, 어디는 평문**으로 ──────────────────────────────
-# 사용자(2026-08-02, 동역학 ch12): [사용자 발화 인용 생략]
+# 사용자(2026-08-02, 동역학 ch12): *[발화 생략]*
 #
 # ★ **채팅에서는 두 표기가 똑같아 보인다** — 갈라지는 것은 화면이다. 한쪽은 인라인 수식으로
 #   조판되고 다른 쪽은 본문 글꼴 그대로다. 그래서 사람이 눈으로 훑어서는 전수를 못 센다.
@@ -315,7 +322,7 @@ def audit_notation_split(fields):
 
 # ★ J-2 — **대응하는 수식이 아예 없는** 평문 등호식. 위의 J-1 은 "이 챕터가 이미 수식으로 쓴 식"을
 #   기준으로 삼으므로, 처음부터 끝까지 평문으로만 쓴 식은 기준이 없어 안 걸린다.
-#   (사용자 요청: [사용자 발화 인용 생략] — '다' 를 만족시키려면
+#   (사용자 요청: *[발화 생략]* — '다' 를 만족시키려면
 #   기준이 데이터 안에 있는 것만으로는 부족하다.)
 BARE_EQUATION = re.compile(
     r"(?<![\w가-힣])"
@@ -350,9 +357,9 @@ def audit_bare_equations(fields):
 
 
 # ── L. 「잘 놓쳐요」와 「떠올리기」가 같은 말을 한다 ────────────────────────────
-# 사용자(2026-08-02): [사용자 발화 인용 생략]
+# 사용자(2026-08-02): *[발화 생략]*
 #
-# ★ 두 카드는 **역할이 다르다** — 함정은 [사용자 발화 인용 생략] 는 경고(교재 근거가 붙는다),
+# ★ 두 카드는 **역할이 다르다** — 함정은 *[발화 생략]* 는 경고(교재 근거가 붙는다),
 #   이해도 체크는 독자가 **스스로 인출**하게 하는 질문이다. 그런데 같은 내용을 나란히 두면
 #   체크의 답이 바로 옆에 적혀 있는 꼴이라 **인출이라는 목적 자체가 사라진다.**
 #   게다가 본문이 이미 그 이야기를 했으면 같은 말이 한 화면에 세 번 나온다.
@@ -360,58 +367,19 @@ def audit_bare_equations(fields):
 # ★ 판정은 **기계가 대신 못 한다** — 두 글이 '같은 내용인가'는 의미의 문제다.
 #   그래서 이 절은 **후보와 점수만** 낸다(사람이 판정한다, 규칙 11). 한국어는 조사가 붙어
 #   낱말 단위 비교가 어긋나므로 **글자 2-gram** 으로 잰다(형태소 분석기 없이 쓰는 표준 방식).
-_KO_KEEP = re.compile(r"[가-힣A-Za-z0-9]+")
-# 실측(동역학 ch12): 후보 3건이 0.31~0.37 이고 그 아래는 뚝 떨어진다. 낮추면 어휘가 같을 뿐인
-# 정상 쌍이 쏟아지고, 올리면 사용자가 실제로 짚은 0.33 이 빠진다.
-CARD_OVERLAP_MIN = 0.30
-# ★ **너무 짧은 카드는 재지 않는다** (신설 2026-08-06, ch01 실측).
-#   점수를 `min(len)` 으로 정규화하므로 **짧은 쪽이 짧을수록 점수가 튄다.**
-#   `T(K) = T(°C) + ___` / `273.15` 같은 식 빈칸은 한글이 거의 없어 2-gram 이 6개뿐이고,
-#   그 6개가 함정에 다 나오면 **자동으로 1.00** 이 된다 — 실제로 ch01 1위가 그것이었다.
-#   내용이 겹쳐서가 아니라 **잴 것이 없어서** 나온 점수라, 그런 1.00 이 목록 맨 위에 있으면
-#   읽는 사람이 이 감사를 통째로 불신하게 된다(잡음이 쌓이면 자를 무시한다 — [A] 의 교훈).
-CARD_OVERLAP_MIN_GRAMS = 16
-
-
-def _bigrams(text):
-    out = set()
-    for run in _KO_KEEP.findall(mask_inline_math(text)):
-        if len(run) == 1:
-            out.add(run)
-        for i in range(len(run) - 1):
-            out.add(run[i:i + 2])
-    return out
-
-
+#
+# ★★ **점수 내는 자리는 2026-09-07 에 `buildlib/checks_content.py` 로 옮겼다.**
+#   같은 부류가 다시 지적돼(*[발화 생략]*) [L] 을 빌드 게이트로 승격했고,
+#   감사와 빌드가 **한 함수**를 쓰게 했다. 사본을 두면 「감사 0건과 빌드 error 가 동시에
+#   나는」 상태가 만들어진다. 여기 남은 것은 화면에 찍는 일뿐이다.
 def card_overlap_verdicts(subject):
-    """사람이 '중복 아님'으로 판정한 쌍 — `data/<과목>/card-overlap-verdicts.json`.
-
-    ★ 판정 파일을 **과목 폴더**에 둔다. 무엇이 중복인지는 그 과목의 콘텐츠 사실이라
-      공통 코드가 알면 안 된다(선례: `problem-originality-verdicts.json`).
-      없으면 빈 사전이라 **기존 동작 그대로**다 — 폴백이 과목을 알지 않는다.
-    """
-    path = os.path.join(DATA, subject, "card-overlap-verdicts.json")
-    try:
-        with open(path, encoding="utf-8") as fh:
-            return json.load(fh).get("verdicts") or {}
-    except (OSError, ValueError, AttributeError):
-        return {}
+    """이 과목의 판정 사전 — 정본은 `checks_content.card_overlap_verdicts`."""
+    return cc_card_overlap_verdicts(os.path.join(DATA, subject))
 
 
 def verdict_hit(verdicts, ch, pid, cid):
-    """이 쌍에 걸린 판정 키(없으면 None). 순수 함수 — 테스트가 직접 부른다.
-
-    ★ **카드 id 는 챕터 안에서만 유일하다** (열린 날 2026-08-06, 고체역학 실측).
-      `p1`·`p4`·`c2`·`c7` 은 챕터마다 처음부터 다시 붙으므로, 챕터를 담지 않은 키는
-      한 챕터에 적은 판정이 **남의 챕터까지 조용히 면제**한다. 면제가 새는 것은
-      감사를 장식으로 만드는 가장 빠른 길이라 키에 챕터를 넣는다.
-      정본은 `chNN::함정::체크` 이고, 챕터 없는 두 토막 키는 뒤로 호환만 한다.
-    """
-    pair = str(pid) + "::" + str(cid)
-    for key in (str(ch) + "::" + pair, pair):
-        if key in verdicts:
-            return key
-    return None
+    """이 쌍에 적힌 판정 키(없으면 None) — 정본은 `checks_content.card_overlap_verdict_hit`."""
+    return card_overlap_verdict_hit(verdicts, ch, pid, cid)
 
 
 def audit_prereq_overlap(chapter, subject, ch_name):
@@ -424,11 +392,11 @@ def audit_prereq_overlap(chapter, subject, ch_name):
         사용자가 짚은 중복은 `ch02 ↔ ch04` 였다 — 자가 챕터 경계에서 끊겨 **구조적
         사각지대**였다. 그 항목이 남긴 처방이 이것이다:
 
-        [사용자 발화 인용 생략]
+        *[발화 생략]*
 
     ★ **선언이 있는 자리만 본다.** 모든 절을 모든 앞 장 절과 견주면 후보가 조합으로 불어나
       진짜 중복이 그 더미에 묻힌다([L] 이 recall 을 뺀 것과 같은 이유).
-    ★ **판정은 사람이 한다.** [사용자 발화 인용 생략] 는 기계가 못 본다 — 되짚기는 원래
+    ★ **판정은 사람이 한다.** *[발화 생략]* 는 기계가 못 본다 — 되짚기는 원래
       앞 장 말을 다시 하는 일이라, 겹치는 것 자체는 결함이 아니다. 이 절은 후보만 낸다.
     """
     cache, rows = {}, []
@@ -480,10 +448,9 @@ def best_paragraph_overlap(left_content, right_content):
     best = None
     for here in paragraphs(left_content):
         for there in paragraphs(right_content):
-            a, b = _bigrams(here), _bigrams(there)
-            if min(len(a), len(b)) < CARD_OVERLAP_MIN_GRAMS:
+            score = card_overlap_score(here, there)
+            if score is None:
                 continue
-            score = len(a & b) / float(min(len(a), len(b)))
             if best is None or score > best[0]:
                 best = (score, here.strip()[:70])
     return best
@@ -494,7 +461,7 @@ def audit_card_overlap(chapter):
 
     ★ **본문도 잰다** (넓힌 날 2026-08-06 — 사용자가 발견한 사각지대).
       처음에는 함정 ↔ 이해도 체크만 봤다. 그런데 사용자가 ch03 §2 에서 짚은 것은
-      [사용자 발화 인용 생략] 과 [사용자 발화 인용 생략] 였다 —
+      *[발화 생략]* 과 *[발화 생략]* 였다 —
       **한 화면에 같은 말이 세 번** 나오는데 자는 그중 한 쌍만 보고 있었다.
       겹침이 나쁜 이유(체크의 답이 옆에 적혀 있으면 인출이 사라진다)는 본문에도 그대로
       적용된다. 본문은 문단 단위로 쪼개 재야 한다 — 절 전체를 한 덩어리로 재면 긴 쪽에
@@ -502,65 +469,17 @@ def audit_card_overlap(chapter):
 
     ★ 판정은 여전히 **사람이 한다.** 이 절은 후보와 점수만 낸다 — 어휘만 같은 정상 쌍이
       섞여 나오는 것이 정상이고, 점수를 판정으로 읽으면 멀쩡한 카드를 지운다.
+
+    ★★ **몸통은 `buildlib/checks_content.card_overlap_rows` 다** (옮긴 날 2026-09-07).
+      같은 부류가 다시 지적돼 [L] 을 빌드 게이트로 승격했고, 그 자리에서 감사와 빌드가
+      **한 함수**를 쓰게 했다. 여기 사본을 남겨 두면 「감사 0건인데 빌드는 error」 라는
+      상태가 만들어진다 — 이 리포가 반복해 겪은 부류다.
     """
-    rows, all_connects = [], []
-
-    def owners(node):
-        if isinstance(node, dict):
-            if node.get("comprehensionChecks") or node.get("pitfalls"):
-                yield node
-            for v in node.values():
-                yield from owners(v)
-        elif isinstance(node, list):
-            for v in node:
-                yield from owners(v)
-
-    def score_pair(left_text, right_text):
-        a, b = _bigrams(left_text), _bigrams(right_text)
-        if min(len(a), len(b)) < CARD_OVERLAP_MIN_GRAMS:
-            return None          # 잴 것이 없어서 나오는 점수는 판정 대상이 아니다
-        return len(a & b) / float(min(len(a), len(b)))
-
-    for own in owners(chapter):
-        oid = own.get("id")
-        pits = [(p.get("id"), str(p.get("note") or "")) for p in own.get("pitfalls") or []]
-        checks = [(c.get("id"), str(c.get("prompt") or "") + " " + str(c.get("answer") or ""))
-                  for c in own.get("comprehensionChecks") or []]
-        # ★ 본문과 견줄 때는 **연결하기(connect)** 만 본다.
-        #   빈칸 회상(recall)의 답은 정의상 본문에서 뽑은 낱말이라 겹치는 것이 정상이다 —
-        #   섞어 재면 ch03 한 장에서 후보가 56건으로 불어나 진짜 중복이 그 더미에 묻힌다
-        #   (실측 2026-08-06: 상위 12건이 전부 본문 ↔ recall 이었다).
-        #   문제가 되는 것은 *추론을 요구해야 할 카드가 본문을 되풀이하는 것*이다.
-        connects = [(c.get("id"), str(c.get("prompt") or "") + " " + str(c.get("answer") or ""))
-                    for c in own.get("comprehensionChecks") or []
-                    if c.get("stage") == "connect"]
-        paras = [("본문 ¶%d" % (i + 1), para)
-                 for i, para in enumerate(str(own.get("content") or "").split("\n\n"))
-                 if len(para.strip()) >= 60]
-        all_connects.extend((oid, cid, ctext) for cid, ctext in connects)
-        for left, right in ((pits, checks), (paras, connects), (paras, pits)):
-            for lid, ltext in left:
-                for rid, rtext in right:
-                    sc = score_pair(ltext, rtext)
-                    if sc is not None:
-                        rows.append((oid, lid, rid, sc, ltext.strip()[:38]))
-    # ★ **절과 절 사이도 본다** (넓힌 날 2026-08-06 — 자기 사고로 열렸다).
-    #   §2 의 연결하기를 '고산 산장 라면' 으로 바꿨는데, §7 에 이미 '고산지대에서 물이
-    #   낮은 온도에서 끓는다' 가 있었다. **같은 현상을 두 절이 각각 묻고 있었는데** 자는
-    #   소유자(절) 안에서만 비교해서 0건이었다 — 고치는 쪽이 새 중복을 만들어도 조용했다.
-    #   연결하기끼리만 본다: 회상은 절마다 그 절의 용어를 묻는 것이 정상이라 섞으면 잡음이다.
-    for i, (o1, id1, t1) in enumerate(all_connects):
-        for o2, id2, t2 in all_connects[i + 1:]:
-            sc = score_pair(t1, t2)
-            if sc is not None and sc >= CARD_OVERLAP_MIN:
-                rows.append(("절 간 " + str(o1) + "↔" + str(o2), id1, id2, sc,
-                             t1.strip()[:38]))
-    rows.sort(key=lambda r: -r[3])
-    return rows
+    return card_overlap_rows(chapter)
 
 
 # ── M. 독자에게 말하는 글의 말투 ──────────────────────────────────────────────
-# 사용자(2026-08-02): [사용자 발화 인용 생략]
+# 사용자(2026-08-02): *[발화 생략]*
 #
 # ★ **관행은 있었는데 문서가 없었다.** 그래서 새 과목이 평어로 써도 아무것도 걸리지 않았다
 #   (AGENTS·docs 전체 grep 에 말투 조항이 0건). 규칙이 없으면 데이터가 마음대로 정한다 —
@@ -591,7 +510,7 @@ def plain_ending_histogram(chapter):
 
 
 # ── N. 분류·정의 나열이 산문에 뭉쳐 있는가 ────────────────────────────────────
-# 사용자(2026-08-06): [사용자 발화 인용 생략]
+# 사용자(2026-08-06): *[발화 생략]*
 #
 # ★★ **규칙은 2026-07-27 부터 있었는데 그것을 재는 자가 하나도 없었다.**
 #   AGENTS 「콘텐츠 표기 규약」이 *정의·분류 나열 → 불릿 목록(`- 용어: 설명`)* 이라고 적어 두었지만,
@@ -602,7 +521,7 @@ def plain_ending_histogram(chapter):
 #   규칙 승격 당시 손대던 장에만 들어갔고 **부류 전수 감사가 뒤 챕터로 안 갔다**(규칙 7 의 ⑵단계 누락).
 #
 # ★ 판정은 사람이 한다 — 이 절은 **후보와 근거만** 낸다([L]·[J] 와 같은 급).
-#   [사용자 발화 인용 생략] 이라고 규칙 자신이 단서를 달았으므로, 기계가
+#   *[발화 생략]* 이라고 규칙 자신이 단서를 달았으므로, 기계가
 #   '여기는 목록이어야 한다'를 단정하면 그 단서를 어기게 된다.
 # ★ 글자 클래스에서 **문장부호와 줄바꿈을 빼는 것이 핵심**이다. `[^,]` 로 두면 마침표를
 #   넘어가 두 문장에 걸친 조각을 '대구'로 읽는다(첫 실행 실측: 9건 중 5건이 그 오탐이었다).
@@ -653,10 +572,149 @@ def audit_tone(chapter):
     return groups
 
 
+DIST_THRESHOLDS = (0.40, 0.45, 0.50, 0.53, 0.55, 0.60)
+
+
+def card_overlap_dist(only=None, subject_only=None):
+    """[L] 후보의 **점수 분포**와 문턱 후보별 건수 — `--class=L --dist` 가 부른다.
+
+    왜 도구에 남기나 (신설 2026-09-07): [L] 을 빌드 게이트로 승격할 때 **문턱을 골라야 했고**,
+    실행 규율 16 이 요구하는 「고른 값」의 근거가 이 표다. 문턱을 다시 만질 사람이 같은 조회를
+    또 짜지 않게 도구에 둔다 — 일회성 스니펫으로 재면 다음 세션에는 근거가 남지 않는다.
+
+    ★ 이 자가 못 보는 것: **판정이 옳은지**. 「판정 있음」은 사유가 적혀 있다는 뜻일 뿐이다.
+    ★ 순회 범위는 `data/<과목>/chNN.json` 전부다(`chapters()`) — 0건은 「거기까지는 없다」.
+    """
+    rows_by_subject, semesters, seen = {}, {}, {}
+    for subject, ch, chapter in chapters(only, subject_only):
+        semesters[subject] = subject_semester(subject)
+        # ★ **후보가 0건인 챕터도 적어 둔다.** 안 적으면 「깨끗한 챕터」가 목록에서 통째로
+        #   사라져, 지금 켤 수 있는 자리를 못 찾는다(0건과 「본 적 없음」을 가르는 자리다).
+        seen.setdefault(subject, set()).add(ch)
+        rows_by_subject.setdefault(subject, [])
+        verdicts = card_overlap_verdicts(subject)
+        for owner, left, right, score, _note in card_overlap_rows(chapter):
+            rows_by_subject[subject].append(
+                (ch, owner, left, right, score,
+                 bool(card_overlap_verdict_hit(verdicts, ch, left, right))))
+    return rows_by_subject, semesters, seen
+
+
+def subject_semester(subject):
+    """그 과목 `index.json` 의 `semester`(없으면 `"?"`). 학기 목록을 도구에 박지 않는다."""
+    try:
+        with open(os.path.join(DATA, subject, "index.json"), encoding="utf-8") as fh:
+            return str((json.load(fh) or {}).get("semester") or "?")
+    except (OSError, ValueError, AttributeError):
+        return "?"
+
+
+def print_card_overlap_dist(only=None, subject_only=None):
+    rows_by_subject, semesters, seen = card_overlap_dist(only, subject_only)
+    count = sum(len(names) for names in seen.values())
+    print("[검사한 장] " + str(count))
+    if not count:
+        print("[FAIL] 검사한 장이 없습니다 — 범위를 확인할 것")
+        return 2
+    groups = {}
+    for subject, rows in rows_by_subject.items():
+        groups.setdefault("2-2" if semesters.get(subject) == "2-2" else "그 외", []).append(
+            (subject, rows))
+
+    print("\n=== [L] 점수 분포 — 순회한 과목 %d개 · 후보(하한 %.2f 무시, 전부) %d건 ==="
+          % (len(rows_by_subject), CARD_OVERLAP_MIN,
+             sum(len(r) for r in rows_by_subject.values())))
+    print("  ※ 「판정」 칸은 card-overlap-verdicts.json 에 **사유와 함께** 적힌 쌍의 수다.")
+
+    for group in ("2-2", "그 외"):
+        entries = sorted(groups.get(group) or [])
+        if not entries:
+            continue
+        print("\n── %s (%d과목) ─────────────────────────────" % (group, len(entries)))
+        print("  %-24s %6s %s" % ("과목", "≥0.30", " ".join("%6.2f" % t for t in DIST_THRESHOLDS)))
+        for subject, rows in entries:
+            cells = []
+            for t in DIST_THRESHOLDS:
+                hit = [r for r in rows if r[4] >= t]
+                cells.append("%3d/%-2d" % (len([r for r in hit if not r[5]]), len(hit)))
+            print("  %-24s %6d %s"
+                  % (subject[:24], len([r for r in rows if r[4] >= CARD_OVERLAP_MIN]),
+                     " ".join(cells)))
+        print("  (칸은 「미판정/전체」)")
+
+    print("\n── 점수 히스토그램 (0.05 폭) ─────────────────")
+    for lo in [x / 100.0 for x in range(30, 100, 5)]:
+        n22 = n_other = 0
+        for subject, rows in rows_by_subject.items():
+            for r in rows:
+                if lo <= r[4] < lo + 0.05:
+                    if semesters.get(subject) == "2-2":
+                        n22 += 1
+                    else:
+                        n_other += 1
+        if n22 or n_other:
+            print("  %.2f~%.2f  2-2 %4d · 그 외 %4d  %s"
+                  % (lo, lo + 0.05, n22, n_other, "#" * min(60, n22 + n_other)))
+
+    print("\n── 문턱 후보별 합계 ─────────────────────────")
+    print("  %6s %10s %10s %10s %10s" % ("문턱", "2-2 전체", "2-2 미판정", "그외 전체", "그외 미판정"))
+    for t in DIST_THRESHOLDS:
+        cells = [0, 0, 0, 0]
+        for subject, rows in rows_by_subject.items():
+            off = 0 if semesters.get(subject) == "2-2" else 2
+            for r in rows:
+                if r[4] >= t:
+                    cells[off] += 1
+                    if not r[5]:
+                        cells[off + 1] += 1
+        print("  %6.2f %10d %10d %10d %10d" % (t, cells[0], cells[1], cells[2], cells[3]))
+    print("\n  현재 게이트 문턱 CARD_OVERLAP_GATE_MIN = %.2f" % CARD_OVERLAP_GATE_MIN)
+
+    print("\n── 챕터별 미판정 잔량 (문턱 %.2f) — 0 인 챕터가 지금 켤 수 있는 자리다 ──"
+          % CARD_OVERLAP_GATE_MIN)
+    for group in ("2-2", "그 외"):
+        entries = sorted(groups.get(group) or [])
+        if not entries:
+            continue
+        print("  [%s]" % group)
+        for subject, rows in entries:
+            per = {ch: 0 for ch in seen.get(subject) or ()}
+            for ch, _owner, _l, _r, score, judged in rows:
+                per.setdefault(ch, 0)
+                if score >= CARD_OVERLAP_GATE_MIN and not judged:
+                    per[ch] += 1
+            clean = sorted(c for c, n in per.items() if not n)
+            dirty = sorted((c, n) for c, n in per.items() if n)
+            print("    %-24s 깨끗 %2d: %s" % (subject[:24], len(clean), " ".join(clean) or "-"))
+            print("    %-24s 잔량 %2d: %s"
+                  % ("", len(dirty), " ".join("%s(%d)" % cn for cn in dirty) or "-"))
+
+    print("\n── ★ 자의 검정 — 사용자가 실제로 짚은 자리가 걸리나 ──")
+    for subject, rows in sorted(rows_by_subject.items()):
+        for ch, owner, left, right, score, judged in sorted(rows, key=lambda r: -r[4])[:3]:
+            print("  %-16s %-6s %.2f %-24s %s ↔ %s%s"
+                  % (subject[:16], ch, score, str(owner)[:24], left, right,
+                     "  [판정 있음]" if judged else ""))
+
+
 def main():
-    only = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--chapter=")), None)
-    want = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--class=")), None)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--subject", "--only", default=os.environ.get("SUBJECT") or None)
+    parser.add_argument("--chapter")
+    parser.add_argument("--class", dest="kind", type=str.upper, choices=list("ABEGHIJKLMNP"))
+    parser.add_argument("--dist", action="store_true")
+    args = parser.parse_args()
+    only, want = args.chapter, args.kind
+    if args.subject is not None and (args.subject not in os.listdir(DATA)
+                                    or not os.path.isdir(os.path.join(DATA, args.subject))):
+        parser.error("존재하는 과목 폴더를 지정할 것: " + args.subject)
+    if only and not re.fullmatch(r"ch\d+", only):
+        parser.error("--chapter는 chNN 형식이어야 합니다")
+    print("[검사 범위] 과목=" + (args.subject or "전체") + " / 장=" + (only or "전체"))
+    if args.dist:
+        return print_card_overlap_dist(only, args.subject) or 0
     totals = {}
+    examined = 0
 
     def bump(key, n=1):
         totals[key] = totals.get(key, 0) + n
@@ -664,7 +722,8 @@ def main():
     def on(key):
         return want is None or want.upper() == key
 
-    for subject, ch, chapter in chapters(only):
+    for subject, ch, chapter in chapters(only, args.subject):
+        examined += 1
         figures = list(walk_figures(chapter))
         fields = walk_text_fields(chapter)
 
@@ -821,6 +880,10 @@ def main():
                 print("  [수식 대응 없음] %s\n      %r" % (path, frag))
 
     print("\n" + "=" * 62)
+    print("[검사한 장] " + str(examined))
+    if not examined:
+        print("[FAIL] 검사한 장이 없습니다 — 범위를 확인할 것")
+        return 2
     if totals:
         print("합계: " + " · ".join("%s %d건" % (k, v) for k, v in sorted(totals.items())))
     else:

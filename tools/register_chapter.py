@@ -15,7 +15,7 @@
 
 `Bash(python tools/*.py *)` 는 allow 이므로 **이 도구를 쓰면 프롬프트가 0**이 된다.
 선례는 같은 이유로 만든 `tools/commit.py`·`tools/sync_common.py` 다 —
-*"git 을 subprocess 로 돌려 승인을 아예 안 탄다"*.
+*[발화 생략]*.
 
 ★★ **게이트를 없애는 것이 아니라 우회 대상을 좁히는 것이다.**
 `index.json` 이 `ask` 에 있는 이유는 거기에 **검사를 끄는 스위치**(`strictChapters`·`status`)가

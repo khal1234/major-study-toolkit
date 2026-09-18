@@ -1,0 +1,436 @@
+{
+  "_설명": "콘텐츠 규칙 한 벌 (R1 · 설계도 docs/2026-09-18-설계도-지적-소급.md 6절). 한 줄 = 규칙 하나. how: machine(자가 후보를 낸다) · render(삽화를 PNG 로 떠 눈으로 본다) · read(문장을 읽고 판정한다). measure 는 machine 만 — drift:<audit_convention_drift 키> · balance:vertical. 장별 판정은 data/<과목>/rules-verdicts.json, 상태는 python tools/rules.py status. 규칙을 더하면 version 을 1 올린다 — 그 순간 전 장이 그 규칙에 대해 「미판정」이 된다.",
+  "version": 4,
+  "rules": [
+    {
+      "id": "practice-prompt-language",
+      "how": "machine",
+      "measure": "drift:practice-prompt-language",
+      "since": 1,
+      "what": "예제·연습 지문은 한글(ramp 1~2)",
+      "from": "2026-09-14 「예제는 다 한글로 가기로 하지 않았나」"
+    },
+    {
+      "id": "expected-echo",
+      "how": "machine",
+      "measure": "drift:expected-echo",
+      "since": 1,
+      "what": "최종 답이 빈칸 답을 되읊기만 하지 않는다",
+      "from": "2026-09-18 큐 L2"
+    },
+    {
+      "id": "formula-summary-card",
+      "how": "machine",
+      "measure": "drift:formula-summary-card",
+      "since": 1,
+      "what": "유도 뒤 공식 정리 카드가 있다",
+      "from": "2026-09-18 「왜 하나 만들면 다른것들은 안만들고」"
+    },
+    {
+      "id": "textbook-problems",
+      "how": "machine",
+      "measure": "drift:textbook-problems",
+      "since": 1,
+      "what": "교재 문제 탭이 채워져 있다",
+      "from": "2026-09-13 교재 문제 탭 신설"
+    },
+    {
+      "id": "quote-pair",
+      "how": "machine",
+      "measure": "drift:quote-pair",
+      "since": 1,
+      "what": "따옴표 짝이 맞는다",
+      "from": "2026-09-17 빌드 C71"
+    },
+    {
+      "id": "literal-newline",
+      "how": "machine",
+      "measure": "drift:literal-newline",
+      "since": 1,
+      "what": "글자 그대로의 \\n 이 없다",
+      "from": "2026-09-17 빌드 C72"
+    },
+    {
+      "id": "formula-learning-path",
+      "how": "machine",
+      "measure": "drift:formula-learning-path",
+      "since": 1,
+      "what": "공식이 이론·예제·문항·요약으로 이어진다",
+      "from": "docs/공식-학습-연결.md"
+    },
+    {
+      "id": "leader-lands-on-target",
+      "how": "machine",
+      "measure": "drift:leader-lands-on-target",
+      "since": 1,
+      "what": "지시선 끝이 이름 붙인 대상에 닿는다",
+      "from": "2026-09-14 기계공작법 fig-10-dendrite-growth"
+    },
+    {
+      "id": "template-echo",
+      "how": "machine",
+      "measure": "drift:template-echo",
+      "since": 1,
+      "what": "풀이틀이 지문을 되읊지 않는다",
+      "from": "2026-09-14 빌드 C56"
+    },
+    {
+      "id": "section-example",
+      "how": "machine",
+      "measure": "drift:section-example",
+      "since": 1,
+      "what": "이론 절마다 절 예제 하나",
+      "from": "2026-09-14 「이론 나오고 절별로 예제 1문제 푸는것마냥」(넷째 지적)"
+    },
+    {
+      "id": "section-example-fit",
+      "how": "machine",
+      "measure": "drift:section-example-fit",
+      "since": 1,
+      "what": "예제의 절 짝이 맞다",
+      "from": "2026-09-14 C55 후속"
+    },
+    {
+      "id": "ratio-by-amount",
+      "how": "machine",
+      "measure": "drift:ratio-by-amount",
+      "since": 1,
+      "what": "비율(효율)의 오르내림을 절대량으로 판정하지 않는다",
+      "from": "2026-09-13 응용열 ch08 외부 검토"
+    },
+    {
+      "id": "tacked-on-aside",
+      "how": "machine",
+      "measure": "drift:tacked-on-aside",
+      "since": 1,
+      "what": "절 끝에 곁가지를 붙이지 않는다",
+      "from": "2026-09-13 응용열 ch08"
+    },
+    {
+      "id": "caption-echo",
+      "how": "machine",
+      "measure": "drift:caption-echo",
+      "since": 1,
+      "what": "삽화 캡션이 본문을 되풀이하지 않는다",
+      "from": "2026-09-13 판정선 「그림이 말한 문장을 되읊지 않는다」"
+    },
+    {
+      "id": "calculator-free-first-rung",
+      "how": "machine",
+      "measure": "drift:calculator-free-first-rung",
+      "since": 1,
+      "what": "1회차 문항은 계산기 없이 풀린다",
+      "from": "2026-09-10 문풀 지문 눈금"
+    },
+    {
+      "id": "drawing-without-figure",
+      "how": "machine",
+      "measure": "drift:drawing-without-figure",
+      "since": 1,
+      "what": "「그리는 법」을 적었으면 그림이 있다",
+      "from": "2026-09-13 「그려야 한다고 판정해 놓고 안 그린 절」"
+    },
+    {
+      "id": "label-crowding",
+      "how": "machine",
+      "measure": "drift:label-crowding",
+      "since": 1,
+      "what": "한 그림에 라벨을 몰아넣지 않는다(단계로 가른다)",
+      "from": "2026-09-10 삽화 지적 일곱 건"
+    },
+    {
+      "id": "prose-correspondence",
+      "how": "machine",
+      "measure": "drift:prose-correspondence",
+      "since": 1,
+      "what": "대응 셋 이상은 문장이 아니라 표로",
+      "from": "2026-09-10"
+    },
+    {
+      "id": "screen-deixis",
+      "how": "machine",
+      "measure": "drift:screen-deixis",
+      "since": 1,
+      "what": "위치어(아래 카드·오른쪽)로 가리키지 않는다",
+      "from": ".claude/rules/content.md"
+    },
+    {
+      "id": "ox-length-tell",
+      "how": "machine",
+      "measure": "drift:ox-length-tell",
+      "since": 1,
+      "what": "O/X 를 길이로 못 맞힌다",
+      "from": "2026-09-06 OX 설계 원칙"
+    },
+    {
+      "id": "ox-phrase-tell",
+      "how": "machine",
+      "measure": "drift:ox-phrase-tell",
+      "since": 1,
+      "what": "O/X 를 문형으로 못 맞힌다",
+      "from": "2026-09-06 OX 설계 원칙"
+    },
+    {
+      "id": "ox-answer-balance",
+      "how": "machine",
+      "measure": "drift:ox-answer-balance",
+      "since": 1,
+      "what": "O/X 답이 한쪽으로 쏠리지 않는다",
+      "from": "2026-09-06 OX 설계 원칙"
+    },
+    {
+      "id": "slide-mode",
+      "how": "machine",
+      "measure": "drift:slide-mode",
+      "since": 1,
+      "what": "유도 카드 삽화는 슬라이드 모드",
+      "from": "2026-08-18 슬라이드 모드 사양"
+    },
+    {
+      "id": "fig-width",
+      "how": "machine",
+      "measure": "drift:fig-width",
+      "since": 1,
+      "what": "삽화 viewBox 폭 640",
+      "from": "2026-08-29"
+    },
+    {
+      "id": "hand-arc",
+      "how": "machine",
+      "measure": "drift:hand-arc",
+      "since": 1,
+      "what": "각도 호는 svg_arc_arrow 로",
+      "from": "2026-08-25"
+    },
+    {
+      "id": "curve-facets",
+      "how": "machine",
+      "measure": "drift:curve-facets",
+      "since": 1,
+      "what": "곡선이 각져 보이지 않는다",
+      "from": "2026-09-10 재지적"
+    },
+    {
+      "id": "arrow-on-outline",
+      "how": "machine",
+      "measure": "drift:arrow-on-outline",
+      "since": 1,
+      "what": "화살표 자루가 도형 외형선 위에 겹치지 않는다(바깥 10)",
+      "from": "2026-09-08 여백 판정 표본 B"
+    },
+    {
+      "id": "iso-3d",
+      "how": "machine",
+      "measure": "drift:iso-3d",
+      "since": 1,
+      "what": "입체인 것은 입체로 그린다",
+      "from": "2026-09-07 「죄다 평면화」"
+    },
+    {
+      "id": "rate-dot",
+      "how": "machine",
+      "measure": "drift:rate-dot",
+      "since": 1,
+      "what": "산문에 날것 닷 글자(ṁ)가 없다",
+      "from": "2026-08-07"
+    },
+    {
+      "id": "deriv-jump",
+      "how": "machine",
+      "measure": "drift:deriv-jump",
+      "since": 1,
+      "what": "대입 전에 원래 식을 다시 보여 준다",
+      "from": "2026-08-19 「원래 식을 보여준 후 대입한 식으로 … 생략하네」"
+    },
+    {
+      "id": "motion-gap",
+      "how": "machine",
+      "measure": "drift:motion-gap",
+      "since": 1,
+      "what": "시간 순서를 말하는 절에는 단계·움직이는 그림",
+      "from": "2026-09-08"
+    },
+    {
+      "id": "term-not-introduced",
+      "how": "machine",
+      "measure": "drift:term-not-introduced",
+      "since": 1,
+      "what": "문항이 쓰는 말은 이론 본문에 먼저 나온다",
+      "from": "2026-09-08 기어가 맞물리게"
+    },
+    {
+      "id": "geometry-in-formula-only",
+      "how": "machine",
+      "measure": "drift:geometry-in-formula-only",
+      "since": 1,
+      "what": "기하 관계를 식으로만 두지 않고 그린다",
+      "from": "2026-09-08"
+    },
+    {
+      "id": "figure-carries-the-symbols",
+      "how": "machine",
+      "measure": "drift:figure-carries-the-symbols",
+      "since": 1,
+      "what": "유도 카드 그림에 그 식의 기호가 객체로 있다",
+      "from": "2026-09-08 「계와 환경 뭉퉁그려서 … 도식화해서 끄집어내서」"
+    },
+    {
+      "id": "fig-vertical-balance",
+      "how": "machine",
+      "measure": "balance:vertical",
+      "since": 1,
+      "what": "삽화 위·아래 여백이 고르다(±6)",
+      "from": "2026-09-07 「맨위 맨 아래 여백」 유체 fig-no-slip-profile"
+    },
+    {
+      "id": "fig-vertical-margin",
+      "how": "machine",
+      "measure": "balance:margin",
+      "since": 3,
+      "what": "삽화 안 위·아래 빈 띠는 9px(허용 15) — 처방 fix_figure_vertical_balance.py --margin=9",
+      "from": "2026-09-09 전전 「맨 위, 맨 아래 여백도 좀 줄여봐」(9px 로 누름, 전전 ch00~02 만) · 2026-09-10 응용고체 「맨 위 맨 아래 여백은 언제까지 지적해야 하려나」 · 2026-09-18 공수2 ch09 재지적"
+    },
+    {
+      "id": "fig-render-look",
+      "how": "render",
+      "since": 1,
+      "what": "삽화 전부를 PNG 로 떠서 본다 — 겹침·잘림·빈 띠(위·아래 여백의 양)·라벨 붙음",
+      "from": "2026-09-18 공수2 ch09 1절 「맨 위 맨 아래 여백 한두번 말한게 아닌데」"
+    },
+    {
+      "id": "fig-physics-right",
+      "how": "render",
+      "since": 1,
+      "what": "그림이 말하는 물리·수학이 맞다(방향·부호·순서)",
+      "from": "2026-09-10 「그림이 물리를 틀리게 말한다」"
+    },
+    {
+      "id": "fig-why-each-choice",
+      "how": "render",
+      "since": 1,
+      "what": "그림의 요소마다 그린 이유가 있다 — 이유 없는 장식·빈 요소가 없다",
+      "from": "2026-09-11 「삽화의 선택 하나하나에 그린 이유」"
+    },
+    {
+      "id": "prose-no-triple-repeat",
+      "how": "read",
+      "since": 1,
+      "what": "본문·잘 놓쳐요·떠올리기가 같은 말을 되풀이하지 않는다",
+      "from": "2026-09-07 「3번이나 나오면 오히려」(재지적)"
+    },
+    {
+      "id": "prose-one-question",
+      "how": "read",
+      "since": 1,
+      "what": "한 절 한 질문 — 결론을 여러 번 말하거나 비유를 섞지 않는다",
+      "from": "2026-09-13 도입 절 반복·「~처럼 들리지만 실제로는」"
+    },
+    {
+      "id": "prose-prereq-light",
+      "how": "read",
+      "since": 1,
+      "what": "2-2 이후는 앞 학기 개념을 한두 문장+링크로만 되짚는다",
+      "from": "2026-09-18 「이정돈알지? 정도로 가볍게」"
+    },
+    {
+      "id": "prose-formula-shown",
+      "how": "read",
+      "since": 1,
+      "what": "이론 본문이 그 장이 쓰는 식을 전부 한 번은 보여 준다",
+      "from": "2026-09-13 판정선"
+    },
+    {
+      "id": "scope-condition",
+      "how": "read",
+      "since": 1,
+      "what": "단정문에 정의역 조건이 빠지지 않았다(영벡터·특이점 등)",
+      "from": "2026-09-13 반례 검토 부류"
+    },
+    {
+      "id": "percent-symbol",
+      "how": "machine",
+      "measure": "regex:[0-9] ?퍼센트",
+      "since": 2,
+      "what": "숫자 뒤 「퍼센트」는 % 로",
+      "from": "2026-09-16 응용열 ch07 「87.5 퍼센트」 — 응용열만 치환됐었다"
+    },
+    {
+      "id": "raw-markup",
+      "how": "machine",
+      "measure": "regex:(^|[^*\\\\A-Za-z0-9_^])\\*[^*\\s][^*]{0,60}[^*\\s]\\*($|[^*])",
+      "since": 2,
+      "what": "화면에 마크다운 기호(*…*)가 날것으로 안 남는다",
+      "from": "2026-09-1x 전전 ch01 「`*` 은 뭔 의미지 … 기호로 남기면 안되지」"
+    },
+    {
+      "id": "no-forward-link",
+      "how": "read",
+      "since": 2,
+      "what": "링크·가리킴은 앞에서 배운 곳만 — 뒤 절·뒤 장으로 미리 보내지 않는다",
+      "from": "2026-09-1x 전전 ch01 EE01-FWD-01 (재확인)"
+    },
+    {
+      "id": "deriv-symbols-defined",
+      "how": "read",
+      "since": 2,
+      "what": "유도의 기호는 쓰기 전에 정의하고, 「확인」 단계는 실제로 검산한다",
+      "from": "2026-08-07 동역학 ch12 「좌표가 안 그려짐 · 기호 미정의 · 확인이 확인이 아님」"
+    },
+    {
+      "id": "deriv-figure-not-spared",
+      "how": "render",
+      "since": 2,
+      "what": "좌표·기하가 있는 유도는 그림을 아끼지 않는다 — 그림은 결론만 적지 않고 과정을 보인다",
+      "from": "2026-08-07 동역학 ch12 「유도 3번은 왜 삽화 안넣는데 … 왜캐 삽화를 아끼지」 · 「삽화가 결론만 적는다」"
+    },
+    {
+      "id": "term-english-pair",
+      "how": "read",
+      "since": 2,
+      "what": "새 용어의 첫 등장에 영문을 병기한다",
+      "from": "2026-08-07 동역학 ch13 「용어 영문 병기가 빠졌다」(결함 · 기계 방지 없음)"
+    },
+    {
+      "id": "answer-unit-matches",
+      "how": "read",
+      "since": 4,
+      "what": "물음이 적은 단위와 답의 단위가 같다(W [N] 이면 답도 N 계열로 말하고, 큰 값은 SI 접두어로)",
+      "from": "2026-07 열역학 ch01 W-47 「W [N] 인데 답은 4.22 kN」 · W-46 SI 접두어 3회째"
+    },
+    {
+      "id": "fig-no-spoiler",
+      "how": "render",
+      "since": 4,
+      "what": "문풀·문제 삽화가 답이나 가린 수치를 대신 말하지 않는다(캡션 포함) — 주어진 것과 구할 것만",
+      "from": "2026-07 열역학 ch01 W-13 「문풀 삽화가 문제를 대신 풀어 준다」 · W-43 「캡션이 가린 수치를 그대로 말한다」"
+    },
+    {
+      "id": "fig-draws-the-topic",
+      "how": "render",
+      "since": 4,
+      "what": "삽화가 그 문항·절의 주제를 그린다 — 제목과 그림이 같은 것을 말한다",
+      "from": "2026-07 열역학 ch01 W-48 「문제의 주제를 안 그린다」 · 2026-08-18 ch07 B-4 「제목과 그림이 다른 것을 말한다」"
+    },
+    {
+      "id": "fig-magnitude-shown",
+      "how": "render",
+      "since": 4,
+      "what": "크기·방향의 차이를 말하는 그림은 그 차이를 모양으로 보인다(커진다/작아진다에 크기 차등, 과정에 진행 방향)",
+      "from": "2026-08-18 열역학 ch07 B-5 「T-s 선도에 진행 방향이 없다」 · B-6 「커지고/작아집니다에 크기 차등이 없다」"
+    },
+    {
+      "id": "notation-consistent",
+      "how": "read",
+      "since": 4,
+      "what": "같은 양은 장 안의 모든 그림·식에서 같은 기호로 적는다",
+      "from": "2026-07 열역학 ch01 W-34 「같은 마노미터인데 두 삽화의 h 표기가 다르다」 · W-37"
+    },
+    {
+      "id": "example-mental-math",
+      "how": "read",
+      "since": 2,
+      "what": "예제 수치는 암산으로 깔끔하다(20×100, I₂=2I₁ 꼴)",
+      "from": "2026-09-1x 전전 ch01 「25*90 이 암산으로 하기 좀 깔끔하지 않잖아」"
+    }
+  ]
+}

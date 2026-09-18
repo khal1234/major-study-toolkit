@@ -42,6 +42,9 @@ data/**/*.txt
 # 이 규칙이면 `.claude/SUBJECT.md`도 무시 대상이 아니라 그대로 추적된다(main에는 올리지 않는다 —
 # sync_common의 NEVER_SYNC가 스테이징에서 뺀다).
 /.claude/settings.local.json
+# 그 파일의 백업도 같은 이유로 버전관리 밖이다 — 기계마다 다른 권한·경로 목록이라 올리면 게시된다
+# (2026-09-11 `.bak-20260911` 이 생겨 미커밋 1건으로 대량 적용 가드를 막았다).
+/.claude/settings.local.json.bak-*
 /.claude/hooks/__pycache__/
 /.claude/**/__pycache__/
 # 훅의 세션 로컬 상태(편집 횟수·거부 로그·로드 이력·트레이스). `.claude/hooks`가 sync_common의
@@ -61,6 +64,7 @@ data/**/*.txt
 #   적어 놓고도 **어느 패턴에도 안 걸렸다**(`git check-ignore` exit 1). 위 dot 규칙은
 #   `.claude/hooks/` 아래만 덮는데 이 깃발은 `.claude/` 바로 아래라서다 — 이름을 옮기면서 닫는다.
 /.claude/wakeup-guard.json
+/.claude/loop-rounds.jsonl
 /.codex/
 /.codex-audit/
 /.agents/
@@ -144,3 +148,6 @@ tools/serve_site*.log
 # 2026-09-02: watch_and_build 런처(완전 분리된 백그라운드 감시기, b1f098d6)도 같은 부류다 —
 # untracked 로그가 main 워크트리에 남아 다른 과목 세션의 sync_common 반영을 막았다(medesign 실사고).
 tools/watch_and_build*.log
+
+# 2026-09-07 평탄화. 워크트리가 이 폴더 자체가 되면서 **git 디렉터리가 작업 트리 안으로** 들어왔다.
+/.bare/

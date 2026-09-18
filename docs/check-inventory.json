@@ -1,0 +1,1594 @@
+{
+  "test_a_key_nobody_reads_is_named": {
+    "expects": 9,
+    "marks": "16763d2f 1fb7a458 504b48ec 5baca1be 6634256c 8189c8ef 8adfdbd8 909d3112 99a6e4e1"
+  },
+  "test_a_missing_subject_filter_is_not_a_quiet_zero": {
+    "expects": 10,
+    "marks": "19f59f13 275ca49b 48302a5f 62115b73 827b55ac 854f0b75 940628d9 c721d0e0 c769c07c ee5ff85c"
+  },
+  "test_a_verdict_to_draw_does_not_hide_the_debt": {
+    "expects": 4,
+    "marks": "8687665d a22065de d28b0577 febda2f9"
+  },
+  "test_accepted_baseline_is_pushed_before_close": {
+    "expects": 17,
+    "marks": "11042fa4 1544adcc 27a22f31 2fb9450d 39b6a0c5 3cec82a6 65e48b16 75ef964a 771218c3 8ae88fcd a886819a ab1169eb b39007ee b40c59a0 cf7a4de6 e3974ab0 f99cc8b5"
+  },
+  "test_adoption_ledger_never_judges_for_you": {
+    "expects": 27,
+    "marks": "019f4c1f 141a589e 17cfa195 1b881931 1daca673 292ead44 29e6b806 2a5071f3 34c06980 4ac84524 745d33e4 797906ca 852e9ebe 8aea6002 93c49b5d 9ce05ff7 a9854a56 aa8b3d4d b0140440 b74c63f7 b8563fec bd4595e4 c59a4c31 c6a65f92 cc885161 e41993aa eac2182c"
+  },
+  "test_agent_preflight": {
+    "expects": 7,
+    "marks": "5e024e99 72ef06c6 889be958 b37b6f67 bf0e640a c383c10e ea3a244e"
+  },
+  "test_agents_ledger_pointers_resolve": {
+    "expects": 4,
+    "marks": "396c3310 743a05a2 86023bac e0e06be8"
+  },
+  "test_all_subject_sidebar": {
+    "expects": 49,
+    "marks": "0a81e52c 0de755a8 1e49c4d4 1e94c612 20538a34 2483ca7e 2dcf0179 2e930b68 31e10121 35115a3d 39119ffc 3ce0169d 43a94153 4857122f 491a6a33 4bbb9f4e 4c1d4d5f 652a3604 6688ca6c 6a7318ad 6f52e575 6ff48264 704eb3af 71c73586 9184b1b1 93991e07 9598665e 9a766fbd a4472125 a56dab0d a8b3d4a1 acb7acb7 b278549d b7194c6b bcde364f c0ba3b94 c390d57f c3c8549a c726b9e7 c8a0adab d3f96193 e769cdc8 e8337cea e8807509 ee40d072 f0e6c93a f6c696b1 fcb0260b fec26b1a"
+  },
+  "test_anchor_text": {
+    "expects": 6,
+    "marks": "25c4d6f9 268b100f 8e3139b3 aa99f906 b2edc3bd e2c318e0"
+  },
+  "test_answer_slot_count_matches_numeric_parts": {
+    "expects": 7,
+    "marks": "14fdcc40 4e46b87e aefa8a00 bb7e6943 c3783775 d303fc0e f4a3dbc6"
+  },
+  "test_answer_slot_ids_exist": {
+    "expects": 6,
+    "marks": "033154a5 25c2f102 2cfe69cd 5f98d27e 71b98a2b bb76aa37"
+  },
+  "test_answer_slot_leak_is_rejected": {
+    "expects": 4,
+    "marks": "7284f210 93ce1ed3 9fc939d4 a9882ef1"
+  },
+  "test_answer_verifier_covers_derivation_chapters": {
+    "expects": 3,
+    "marks": "54e558d4 61d915f5 90f5ea49"
+  },
+  "test_arrow_clearance": {
+    "expects": 11,
+    "marks": "0309741d 550e0770 5870fee8 5ea26ed5 68a24825 6f4d3edb 70e18596 82739f33 b024c188 b05c2259 c0b27add"
+  },
+  "test_arrow_fixer_moves_path_stems": {
+    "expects": 7,
+    "marks": "14e7c219 1d5cd1e8 67b92e1f 701efb5c 99453013 b1356b31 d6cfe988"
+  },
+  "test_arrow_scale_spec": {
+    "expects": 10,
+    "marks": "29a349b4 6768586b 690714b7 6c9127aa 70d2a356 95901798 9ceece51 a1b130df bf39d96c e4c24b29"
+  },
+  "test_arrowhead_has_a_seam_stroke": {
+    "expects": 12,
+    "marks": "21a83a74 2b25c036 3309973d 347fdf52 57d22592 68c1133b 91428070 a9f01a55 aef0b971 be8cb38d da7a6697 dddbc080"
+  },
+  "test_audit_covers_every_chapter_file": {
+    "expects": 9,
+    "marks": "3451b309 356d5762 65c62a50 9e4642a5 a107fb57 d2e3b34d d4ed240e d55b7343 ee7ef76f"
+  },
+  "test_audit_figure_anchor_agrees_with_build": {
+    "expects": 7,
+    "marks": "115479c0 12adebaa 1bda4cbf 24f2958e 651d4028 818da630 b6cd6301"
+  },
+  "test_audit_refs_without_subjects_is_not_a_failure": {
+    "expects": 2,
+    "marks": "b1938d72 e2a134ff"
+  },
+  "test_audit_step_traversal": {
+    "expects": 4,
+    "marks": "0a9286ba 4a3308b4 7fe1550c afe946c5"
+  },
+  "test_author_only_fields_never_ship": {
+    "expects": 5,
+    "marks": "020eeeb7 9c04e977 cb5ce1cd db537915 e6fcf588"
+  },
+  "test_authored_text_never_uses_esc": {
+    "expects": 2,
+    "marks": "7db165d4 a2097c08"
+  },
+  "test_axis_has_direction_arrow": {
+    "expects": 5,
+    "marks": "00409127 2ad96064 3359c98d c67f134f d1a77ae8"
+  },
+  "test_axis_name_sits_one_em_from_the_arrow": {
+    "expects": 6,
+    "marks": "2100ec4f 2bada35d 363f7e8b 58e5a339 9681e578 c15c4853"
+  },
+  "test_backup_includes_git_ignored_state": {
+    "expects": 17,
+    "marks": "0fe3855a 2d60e9b3 43ee433d 4d3cb61d 60c0c9d8 62c6fa31 6ae3f555 78ef227d 92aa0208 956be03b 9c0bcd57 a77321e4 a79eda2f c13749b5 c76d4bcc db44c08d e7cd1043"
+  },
+  "test_bare_comma_product": {
+    "expects": 5,
+    "marks": "2e7f817c 4452a6c5 80ae5788 be1ec7bb d50d459c"
+  },
+  "test_baseline_move_cannot_swallow_unseen_commits": {
+    "expects": 24,
+    "marks": "09bddfd8 0bff21d2 0f754a75 1ad107cc 1c0eba7a 1d945afd 2f707221 34132b9a 3ceb9f80 49f3dd8e 526ecc59 541ae1ae 65b40d90 7c466299 80fa1967 823e6668 855f7f8c 976cc656 b5171994 bbcdf56d c5a2626a c67f3447 df588920 ef4b6ec4"
+  },
+  "test_big_operators_eat_the_latex_delimiter_space": {
+    "expects": 3,
+    "marks": "28b7a5f9 57827c74 80b3499a"
+  },
+  "test_box_center": {
+    "expects": 20,
+    "marks": "02087ed4 10d7d1d0 2d1ccc5c 51e659e3 74a0aab9 7794a9fe 7d2ba411 8a7d5bb8 8a984ef5 91c0997a a85f5af8 a92b6949 a947c558 ad5973aa b65f4efe bd892c80 ca102b6f eacc8d6e fc6d954f fe90d660"
+  },
+  "test_brace_arg_macro_is_required": {
+    "expects": 14,
+    "marks": "159653f1 16439006 1fcb280b 2bb6fb1c 4504419e 563783aa 59aa65f4 757e6d5a 782c26d7 8916159d a240cdc5 c6a45370 ceeddb65 db56e347"
+  },
+  "test_bracket_numerator_is_a_text_fraction": {
+    "expects": 8,
+    "marks": "1d671b44 2ed9265a 3679aa53 4d7c726c 54ed12ea 8ab696fe b8dde016 d9906e6f"
+  },
+  "test_build_without_subjects_is_not_a_failure": {
+    "expects": 3,
+    "marks": "8326cee7 b1938d72 e2a134ff"
+  },
+  "test_bulk_apply_guard_is_wired_and_measures_the_right_tree": {
+    "expects": 6,
+    "marks": "4086870f 606debb4 6e6872de 87eb244a ac304ae0 aeebed40"
+  },
+  "test_bulk_rewriters_preview_by_default": {
+    "expects": 3,
+    "marks": "31151a27 77813d1b c676497b"
+  },
+  "test_caption_ruler_is_shared": {
+    "expects": 6,
+    "marks": "3ceff81c 4920b2a5 9b53dc2a c4f1c2cd f26d17a3 f5909974"
+  },
+  "test_caption_says_only_what_the_picture_shows": {
+    "expects": 11,
+    "marks": "0a504262 340d6b70 3a24d214 42168842 453b183e 4e0ac08e 90d55170 9fb5e902 a91276b5 c717ec43 c7a0e635"
+  },
+  "test_caption_tier_is_uniform_within_a_figure": {
+    "expects": 4,
+    "marks": "117a4e25 15e553f1 4971ff74 7351066c"
+  },
+  "test_card_reorder_preserves_json": {
+    "expects": 9,
+    "marks": "21f19d7e 2c8bb070 4159ecd9 4c0055db 8a7e9f38 99b20eaf a970acae fc83f76e"
+  },
+  "test_centerline_is_a_chain_line": {
+    "expects": 5,
+    "marks": "3722cb22 490d431a 5553dec0 931993f1 f86fce61"
+  },
+  "test_chain_selfsufficiency_counts_the_bridges": {
+    "expects": 18,
+    "marks": "13e130d4 1593e50f 17ffed32 228289bd 30d2eb9c 31f1b4d5 53172221 70228552 8f5ce697 9ee8eff1 a3f9f760 adddb8d6 b8a0f9f2 ca9b4606 da9b2bff e99ce640 f046f383 fabef20d"
+  },
+  "test_change_note_writer_keeps_the_json_shape": {
+    "expects": 12,
+    "marks": "3ff95eda 42744d04 4dc47552 4ea3e2b7 6f6a755d 73b47dee 75b23b61 8eaa9a77 abd3cbb5 c5b8776d d6f681f2 e9ad89e1"
+  },
+  "test_chapter_button_follows_the_reader_down": {
+    "expects": 8,
+    "marks": "196f648f 2968694e 2d081ae4 42997b11 70c22d94 ac848d9f e053be39 fd21c225"
+  },
+  "test_chapter_intro_gate": {
+    "expects": 5,
+    "marks": "1c4b379b 1d369b83 3bfdd917 7dccfde1 d525cf93"
+  },
+  "test_chapter_summary_has_its_own_tab": {
+    "expects": 22,
+    "marks": "0219de3f 0e24129e 15eab974 4065643c 55f71815 69e096d0 755aaeb0 7aa528f9 7e06fca6 8283f30b 98fbe10b 9bbaa143 b9692381 bbca81db c1d94587 c64cd250 d6c2437e e18829ab e6db7b0d ef7e5fc9 f95709a2 fe365d27"
+  },
+  "test_chapter_title_agrees_between_index_and_chapter": {
+    "expects": 6,
+    "marks": "1d446526 4b6c8a1d 6fac902f 9be6a281 ae9d5a89 d8f65fb7"
+  },
+  "test_char_width_matches_the_browser": {
+    "expects": 6,
+    "marks": "30b67970 44329595 95ac34cc b82bedb5 f1fef180 f7248cde"
+  },
+  "test_check_answer_has_a_sentence_ceiling": {
+    "expects": 10,
+    "marks": "0ce981d1 5befd8f4 5e4c41f0 7fde7bbc b08efdc6 b1d70209 b6ca3254 bca7dd1b c0c28a98 d032c161"
+  },
+  "test_check_answer_length_counts_visible_chars": {
+    "expects": 6,
+    "marks": "0f8b0214 1116f166 23a600c1 55d50aa3 7a6c7b2a df4445a4"
+  },
+  "test_check_answer_stays_in_scope": {
+    "expects": 7,
+    "marks": "04fb6f8b 25141462 56a4b84b 5a2e76ac 823d248f 86c6b81f f8e3a318"
+  },
+  "test_checks_do_not_erode_silently": {
+    "expects": 20,
+    "marks": "13a5ebde 1d9ec486 2b299fa4 35389139 3aab8487 5ff75833 6476f6c4 689ce162 8a0e42aa 930d9e04 9cea1a68 bab445bf bcc60fe2 beb954e7 c9650a03 d8a72e5f f3372e0e f8bfc86b faa9d6e3"
+  },
+  "test_circular_arrow_tangent": {
+    "expects": 2,
+    "marks": "7fcecc87 e4dde543"
+  },
+  "test_citation_does_not_leak_into_reader_text": {
+    "expects": 5,
+    "marks": "0973f9ec 81bbf69a a64b7fbe c4b0d198 c7160ea4"
+  },
+  "test_close_report_builds_all_chapters": {
+    "expects": 3,
+    "marks": "230f5849 8d377756 d643a694"
+  },
+  "test_close_report_does_not_misreport_without_a_subject": {
+    "expects": 8,
+    "marks": "3bae49cf 58a47d87 5db62be2 97a9088c 9cb262a1 cd282f40 ef85e66e f92fee8c"
+  },
+  "test_close_report_exit_code_follows_the_blockers": {
+    "expects": 6,
+    "marks": "3c28ef19 658a208e 9b7818df cf7370f8 d99507fb fb152c34"
+  },
+  "test_close_report_measures_real_chapters": {
+    "expects": 7,
+    "marks": "01a92360 14eea765 1f136dfa 91485a75 96bc75b4 e001de8e fcbaad27"
+  },
+  "test_commit_only_takes_the_paths_it_was_given": {
+    "expects": 21,
+    "marks": "10b382c5 161210a6 190fa87c 239bb2d1 57a342c3 653f4152 74ce9a61 774b08e1 7b68482e 818e4a80 88f08cd2 893d06c3 932b18ae 9ad559eb d8f93c25 db0959f0 e001817f ea43e476 edb46269 f296f324 f2ccae94"
+  },
+  "test_commit_reflects_common_to_main_on_the_spot": {
+    "expects": 25,
+    "marks": "01083123 0ef54224 0f216281 32f4ec35 34bbbee3 39aea943 60a74582 64cb1971 689869ea 70d7731e 79284006 828d8502 9cd90be2 9d250d46 a9265d29 ad6d8559 b781b042 c9081700 d400dc7f d4887c76 d9d9536c e0607580 e4204b25 f5a124ae fca91734"
+  },
+  "test_commit_runs_close_gates_only_where_declared": {
+    "expects": 3,
+    "marks": "47e83690 55f33e14 5cca325c"
+  },
+  "test_common_guard": {
+    "expects": 23,
+    "marks": "14a2d0d6 1ba22084 21422355 2749de1b 29778120 39227e6b 3d4814f4 4cd4eec0 52154227 7ce284d6 7e4aed8a 81ca6f7f 8d883af2 9ad9704a 9dbbaf91 9e244867 a6e08d47 b2aaa230 d08836e8 d2062ee2 e2236994 f6567a57 fc664c6a"
+  },
+  "test_common_suite_never_hardcodes_subject_data": {
+    "expects": 3,
+    "marks": "47e2fdd2 55921972 d373ea50"
+  },
+  "test_completion_criteria_are_executed": {
+    "expects": 12,
+    "marks": "1682ef9d 1738139d 43defe5a 596e3c66 624082bc 8b6397fa 8cd60adb 9c089904 9f8a3ba6 a487c093 b990e513 f95022b0"
+  },
+  "test_comprehension_check_declares_its_stage": {
+    "expects": 5,
+    "marks": "1cfd8b6f 410fb8b5 7ced1a3a c5196a94 da7aab2d"
+  },
+  "test_comprehension_check_folds_only_the_answer": {
+    "expects": 8,
+    "marks": "105e41d2 2d758a1d 368f5fa2 a7d67e3e aa3178e2 caf0e67e ef645965 f33c3aa3"
+  },
+  "test_comprehension_checks_are_never_filtered_away": {
+    "expects": 3,
+    "marks": "0e0e444b 2b46bae4 fb0097c2"
+  },
+  "test_conduct_audit_counts_but_never_judges": {
+    "expects": 12,
+    "marks": "123df2a0 1ae8a838 1c455916 3ac14feb 44a66461 83274aa7 87299f92 941e6425 aa0803ee b04ff711 b670543b ca8b5c72"
+  },
+  "test_container_root_session_has_no_subject": {
+    "expects": 22,
+    "marks": "0176615a 0661bc1d 17bcbbd7 3191734b 33a6c528 4d152ac9 4e806be6 532556ed 53f9ccba 5d94ae03 6187397d 7e95a823 7ed1fa67 8713f527 aad1d922 ae8c34e3 b47720c5 bb29b257 d64359ed df10fa3d f49744d7 f7144f4f"
+  },
+  "test_control_fonts_inherit": {
+    "expects": 7,
+    "marks": "265ea0c0 29792e05 434c4bfb 5c6636e9 6df4c147 7a0d5af4 9449edfe"
+  },
+  "test_convention_drift_finds_candidates_and_stays_subject_agnostic": {
+    "expects": 29,
+    "marks": "12afedbb 15b34e26 1ae26315 1e27c193 2f2a36f4 3135d4ca 404df1b1 490e5c9e 4abc92e1 626ae729 74d3c51f 8390a7fc 9087376e 9cd971d0 a5748cdc ac232291 adb93830 ba9e1bc1 be6f8d68 bfad73a1 c74b50f5 cc7e776f d89e3af9 d8a88162 ea210dce eb11e77d ec4ae676 f65ba663 f65ef1de"
+  },
+  "test_coverage_judgments_are_written_down": {
+    "expects": 10,
+    "marks": "11ecb075 206e79d5 3a3f11f4 3b4bc2a1 73929ef4 8e8aab01 98c146e8 b1850d3a d29aa27c f9ecec59"
+  },
+  "test_cross_subject_link_is_verified": {
+    "expects": 3,
+    "marks": "0993e43c 504ffd2a a66be3f1"
+  },
+  "test_crystal_indices_are_not_measurements": {
+    "expects": 5,
+    "marks": "3347ac84 33fa031c 6c33e425 7bdf59cd b2ef512d"
+  },
+  "test_damped_oscillation_has_a_ruler": {
+    "expects": 4,
+    "marks": "0b782837 452f531f 6c4c941c 98bdc616"
+  },
+  "test_dash_audit_sees_group_inheritance": {
+    "expects": 3,
+    "marks": "00c4365a 5eb64f2d 903a3b60"
+  },
+  "test_dash_role_registry_is_shared": {
+    "expects": 7,
+    "marks": "0569221f 0f09b3b6 201a67f1 4d5c8a72 85cce3aa b7093cd0 ed357d4f"
+  },
+  "test_dashed_line_does_not_cover_a_solid_one": {
+    "expects": 6,
+    "marks": "3b6b7374 5f8b7b32 a2ac29ca ae945a7d cfb8f1dd e5e60cd3"
+  },
+  "test_dead_textbook_map_is_not_silent": {
+    "expects": 4,
+    "marks": "1bfe2538 68f7624d a6bfb537 c47c4271"
+  },
+  "test_declared_hidden_tabs": {
+    "expects": 11,
+    "marks": "01960fc9 138550d2 3cea170d 5b868a0c 9cd1911b 9ea4c4ae acd7a284 c7de8824 e63d1e3a e7b211dc fe572d19"
+  },
+  "test_deep_link_viewer_agreement": {
+    "expects": 8,
+    "marks": "1c6db7a9 71be57fb 7830855a 7f29b979 8da430f6 9958be2c af16f186 c8917075"
+  },
+  "test_density": {
+    "expects": 7,
+    "marks": "231b7b6e 3b195d58 3b8c916b 6dcfb6c4 8ca5215a ce39406f f8c7cc1a"
+  },
+  "test_derivation_card_fields_match_viewer": {
+    "expects": 23,
+    "marks": "2cc49c6a 3e1f9de1 479a5e27 4c439a46 72f65a81 7abdc3f2 7cae5475 7e46551d 84d4b1cd 916ca91e 980ce4ca 98d7b9b3 a4c1808f abfaf2f0 aed706ed af699936 b306ebe1 b89d4247 cb20c3f3 d2e5b5a3 d4865101 dddc6fda e7be66f3"
+  },
+  "test_derivation_follows_theory_order": {
+    "expects": 6,
+    "marks": "2354a759 835cc735 8c489951 9a7a6daa a8dbe1eb fc5e925b"
+  },
+  "test_derivation_kind_decides_step_shape": {
+    "expects": 23,
+    "marks": "123c419b 162695cb 2a8caea7 2b816143 33a337ba 3625d978 38ba3e31 3e871260 52bc9310 56de1b4e 5eeab91c 63148b42 64888ef4 6c4c1e81 7159b3fe 7a5112fc 953bcda1 a79c17d0 b69ca9b6 d9a1599f f31a98a9 f6fcdc97 f9866557"
+  },
+  "test_derivation_schema_extensions": {
+    "expects": 17,
+    "marks": "232068b5 408a1f7c 427ac9ab 60c19f23 6c6494c0 7cd1d603 8d29359d 90278c0f a3e0dbf9 a9bdb21b aec9f67f b1f2a106 b50a58f2 c693ec25 c91ed52e caff091a ee757a47"
+  },
+  "test_derivation_slide_layer_is_declaration_driven": {
+    "expects": 34,
+    "marks": "0020f9d2 0196e515 066e6ffd 0bf494d2 33acaeb1 36422ff6 41e459b7 4732bc8e 49986181 6723a74d 6c4daf62 6ebe79d8 715f73a9 7424fb28 747fd9ff 7853fbef 821c1b3a 8fda11f8 951ca5f5 953f5863 9a6e40fc 9fb82533 bd5c5d17 c971d45b ca94f541 cfb2fe3a d0f7947a d2fbe80b d684c3c1 dc66d4e6 ecb97a68 f5c097c8 f761460e fc1a855b"
+  },
+  "test_diagram_kind_label_is_not_noise": {
+    "expects": 7,
+    "marks": "0072b342 29403ff6 39a246c9 613dcc0b 817eefd8 b58059cc f589f2a8"
+  },
+  "test_diagram_note_falls_back_to_its_owner": {
+    "expects": 16,
+    "marks": "0b63c210 15f9cf2e 2bea3b31 56c81ff3 5841b5bf 7d3c5471 8290b263 8f8bcfcf ac254104 bae56782 d241f48b dcca1b82 e3813728 f6d96abb fa32cbd5 fd570490"
+  },
+  "test_digit_subscript_under_lowercase": {
+    "expects": 7,
+    "marks": "304da87f 52e2fd08 896adcf8 a02fa00d a85af005 b817b387 d8641ac5"
+  },
+  "test_dim_extension_geometry": {
+    "expects": 13,
+    "marks": "43eda0e8 526c25c4 89370a5d 91e17488 926f94f0 99fc975d 9a4fd2f8 a139f99c a96a2ab8 bc39cd78 c50e46b1 d0c25845 ee0f651a"
+  },
+  "test_dim_extension_sees_a_collinear_face": {
+    "expects": 5,
+    "marks": "694372ce ad752e68 f422a7d6 f6b46490 ff092c57"
+  },
+  "test_dim_group_holds_one_dimension": {
+    "expects": 3,
+    "marks": "71a05d95 72a4eb69 cf786d11"
+  },
+  "test_dim_group_scope_and_inheritance": {
+    "expects": 4,
+    "marks": "37cdfebd 6c4f10ef ac2f4ad4 b09e7e39"
+  },
+  "test_dim_head_fill_is_inherited": {
+    "expects": 4,
+    "marks": "1af4458d 2a5a61c4 308ac6e0 a8812bb3"
+  },
+  "test_dim_label_only_pulls_what_is_already_attached": {
+    "expects": 5,
+    "marks": "2fe9282a 416fd657 47c34894 8c65c04b be6f8d68"
+  },
+  "test_dim_label_placement": {
+    "expects": 8,
+    "marks": "046ef276 0a15f86c 2136efae 4d786d6b 7996432f 9b822eca a4895b0f d4f93e4d"
+  },
+  "test_dim_shaft_stops_at_the_arrowhead_base": {
+    "expects": 10,
+    "marks": "042ff33c 69f0a4b3 6a0edfef 8028ce22 a3405f5b a9dbc898 adb38c77 ae945a7d f3056e83 f67afe04"
+  },
+  "test_dim_stroke_width_is_thinner_than_the_shape_line": {
+    "expects": 11,
+    "marks": "0c4457b6 1db4b98b 4501c36e 4b5f20b5 5e16ee27 6bf3e532 7d84d17e c9af44ab ce2031e2 cf61cc0e d10e62ed"
+  },
+  "test_dimension_extension_starts_at_outline": {
+    "expects": 8,
+    "marks": "3cf8367b 650a3f62 6e9da485 828cdd62 9a6fe572 c749b922 c764a9b0 c9874dbf"
+  },
+  "test_dimension_line_standard": {
+    "expects": 8,
+    "marks": "057dd217 0e6c53d0 32986a60 73303408 82cac737 b21ff6b3 bc5ec5d9 f0a93aeb"
+  },
+  "test_doc_section_replace_refuses_whole_file": {
+    "expects": 4,
+    "marks": "20b086eb 61689bb4 88ed0228 b88bd562"
+  },
+  "test_doc_section_replace_respects_fences": {
+    "expects": 10,
+    "marks": "3287152f 3fce99eb 79529509 a06ef854 bebfa9e6 ce27c0cf cec522eb f3096cda f349b946 fd7febad"
+  },
+  "test_dome_declares_its_shape": {
+    "expects": 3,
+    "marks": "03dfca38 784e7c03 b773ad30"
+  },
+  "test_dot_mark_has_a_floor": {
+    "expects": 13,
+    "marks": "1eab6b83 1f635213 28f1228d 30393517 571c5337 6752d5a4 7ff4afc9 a2a5c939 dd83ba51 e7f1852c eab503c5 f87c2479 f916ec54"
+  },
+  "test_dot_mark_is_glyph_relative": {
+    "expects": 9,
+    "marks": "237613b5 35d42d50 38f7466d 613b556b 7b162845 87049dee 93dc1dbe a341bbfd f1b358a5"
+  },
+  "test_drop_inherited_gate": {
+    "expects": 7,
+    "marks": "0e6f3a4b 312e122e 663e42ae 815f7a9c 957b7329 ed4fcc6d f2738c35"
+  },
+  "test_dropped_input_counts_only_what_the_user_typed": {
+    "expects": 9,
+    "marks": "25f57efc 6002c4a9 712d7085 71abfb5a 87eb244a bb2d8f0e c34590bd db85659f fc86f722"
+  },
+  "test_ell_sits_on_the_same_line_as_rho": {
+    "expects": 3,
+    "marks": "b40bd3b2 b5004de1 e43cc972"
+  },
+  "test_error_log_sessions": {
+    "expects": 16,
+    "marks": "2aa21bd9 2dbeee0e 33f8da5b 3f9cab29 5c0c2ff8 633bb994 684f23a2 87e77651 8ac0da59 9539ded0 996abb48 a90061be bacfff51 cbd399f2 df658c1c faed30c4"
+  },
+  "test_every_subject_declares_what_it_compares_against": {
+    "expects": 10,
+    "marks": "28137e32 3a1c0340 3e1bba70 4281b930 460c5851 6816767f 84b87c17 d99a9830 e6deeb71 e9cd4560"
+  },
+  "test_every_test_is_registered": {
+    "expects": 3,
+    "marks": "0afa2ca9 41bb2ce7 70e427d2"
+  },
+  "test_exam_asks_for_the_answer_not_the_method": {
+    "expects": 31,
+    "marks": "00db81fa 03536ffb 1136795b 123fe558 1670c237 16be2353 2c53e8aa 2cb9ddfc 2ccd2857 308fac10 346fe6fc 37a1f344 4aa3fe2a 52adb2ac 5b13ddcf 5e16083c 64677eb9 6cb431b7 6fbc54d4 7e37a160 8962d44e 8c85db32 92a2c830 99b8cef3 9de985dc a5ad13be c310804b c98232ae ce27bee4 d6f4eaa3 d7aa737b"
+  },
+  "test_exam_figures_speak_the_exam_language": {
+    "expects": 9,
+    "marks": "17b07dbc 3547edc0 4cd0a9fe 4f874572 55f71815 57981974 91667933 a131acc7 e9608d84"
+  },
+  "test_fail_only_never_hides_a_violation": {
+    "expects": 3,
+    "marks": "0bf7f52a 5b80e88b b9984fca"
+  },
+  "test_fan_is_one_shape": {
+    "expects": 9,
+    "marks": "0fe721fd 139155af 1cbbcfae 284451ad 57b3e8de 87bf8072 91481df0 d67ff5e1 de50e1ff"
+  },
+  "test_feedback_lookup_reads_transferred_rows": {
+    "expects": 5,
+    "marks": "1499a391 454834a8 94e8623c b9ff537a f98477c7"
+  },
+  "test_figure_balance_audit_sees_derivation_slide_figures": {
+    "expects": 1,
+    "marks": "9b94ef00"
+  },
+  "test_figure_box_width_is_uniform": {
+    "expects": 5,
+    "marks": "256d0b52 27070e89 346a05bb 4eafeec7 5c233a07"
+  },
+  "test_figure_math_font_fixer_shares_the_ruler": {
+    "expects": 12,
+    "marks": "1806fed1 1da4deaa 41b7aec7 442bb460 5a4d38cf 5dca68bb 614a897e 8df6ae78 ab0f8ca8 cb91c6f0 d95167df e0e1856d"
+  },
+  "test_figure_math_matches_prose_typesetting": {
+    "expects": 10,
+    "marks": "33ed0fa9 751256a2 84e28229 89788975 8b362cb1 a9b9b875 aa544f30 ae945a7d de6c5ba7 e6bf0a51"
+  },
+  "test_figure_review_renders_like_the_screen": {
+    "expects": 10,
+    "marks": "24ba699d 3dad7754 60e92af6 61f82925 69a6084e 79d78856 85c43279 9e7121d1 bac582e8 c2e2bc12"
+  },
+  "test_figure_spec_gate": {
+    "expects": 5,
+    "marks": "25b33ec7 2a43e18f b397b2b3 dabc3fc9 ef573f16"
+  },
+  "test_figure_text_grouping_follows_colour": {
+    "expects": 12,
+    "marks": "0231a77f 1a4dbd86 4854ff3a 5fd64b66 61c4b689 71eb66e0 730a8b61 a09e60b1 a7a33bf5 eb72dd49 fed9fcb9 fee79b93"
+  },
+  "test_figure_text_scale": {
+    "expects": 13,
+    "marks": "0268c4f9 0b11204c 80617686 817a2a76 8a0592e4 bb59fa39 bfd60f5a c32249a4 c8f55913 d18ff67a f1ad55aa f1ba5fbb f385edc1"
+  },
+  "test_figure_text_survives_font_fallback": {
+    "expects": 5,
+    "marks": "43aa77bb 5bb4b102 af3d0b3d b953379f d369332c"
+  },
+  "test_figure_vertical_balance_is_a_gate": {
+    "expects": 5,
+    "marks": "2f63d560 76c5b9b5 b39b536b d6344377 f95619ec"
+  },
+  "test_figure_vertical_balance_tool": {
+    "expects": 11,
+    "marks": "04a47f9f 16d6096e 2f24ff1e 3bf38737 5a42274a 5bd1f8ba 653a734c 6ba666b2 6feacaf5 c25bc16b de6e6813"
+  },
+  "test_figure_warning_names_its_target": {
+    "expects": 3,
+    "marks": "838cd17f bb83ffd2 facbf88e"
+  },
+  "test_filled_wedge_is_not_a_plot_axis": {
+    "expects": 5,
+    "marks": "1d2c34c0 62178223 94e5698c 96885ba0 effe8f5a"
+  },
+  "test_fix_tools_see_double_quoted_svg": {
+    "expects": 6,
+    "marks": "40815cc6 69eae2ed 73347eb8 afd524c4 db0c2fe0 f1365fa7"
+  },
+  "test_fix_worktree_config_tool": {
+    "expects": 6,
+    "marks": "103c75f9 1b8db487 20d2ff59 a163194d b44d99b0 b7db23c9"
+  },
+  "test_floor_check_measures_wiring_not_documents": {
+    "expects": 16,
+    "marks": "39617c3b 3b31e397 49e0ff1c 5f56919a 6196fd0a 72ca5a16 8a812dc5 9169aeb0 9f58b71e b2db6517 c675231d d31b267e db2bca43 dc4881ec f16347d5 f5a6c799"
+  },
+  "test_follow_up_is_a_separate_field": {
+    "expects": 10,
+    "marks": "06d306ce 36111324 5661759b 60bc00f5 64d0f914 6e3a2c5e 932860ce eccd90ad f117fa1e f528728f"
+  },
+  "test_formula_declarations_counts_from_the_problem_side": {
+    "expects": 12,
+    "marks": "1a86ed3a 3489bba7 42ecd175 63ab8c78 7b4786dd 8040a96f 84260bae 8e5f9bf1 9b3558f8 b2b660b6 d06b1fbf efc3c22f"
+  },
+  "test_forward_link_is_rejected": {
+    "expects": 5,
+    "marks": "9c8e60d8 a142f3f0 bbd2a2eb e0e115ec ef8a0f29"
+  },
+  "test_fraction_bar_sits_on_the_math_axis": {
+    "expects": 26,
+    "marks": "128939ad 27d62b1f 2e129b78 401435cc 51d3d233 641db086 67e0b050 705ecfa9 7066052a 9488567c 97f29408 ada55c29 af96be91 b54e3000 c4b9f69a ca261ec8 d09715e0 d68da3db d6e3142e d8a72abf e05b952e f2c5a645 fb5d6396 fcf08c52 feacd7fb"
+  },
+  "test_free_shape_needs_a_verdict": {
+    "expects": 6,
+    "marks": "2fb3d752 7c287910 8e531715 9af5629c b2f67388 d6dd6a58"
+  },
+  "test_gate_rerun_guard_finds_its_counter": {
+    "expects": 5,
+    "marks": "87eb244a 8eeb3632 a3c98b2c e2bcf6b8 fcc4eeae"
+  },
+  "test_git_checkout_theirs_is_auto_allowed": {
+    "expects": 5,
+    "marks": "14bf3264 1ed7132b 515eaf2a 92356a18 b6ab0430"
+  },
+  "test_git_show_to_file_stays_in_the_two_write_zones": {
+    "expects": 5,
+    "marks": "07288264 3abbbf08 79819785 8c7d5a2e ded5b386"
+  },
+  "test_git_status_paths_survive_non_ascii": {
+    "expects": 3,
+    "marks": "041f1ef3 6b64848e fcf73a8c"
+  },
+  "test_given_chip_is_independent_of_reveal_mode": {
+    "expects": 14,
+    "marks": "0a478aa7 0bd7d039 0e4cfcad 1b7f7c62 1c5acb3f 4cc9e819 5a5af578 83f9dd90 8a67d9f8 a20b66a4 ad872956 be8fcacc d9052cb0 e7c37468"
+  },
+  "test_group_attributes_are_inherited": {
+    "expects": 6,
+    "marks": "0cdf8cb5 0f3b1870 1c17aa2f 62df3be5 777aaef8 ee362698"
+  },
+  "test_group_title_spans_sibling_boxes": {
+    "expects": 5,
+    "marks": "06bc5155 0752661b 23824bde 2ee7f324 a9969575"
+  },
+  "test_guard_rules": {
+    "expects": 150,
+    "marks": "0002e6da 00e4d542 01a5a7fe 06ccfc1c 06e413e9 0719bf00 0c171358 0c72b9e5 0cdcba62 0d82585d 0df570eb 0eea0e54 110ef7e9 112d04e1 11df397d 132e75a2 14423ffa 14c69663 16eb6cf8 17cbfbd6 18ccfe8a 199950d3 1cdf493e 1d6b7e09 1db97f92 1dd342a1 1e26adb9 1f5b3a6e 1fbb7329 21e6689d 23fc4745 2683294a 26c47f4f 2809666e 2a3aaa8d 2a9180a1 2bb7d90e 2cda78fd 2f0449f2 36e50dcb 3c83e953 3d16fd1e 3e42583d 3e66089b 3e91517d 3f711d30 47407da1 476d58cd 49cb458f 4fba8e17 5044384d 514232a4 53f9e94f 54dcdf14 5886f06f 59d912ea 5b143284 5d59d5e0 5e0316d2 5f0724d9 62a2e719 62c11059 62e29c00 659692d2 65c9596a 6a67179b 6e327a3a 7245aa48 73184a28 744a368c 7673bc22 77786bf4 78e32820 7a666e3f 7b86988b 7d094b9d 7fa32b74 815cc9bd 83d96e4f 846a7e63 87a43d98 8c9962cc 8d70ac70 8fed74d9 96e3c809 9b8f11b2 9cb046b6 a04d1ffb a0defd00 a147c623 a3cb40e1 a4012047 a69a3cb3 a8230446 a89b272d a903412a a9db68bd aabfd773 ab0e5151 ab88b399 acede6ee ad118933 ae365a13 afe33a27 b17b826a b6f2f4bf b7cb67eb bba52a75 bbdb7220 bc3b4fbb bf1dcbc9 bfef3f9f c2d64f49 c2d9c94c c4069255 c470448c c643ec5f c7b53ac5 c9cb6d42 ca25a26c cb1aa037 cdd90159 cdfebd7d ce189620 d08c8cfd d57af0c9 d63d72d7 d8767feb ded2c4af df581cee df69886f df6bf0f9 e1eb49e7 e2ddb7f7 e3785028 e55aa6f5 e7bda18f e93df531 ed674b4c ee563ea4 efb26eb9 f0476e72 f288cdeb f3895c7f f523cab0 fd9e089d fe0a980d fe75adc3 ff121d4e"
+  },
+  "test_guard_write_rules": {
+    "expects": 6,
+    "marks": "453a0094 64c65374 bbd500fa c8f6679a e7e8f3ae"
+  },
+  "test_guard_write_target_path_blind_spots": {
+    "expects": 5,
+    "marks": "06898431 35975909 68307590 848184f1 bb054b58"
+  },
+  "test_guard_write_trusts_only_lossless_records": {
+    "expects": 4,
+    "marks": "1573d382 592dacda 6d661edd ecfbe733"
+  },
+  "test_guide_size_accept_does_not_swallow_judgments": {
+    "expects": 6,
+    "marks": "0088338f 233872d2 356367c4 86cb543b 925a51db a32f6df5"
+  },
+  "test_guides_move_to_rules_and_skills": {
+    "expects": 12,
+    "marks": "3c0c4fe6 53a61489 5a0af8b1 6adf3e53 81e75fc4 a58923e3 b2303072 d1eb3f4e e3d8650d e5d604a8 eabdf757 ff2bd4df"
+  },
+  "test_halo_is_not_a_gap_exemption": {
+    "expects": 2,
+    "marks": "584e3d57 6771745e"
+  },
+  "test_hanging_indent_does_not_leak_into_inline_boxes": {
+    "expects": 5,
+    "marks": "025e2c3c 15526145 43d392b3 62eae93b c0c4bee4"
+  },
+  "test_hangul_is_not_used_as_a_subscript": {
+    "expects": 11,
+    "marks": "26af36c5 2e6e200b 5b057bf8 654aa1f0 69a9bc6c 7f71a820 97a8eaa6 ac01eeb3 c7d052ed f0f32467 faeaf836"
+  },
+  "test_highlight_without_a_reason_is_reported": {
+    "expects": 3,
+    "marks": "084de306 7e624309 89b7cf3b"
+  },
+  "test_home_groups_subjects_by_semester": {
+    "expects": 12,
+    "marks": "3407e065 3f8639da 49f20ecd 4ebda5a0 5eeaa8d1 b61c63d7 bc1fad01 c7b2d262 ddaa0a59 ea0d1d67 f7c37cb1 f8ae42ea"
+  },
+  "test_home_page_shares_the_viewer_palette": {
+    "expects": 6,
+    "marks": "6463f16a 70ae2bea bcf5f53f d73d0c5f ea19b362 fb7d6e40"
+  },
+  "test_hook_matchers_cover_powershell": {
+    "expects": 2,
+    "marks": "0b24704e 647692aa"
+  },
+  "test_hooks_run_end_to_end": {
+    "expects": 7,
+    "marks": "1cf5b1c7 2c8b32a4 358fe62f 8fe29523 d24776df da067e3e db473e16"
+  },
+  "test_horizontal_step": {
+    "expects": 21,
+    "marks": "136c1bd0 36850f6b 43648144 43fe1d52 470f41d0 667017ee 71e29707 750b39ef 78cadf2b 7d8f9085 7e8d2fb7 825f08f7 94e14e74 9f63a31d b8dda9ab d2b32860 d5130ed0 dcf10b87 e31e40a1 ea5ce884 f7ed61a5"
+  },
+  "test_inline_math_command_vocabulary": {
+    "expects": 13,
+    "marks": "0cbdeca4 1df32689 4120ac79 4b0a3479 5829e358 6f917a1e 722ea7f2 bb8dd7ca d5be87d4 d60cfb66 e810bd42 f55218ce fc237b15"
+  },
+  "test_inline_math_does_not_break_mid_formula": {
+    "expects": 6,
+    "marks": "4fd6d376 6be73eaf a0eb926d c296afd7 ec4003a6 ef212352"
+  },
+  "test_inline_math_markup": {
+    "expects": 13,
+    "marks": "2088d17e 3996fddd 3a57894d 69d3ce02 7789a1cb 77ac97dd 96ebcc60 a1fb9cca d1b463f1 d9826211 e4f2d338 f2c9808a fef8d954"
+  },
+  "test_inline_math_scrolls_only_sideways": {
+    "expects": 4,
+    "marks": "aa7208ba c85134eb e93ee054 fec64f65"
+  },
+  "test_inline_math_subscript_is_not_split": {
+    "expects": 4,
+    "marks": "44224b58 6d505d39 6e9a3765 f8406392"
+  },
+  "test_inline_math_uses_math_font": {
+    "expects": 6,
+    "marks": "348250d1 5cdb9486 685c0520 b7a6d111 bd97c532 ed900c85"
+  },
+  "test_insights_due_reads_the_shared_ledger": {
+    "expects": 9,
+    "marks": "35037670 3734706b 6f2a5465 715de227 83567ea1 88781109 af93e9a7 b4558e64 c5b44519"
+  },
+  "test_instructions_log_does_not_lose_concurrent_records": {
+    "expects": 3,
+    "marks": "32ec9e25 4a38cb56 b03734db"
+  },
+  "test_integral_limits_clear_the_glyph": {
+    "expects": 4,
+    "marks": "11f6d7f6 79e37ec8 a507f51f be6dea8d"
+  },
+  "test_iso_primitives_pass_their_own_rulers": {
+    "expects": 16,
+    "marks": "159142a2 2da7fcbd 41f87c96 4a629580 523d757d 57612834 6a900b46 8ba8115d b59984a3 c207e60c d3629372 d61242ad d9374b6b f18eefb7 f94e92ab faa901d4"
+  },
+  "test_item_figure_rejection_weighs_an_alternative": {
+    "expects": 5,
+    "marks": "3c811d1f 5d29c7ae 67178570 933da47b c0c9ef94"
+  },
+  "test_json_rewrite_preserves_formatting": {
+    "expects": 16,
+    "marks": "08492e6d 1299db94 1f918617 43a1ed71 465035eb 4b203fca 5b1a0531 5ec318b6 60693034 756aa4b0 7c34aa1e 92d7c89b 9ba3c434 c6f9e3ec cd91c450 e7c52416"
+  },
+  "test_keyword_chip_row_is_vertically_centered": {
+    "expects": 4,
+    "marks": "21e9ab08 661bb28a 8aaf83cb f86b59a0"
+  },
+  "test_l5_counts_layers_not_thickness": {
+    "expects": 8,
+    "marks": "0beabebc 7589902d 8c2f83ff a1ed193a bb980acf e273fbf9 ea3264b8 f7a305f4"
+  },
+  "test_lab_pages_ride_the_build": {
+    "expects": 4,
+    "marks": "02764ea3 03eb2afd 104e56f6 c28ccfa9"
+  },
+  "test_label_gap": {
+    "expects": 2,
+    "marks": "8ac4a60d c559635d"
+  },
+  "test_label_gap_fixer": {
+    "expects": 22,
+    "marks": "015d262e 10355751 11973ae7 13d412be 25f9e9a1 2dc0b4b5 39cb894b 5113edba 5542e509 6204d895 7cfc84f9 95898b40 b4afcab1 b5bdeeff d1aa7fad d2de5f3e db96f869 de9f99ff ea7f2c2b f0c084f6 f64a617a f8b18753"
+  },
+  "test_label_gap_fixer_keeps_centered_labels": {
+    "expects": 6,
+    "marks": "3f2598e2 42f0ddb7 5029bd0c 70dd6f2f d0c575d2 eac42d31"
+  },
+  "test_label_gap_respects_container": {
+    "expects": 8,
+    "marks": "327545ee 4af81b1d 929f927a 97b058cb 98e39a53 9dafd1e8 c9c6148c d01d3761"
+  },
+  "test_label_pair_gap_is_compared_not_floored": {
+    "expects": 11,
+    "marks": "225d833b 2b4cd995 2d916f6e 405a71dd 7f63e6a5 910630fc a6a5c506 aa49f857 e142965d e73b7f4c f7f9563d"
+  },
+  "test_label_value_uses_colon": {
+    "expects": 2,
+    "marks": "2fb34155 32bfe68e"
+  },
+  "test_leader_line_spec": {
+    "expects": 7,
+    "marks": "3214d4ec 42b94daa 4cdd56be 4dcd040b 6c36244d 86211276 a54f9236"
+  },
+  "test_ledger_closed_rows_name_a_real_machine": {
+    "expects": 38,
+    "marks": "000a02f9 01511b3a 02ecd98e 108e9006 1461541b 1be938d7 264c9ad5 30a3a5c4 3908d986 3c5540f9 53427a44 53c76a23 59a10cbd 5abc7921 65eec110 72537495 7391bb46 7744f89c 7ea04630 91655a05 938787f7 967b63e8 971436b9 a2c2bb6e a8daf10f b481e5c8 c3ca0535 c5baf29b d082d37b d11bef66 d17d3035 d44886ad d48fabfb e684c1e8 f2c8f8ad f300eff0 f5ace417 f6a85601"
+  },
+  "test_ledger_reads_the_canonical_not_a_frozen_copy": {
+    "expects": 17,
+    "marks": "0e18eec8 16ef3918 2b40d502 4bf6ee1c 5e29ca93 725dd461 75760b7a 8865b5dd 895083bb ad27b881 b20177a5 bd8ade3d c0f8ce17 d528326c f0553e21 fbbc4166 ff5f20fe"
+  },
+  "test_left_chapter_nav_breakpoint": {
+    "expects": 23,
+    "marks": "00b14495 05ed055c 09b68f9e 16ad86c6 2136be5c 21a5121b 28f6a255 2d41d6e8 437f1951 55f4cd92 591ebc22 6ba1f885 71b5b9ff 84eae662 8f369610 91b21738 b4ada07c b8234454 bef428d7 de11b7e0 f837106c fb1da343 fe8d9f9b"
+  },
+  "test_length_symbol_is_ell": {
+    "expects": 7,
+    "marks": "19c130e2 3ef9b3ef 47b15a0f 5670a259 76088b45 a0958a27 faef0972"
+  },
+  "test_lever_rule_label_side": {
+    "expects": 5,
+    "marks": "0e69f596 533272f2 69b57f6a a29e0949 c96841f9"
+  },
+  "test_local_server_ports": {
+    "expects": 27,
+    "marks": "020d8245 0e938522 24cb499d 257060d9 2ef7a8b3 37bf1335 47927a91 514a4909 5d94518d 62173a41 7927fc16 7ace44e6 7d02405d 87c91d71 8b680b51 8e13e7f7 997e7056 9a4b0930 9eb8cc52 a55c8b2e a579281c aa7407ca b4c2e354 c895e804 dd7d8e5a f4494f30 f8f9cd8b"
+  },
+  "test_long_equation_breaks_before_the_relation": {
+    "expects": 5,
+    "marks": "245fef3d 7778acf6 c1860a71 c75d274a fc4daeda"
+  },
+  "test_magic_numbers_are_ratcheted_not_flooded": {
+    "expects": 10,
+    "marks": "1af4e27b 47d99774 4c6ba024 5088ae9f 7881fd84 8108e485 9d612c18 acdd06fd e56854b6 f7524bee"
+  },
+  "test_main_holds_no_subject_data": {
+    "expects": 2,
+    "marks": "26c47ff1 5e4ece90"
+  },
+  "test_materials_answer_parser": {
+    "expects": 7,
+    "marks": "00cc56b6 47fc9b23 4835ee29 67898387 9a8e4817 d0d6e598 fd1824f4"
+  },
+  "test_math_font_matches_the_prose_stack": {
+    "expects": 4,
+    "marks": "8c76a7ee 97e77b74 d24697af e6d8a3bc"
+  },
+  "test_math_is_always_drawn_with_the_shared_stack": {
+    "expects": 5,
+    "marks": "5906fc54 67b7788a b707812b b7688b1d d58b1feb"
+  },
+  "test_math_label_dash_becomes_a_colon": {
+    "expects": 10,
+    "marks": "08799932 2daa4046 33a996ac 494a438f 5355e685 564f8fc2 72f7750c 8c0519c9 90622f79 bf9690fb"
+  },
+  "test_math_line_uses_the_monospace_ruler": {
+    "expects": 8,
+    "marks": "2d2b23aa 42dfa960 4999df37 64082847 6af565d0 ac10d466 dc65a64a e8c5fd8c"
+  },
+  "test_math_positioning_markup": {
+    "expects": 2,
+    "marks": "9e65cc38 b208d556"
+  },
+  "test_math_sentence_end": {
+    "expects": 8,
+    "marks": "0f89fc2a 508008bc 6097818a 69435472 84886121 bd66b119 ddd976e1 ee22aa56"
+  },
+  "test_math_slash_fraction_is_rejected": {
+    "expects": 33,
+    "marks": "0dd69b1e 0ec7626d 10f93e6a 1765cff6 1b80f47c 1c107455 1d671b44 246822cb 34a421a9 37c76684 49732b95 4eb3d7bb 524cea90 59555053 618381fe 66b40279 6d2ace93 7aea9f1c 7e56e5fe 8036db67 82b7526c 85c60dd1 88f754af 967fec6e 98d482e1 9d60dd06 a3405f5b a7e1086c bb4fc02b e412371e f4a83aed fd84d449"
+  },
+  "test_mathcal_letters_match_the_renderer": {
+    "expects": 1,
+    "marks": "02bf5ce4"
+  },
+  "test_mathfrak_letters_match_the_renderer": {
+    "expects": 1,
+    "marks": "c847f96e"
+  },
+  "test_matrix_environment_matches_the_renderer": {
+    "expects": 4,
+    "marks": "0b78f4d7 409dc1b4 4f753c63 848b482e"
+  },
+  "test_middot_list_uses_commas": {
+    "expects": 6,
+    "marks": "1df32689 211da41f 2aba5e64 6142d738 66a96dd1 89823e4c"
+  },
+  "test_miter_spike_is_judged_by_shape_not_length": {
+    "expects": 13,
+    "marks": "13241a42 23600bdb 51175d94 658dd0f6 676198a9 6839fdaa 7aee7d3c 7c88e655 8c6491ed a54e60f8 b86cb3c3 d05a3bed ea5841a3"
+  },
+  "test_motif_scope_covers_svg": {
+    "expects": 2,
+    "marks": "3801e96c 66b1193c"
+  },
+  "test_motif_scope_is_chapter_wide": {
+    "expects": 6,
+    "marks": "2b554d46 3816ac15 a8428193 c535a243 d39c3436 f835cd91"
+  },
+  "test_motion_is_measured_frame_by_frame": {
+    "expects": 16,
+    "marks": "0e18abe7 325a6e4d 58766ae6 63fe4a78 6ae73774 71601704 796f98e4 8971a88d a0b8ba53 af26b85f b6c6edd4 ce84be1d d088f61f e00eb581 e129b17b e8e8fab2"
+  },
+  "test_narration_has_a_blocker_not_just_a_counter": {
+    "expects": 14,
+    "marks": "0df732d1 22281ee5 2a1b86e2 47456b3c 49ac26e6 5141def0 61fb9395 735656e2 7c790a91 a0e5f6d9 a109b5fb a113dd83 acd957c2 c0bbdea6"
+  },
+  "test_naru_audit_document_command_executes": {
+    "expects": 2,
+    "marks": "4e95749f 6e1ed589"
+  },
+  "test_nested_fraction_is_rejected": {
+    "expects": 7,
+    "marks": "159a21b2 5355e685 56906626 6509ab33 81231967 a989df98 bce5bbc5"
+  },
+  "test_new_checks_are_strict_everywhere_by_default": {
+    "expects": 9,
+    "marks": "1a05b275 537916c7 5561550b 6123324c 63622504 afddc1fa ccceb916 d8622117 fa0fc7c2"
+  },
+  "test_next_button_starts_from_top": {
+    "expects": 11,
+    "marks": "18a96ef1 23fde67b 4dfbc0d5 65d4f8a0 7ab3b161 825f38e8 97c91708 9af441e7 c26490e8 d9e35105 fc6632e0"
+  },
+  "test_no_diagram_needs_a_declared_reason": {
+    "expects": 6,
+    "marks": "230a8187 2963449c 548bc6ce 55559f73 e38fdba4 f80c00b9"
+  },
+  "test_no_subject_hardcoded_data_root": {
+    "expects": 8,
+    "marks": "2b043c9e 2d1ccaaf 6b6e021f 8d225e66 98a3a599 b39a2ee5 b56f66e5 f7c1a6f8"
+  },
+  "test_notation_is_not_split_between_math_and_plain": {
+    "expects": 11,
+    "marks": "2ee2ee7d 77af88da 8499cb42 95677af9 a7da155c ac3b15f2 aeccc88d be876629 dbc8e8f6 de7cdf1b ffe106d8"
+  },
+  "test_numeric_character_references_are_decoded": {
+    "expects": 5,
+    "marks": "50b6b47d 6368e660 a380e8dd b20c32b6 c35c1613"
+  },
+  "test_open_admissions_ratchet_blocks_new_confessions": {
+    "expects": 5,
+    "marks": "013191c2 199837b5 5c4f4592 b25a48bb bc630186"
+  },
+  "test_optin_strict_keys_are_visible": {
+    "expects": 23,
+    "marks": "0099f6b7 0e249543 17905085 1fd11832 277c0a30 50418b39 53a0c04f 64a8523a 6bd3d407 824e5f3d 8c317f7b 8f4097be 994b0d6a a62417f7 a82bf848 b3e2a1ac b7523756 ba73a9da bef7fc89 c071cf31 d8429d51 e60109f1 e7a44739"
+  },
+  "test_originality_fingerprint_is_shared_by_corpus": {
+    "expects": 7,
+    "marks": "318cac57 423b8845 54e8e36e 6cbb2485 7c3b5849 c9941e10 d0fef5d5"
+  },
+  "test_originality_order_watch": {
+    "expects": 25,
+    "marks": "03f5d9cb 09c348ce 0e96e27b 1ed26eb6 27982cfd 2cfca420 2d23f9b5 2d42d652 47a00990 545b125f 56cde6d7 5a84d68e 773d1309 77432936 77d34fa7 7e589d40 885a31bc 88ad43be 9aea6c5f a8087477 b4996890 c47b6657 e95b3013 f0dab012 fd3121f1"
+  },
+  "test_originality_pdf_map_is_subject_local": {
+    "expects": 8,
+    "marks": "018343a7 038003c8 1bbc7c87 20911b34 26d89895 39699b93 74fb496f f038a415"
+  },
+  "test_originality_says_when_it_cannot_compare": {
+    "expects": 12,
+    "marks": "22b6dadb 2e2628b1 3274498a 466eec00 557b59f9 69897ae9 c3ed23e7 ccb13687 e0b2eee5 e56b9c3f f61fd967 fbf70fd6"
+  },
+  "test_orphan_check_audit_sees_its_own_blind_spot": {
+    "expects": 7,
+    "marks": "280ae7b1 45824b2e 6c5c3994 84748042 878afd2a 89fb54d6 daab8e01"
+  },
+  "test_our_sections_are_called_n_jeol": {
+    "expects": 9,
+    "marks": "30d59bf2 4765a7cd 82d77db8 8751381a 87517b34 9f7c01a3 be14ebed bf6f5a36 f9427c8e"
+  },
+  "test_outline_subq_key": {
+    "expects": 14,
+    "marks": "028ecfea 0e2e5aa6 270646f7 2a3f955c 54abd380 5a1f2659 5cd01bd5 6d12c5fa c32c3c1b ceeca312 d0a05f85 d390ed49 d81aea1b e2a33ef6"
+  },
+  "test_overview_chapter_hides_empty_tabs": {
+    "expects": 14,
+    "marks": "017d2827 0bb361cd 103a87f2 1bfc60b6 329e3fe1 3592f7d7 4de46604 7a552c93 7a590344 8644a694 bc10cde3 c45664cf c459c545 de414577"
+  },
+  "test_page_gap_ruler_knows_the_neighbouring_chapter": {
+    "expects": 5,
+    "marks": "25ed74e2 6ac5dc74 9c247836 a9d594b0 d6e1c0cf"
+  },
+  "test_panel_title_gap_is_half_em": {
+    "expects": 9,
+    "marks": "37b3f219 592718e2 5e5c0b6c 88f715a3 b2dd1382 bae30268 c4f2bce9 ff7f4a16"
+  },
+  "test_partial_review_baseline_acceptance": {
+    "expects": 10,
+    "marks": "05cc34d1 56305dd4 61de6017 68c87958 a1506303 a8997a21 b07b3df8 c89ea774 dd7f8f98 e327df0a"
+  },
+  "test_path_names_survive_other_os": {
+    "expects": 6,
+    "marks": "1ff0a44b 31ee34ed 6829dbf9 79e645b3 c69c45d9 f9cbcf7c"
+  },
+  "test_path_polyline_flattens_curves": {
+    "expects": 5,
+    "marks": "04aa7339 7b6e963f a94f7ed5 c51267a0 ece1cf0c"
+  },
+  "test_permission_event_hooks": {
+    "expects": 19,
+    "marks": "0138b55f 0e9a237a 204c6bb2 2a20492e 54ef5c58 56ff2131 6194fb19 63191efc 97527f0a 9c24172f a7bf6872 b29e6eaa b387140c d75e2900 e1982136 e58e0595 e8232abb f2232d0f fba23a25"
+  },
+  "test_pitfall_and_check_do_not_repeat_each_other": {
+    "expects": 8,
+    "marks": "06c728a4 2436fff7 2959f9d2 80111dd1 c50a3bf6 cb64f5e1 f4d9e6d6 fc9bb8cd"
+  },
+  "test_pitfall_source_negation_is_rejected": {
+    "expects": 6,
+    "marks": "0763d3eb 0ef4935f 1932479d 20e8b5d2 ef9a1d91 f76375e4"
+  },
+  "test_pitfall_source_prefixes": {
+    "expects": 6,
+    "marks": "154f7571 1ad094e9 409ac060 8117fb2d a3a04ff9 ff650840"
+  },
+  "test_placeholder_chapter_is_not_a_defect": {
+    "expects": 3,
+    "marks": "29d1f90b 5cbb18b1 c5b9752b"
+  },
+  "test_plain_math_outside_inline": {
+    "expects": 24,
+    "marks": "08ffd975 231d6b03 2f4bec7a 31e667b7 4a58ddba 5abd8ef5 63dd27c7 79c0382a 7fec6269 8306543e 9f609ba8 ac323d43 b07d273c c158b038 c9dbe0fc ce0bf5cf d345ae25 da5c0e46 f0dd17d8 f6eda386 f8f67356 ff1bb991"
+  },
+  "test_plot_curve_shape": {
+    "expects": 7,
+    "marks": "21a531bf 50e40c72 69b57f6a 93645a39 d4271808 e3003a4c e6ffc0b1"
+  },
+  "test_plot_label_inside_axes": {
+    "expects": 7,
+    "marks": "5e3254e8 69b57f6a 7ea47864 8e025e4c 906cf87e a64b3a40 d451b9f3"
+  },
+  "test_polygon_shapes_are_reported": {
+    "expects": 4,
+    "marks": "06369b48 8eb06a4e ace975d1 d1c48cee"
+  },
+  "test_polygon_to_path_conversion": {
+    "expects": 14,
+    "marks": "02594f24 136afc9a 360cc037 42b2f0a2 5770bd89 59e1a9d0 678fa74c 6d91c320 758865d8 775b6ced bd60a783 dd1d98bd e7be4a7a efdac823"
+  },
+  "test_powershell_scripts_have_bom": {
+    "expects": 2,
+    "marks": "28e63b8e f2838746"
+  },
+  "test_practice_stage_vocabulary": {
+    "expects": 6,
+    "marks": "09316548 378015c4 6a2df0bf 70467327 b70d8102 f06f08f5"
+  },
+  "test_pre_frac_macros_match_the_renderer": {
+    "expects": 1,
+    "marks": "7fa367a9"
+  },
+  "test_prereq_overlap_crosses_chapters": {
+    "expects": 6,
+    "marks": "099c2c62 46ec490b afc8d828 b3127eac cb558b63 eab63ed8"
+  },
+  "test_prime_does_not_space_before_its_argument": {
+    "expects": 14,
+    "marks": "00405bbd 086533b6 16e234b5 16ec6860 23551052 4b683cf9 5b9f5155 67ed1086 6bec1ab5 7ec500ad 9450a147 a2169336 a331587e e40ebbc5"
+  },
+  "test_problem_difficulty_vocabulary": {
+    "expects": 17,
+    "marks": "05ded1e0 0a7c2f26 11a61101 4ab92899 54a2a5ea 5abb0653 66306196 69157237 9161a75e 99c6c0e6 aadd662e afa7e3ee bbe5727c c52525a1 d173b457 f5ee3da9 f985b26b"
+  },
+  "test_problem_numbers_match_figure_and_answer": {
+    "expects": 9,
+    "marks": "013956fa 1b19adb9 1dca210b 2625970f 2ce7fcc9 8a142d31 9be863ee d89692ce e9d78904"
+  },
+  "test_problem_originality": {
+    "expects": 15,
+    "marks": "091a16c3 11608204 3363a2b2 34419b49 5099c778 63f1b08f 85066970 87ecc6ab b8f461f6 bd829f87 c8c65190 ddbd7c7e e8fc3ee5 fe3b8dbd fe89dd36"
+  },
+  "test_problem_prompt_language": {
+    "expects": 15,
+    "marks": "115586fc 15112326 229e03d4 2649c3bc 38d9ccb1 3e79c970 44e603bf 52704d6f 685d8ad3 81929fcc 8c7867ec 930906e4 c57cb8ac da6545d4 f1a08988"
+  },
+  "test_prompt_ramp_is_measured_and_ox_is_exempt": {
+    "expects": 7,
+    "marks": "081e282b 2712fd5c 4e94a399 5143994d 62e0f353 6f90c7ea eb78c8d3"
+  },
+  "test_prose_check_sweeps_all_collections": {
+    "expects": 6,
+    "marks": "236794d1 392bcfe6 64228d2a 8351397b b09a9572 e9cbb5a0"
+  },
+  "test_prose_correspondence_counts_only_prose": {
+    "expects": 5,
+    "marks": "1e95eda9 22a5fa94 c97d3a2b e01f8374 f50a7538"
+  },
+  "test_prose_fraction_does_not_stretch_the_paragraph": {
+    "expects": 4,
+    "marks": "122c72c3 363a4634 553bdfac 6e3fc83f"
+  },
+  "test_prose_list_audit": {
+    "expects": 6,
+    "marks": "1a7dd66f 1cfe2f4f 95fbc6d8 a7fcae57 cb60729c ed3329dc"
+  },
+  "test_prose_style": {
+    "expects": 10,
+    "marks": "1b21032d 259a6a0e 2913ee55 358fabaa 60314bc1 6ba8c1ae 89eba05a 902d9a25 a627458f cd6c55db"
+  },
+  "test_prose_subscript_has_an_explicit_size": {
+    "expects": 5,
+    "marks": "9e225e1f b645aed7 ce4154b3 e639fe73 f8720af4"
+  },
+  "test_published_page_has_no_dev_comments": {
+    "expects": 9,
+    "marks": "287e90e8 3ff5d0a3 49831db5 540401ae 61c2a211 8a9bc014 986297fd e8a22574 fc938773"
+  },
+  "test_published_surface_is_scanned_for_private_data": {
+    "expects": 12,
+    "marks": "09012cc5 0dfabe5f 2fe8c64b 31cd8e12 3aa82c28 437f2949 7cb6e44c 9d5f221f a455855e bf1978e6 c0c123b4 fb8ba85b"
+  },
+  "test_raw_subscript_is_rejected": {
+    "expects": 5,
+    "marks": "00cce645 21afc676 3f4dc2f6 771dc0c0 cfee3ca9"
+  },
+  "test_reader_environment_is_not_assumed": {
+    "expects": 6,
+    "marks": "3cd6f014 4c2e5109 ba4e1546 c1f0aabc c3188615 db985fb7"
+  },
+  "test_reader_facing_prose_is_polite": {
+    "expects": 75,
+    "marks": "01ad9e77 0764ca30 094c3d83 0b39256f 0f1af4a6 12c95eae 14f35918 1b180da2 1b6aa7d2 1bf02cb9 296b211a 2a44c635 2a876200 2aa358b7 2b31be59 2c99ff48 2d9b696d 2fc38075 30f2e1b4 3c246efd 3d544a8c 3daa717c 3ff2fa6e 4067cf55 4144381d 41ae6c4f 4782ed69 48aac60b 5271a81d 548c11cd 589e3d49 5e5d1e0c 615c1691 62dcefcd 63258290 63e1b8c6 655ac1d2 6c3338a8 6d40c2a7 6dc1a7d2 74ffdd04 78408bba 7a380823 7d92d379 7ff1d96f 84ecb101 87b034a8 892999d8 906fae1f 96d0433d 9df24a5a a02896b7 a32b1cad a3405f5b a345c581 ac5184ed b481b024 bedce8d4 bf6f0cbc c0340132 c2262b20 c3f0e588 c3f5cc49 cad8d9c8 d85264be da8ee190 e06168aa e1ebfedc e4896577 f46eb669 f99efdcc fd5299f6 fde5c4d7"
+  },
+  "test_register_chapter_only_adds": {
+    "expects": 13,
+    "marks": "1057927f 1670a327 30e88024 48083912 4f0ba8ba 57dfad03 920f9112 9895bd41 a1820013 e46c24e1 fae2389e"
+  },
+  "test_render_math_escapes_html": {
+    "expects": 5,
+    "marks": "05c3554d 2a93cc7f 36d6d38f afceb449 e7c2a19c"
+  },
+  "test_render_review_gate": {
+    "expects": 33,
+    "marks": "02a96577 04155f9d 0554086c 08ab146f 0a83cb10 0ad9537f 14f6bae2 19bd1925 1a0b0ba1 23bda04f 2db2c666 300862af 31924bbb 346a68ea 3f8e5d34 4a3aa813 5af8493e 6bac1d8e 7263ae0a 8428fa1e 98c6455b 993d8be4 a0e325df bcfdd698 c626ae47 ca03240c caa87cd7 d7787796 dcd570c4 e87cbc1f e9d674e6 f78bd87a fa856faa"
+  },
+  "test_reorder_sections_moves_only_order": {
+    "expects": 9,
+    "marks": "1b1d9a85 22edd10b 3a829f60 573e4b3e a3ed84b3 b2e07f1c c5681773 d5f49c83 dc990c7a"
+  },
+  "test_reveal_chip_is_single_signal": {
+    "expects": 12,
+    "marks": "13439042 1cdff26e 1eb19f7c 4383456a c24d42b1 c4c82ed7 c85fe149 cf5aad7c ec8d3403 ed56d1ee f1568ddb f9ddfc0e"
+  },
+  "test_reveal_masking_does_not_leak": {
+    "expects": 5,
+    "marks": "42bd3d6b 4cc0c0e1 ae3c8f89 c83238ab ccca26b4"
+  },
+  "test_revert_tool_keeps_a_copy": {
+    "expects": 7,
+    "marks": "158894ef 37a3c80b 4cab720c 576e9d4b 716da786 a5a8e7ed e1c1cbd6"
+  },
+  "test_review_baseline_accepts_by_formula": {
+    "expects": 10,
+    "marks": "06ad26e3 1b6d9cea 3e631426 5162cf17 6dd8397f 837b374a c906757d cdb674ed e53b6f71 fbb5cdda"
+  },
+  "test_review_baseline_accepts_by_section": {
+    "expects": 9,
+    "marks": "06ad26e3 2db46484 43f7ec30 488c608f 6e3f68f7 912223f0 9ad9349b ad218a0a c0f845af"
+  },
+  "test_review_baseline_lint_is_advisory": {
+    "expects": 6,
+    "marks": "054daf48 47c30e2d 8bff3d7f 8c0b2cb4 e0ce410d fa694581"
+  },
+  "test_review_baseline_reminder_reads_the_user_signal": {
+    "expects": 6,
+    "marks": "0d827b4c 0f87735a 838b5a68 a8d799b3 b7110f76 dee0c827"
+  },
+  "test_review_baseline_uses_resolved_shape": {
+    "expects": 3,
+    "marks": "2bbc36dd 5464706e c67ba09b"
+  },
+  "test_review_can_fold_drill_collections": {
+    "expects": 9,
+    "marks": "003e0612 32b7b60d 38201eb6 4eeb14b3 6a550d49 775b5d73 a39fc5d6 eadf9122 ef1acd37"
+  },
+  "test_review_card_diagram_needs_a_reason": {
+    "expects": 5,
+    "marks": "173598ad 34d15457 5851ba57 80311a12 bbdd37fe"
+  },
+  "test_review_change_is_binary": {
+    "expects": 27,
+    "marks": "0c0993a3 227b5ec0 2836af2c 285dc0c3 3017f5aa 35288240 3deb5bd5 40fc9bf9 424299b1 5ca9d384 6c46067d 749abbf9 7a678363 8a6839f8 8d215650 93548404 9492397e 9a1a596c ad6c8bd5 b2860e0e bd09adf0 bd8fe47e c096ceaa c1ed444f e68cd106 f79dede9 fa563528"
+  },
+  "test_review_cursor_survives_reload": {
+    "expects": 9,
+    "marks": "02a0da91 105f6678 677cefe1 77af4559 808072c0 849974eb a8b6effe c178f813 d3fe8908"
+  },
+  "test_review_drill_fold_label": {
+    "expects": 11,
+    "marks": "0bf6c200 150d90e4 19e0548c 34bd529d 3dcb59b1 607abbde 9377c0bf 9dcf407e b0fc204f c308ebe6 df108386"
+  },
+  "test_review_fields_cover_every_check_owner": {
+    "expects": 4,
+    "marks": "6d9899c2 8c490b94 af1db471 c42bc0e0"
+  },
+  "test_review_hold_blocks_baseline_move": {
+    "expects": 7,
+    "marks": "03d13b0c 2f3e131c 50201a11 5c3740dd 89ef0662 b60a6592 e36d2376"
+  },
+  "test_review_lands_on_the_whole_card": {
+    "expects": 5,
+    "marks": "704fec1b 75ed985a 8d0d7c35 bd73b168 c2d13de6"
+  },
+  "test_review_level_badges_and_palette": {
+    "expects": 12,
+    "marks": "1692b4b0 2934cfa3 330f5fa5 5400f2e4 5c75a9b8 6565f998 74f53f13 812988a8 ae93334d d7dae658 db8ad77e ed71745f"
+  },
+  "test_review_mark_clears_the_bar": {
+    "expects": 7,
+    "marks": "081bd0ac 28dc224e 2ff5e278 8ebc9e6e 9e27428a ada465bb d4e3a628"
+  },
+  "test_review_marks_only_changed_elements": {
+    "expects": 10,
+    "marks": "19e26c10 3b627d3c 55532ac2 8dd2f137 a1081b87 bb2c6865 bb6251eb c6decf30 c86974cb f85fc2be"
+  },
+  "test_review_marks_only_changed_paragraphs": {
+    "expects": 10,
+    "marks": "09b88baa 3ee1549e 555d8623 82ab8082 87f1d98c 92e2149e 9e4ec3f7 d0667139 de754838 f4e136ed"
+  },
+  "test_review_nav_counter_is_not_tied_to_scroll": {
+    "expects": 15,
+    "marks": "06804aeb 137ab67f 13b5311a 316e8753 373db5bb 56cfadf4 58dd487e 5ae1d1d6 6b2fc7cd 7cb0d431 9a20766d a2ed59bc a60c6203 b38b38f9 db0b0aa9"
+  },
+  "test_review_nav_cross_page_boundary": {
+    "expects": 9,
+    "marks": "19f38679 2c3e85ea 5bd99130 715bedf5 845a262e 8b0fbae4 94b9bb33 dd866916 ec68f4a5"
+  },
+  "test_review_nav_crosses_chapters": {
+    "expects": 14,
+    "marks": "2b06381f 4ad4190e 4d67556d 4de095c8 5494f7c7 89f4cff9 8e749139 a60b42c7 a724f0eb b17b336f b7bd095c c2502f8e e95847ad f585a3c7"
+  },
+  "test_review_nav_folds_by_change_note": {
+    "expects": 10,
+    "marks": "002e0922 2f853cde 3c34ebab 5c528457 6615a2df 6d973b99 7cbc10f2 86a2d3d6 95f995d6 f0d23539"
+  },
+  "test_review_nav_opens_collapsed_targets": {
+    "expects": 9,
+    "marks": "05eb4902 3e57c168 58c2d764 75f569a3 97305643 b1729ff1 cad85d63 efd88fb6 ffec9b0e"
+  },
+  "test_review_nav_reaches_a_single_change": {
+    "expects": 6,
+    "marks": "1632fc62 24a78640 3371fc3e 3bcefba7 dfd9bd69 f1b20468"
+  },
+  "test_review_nav_reset_only_moves_the_cursor": {
+    "expects": 22,
+    "marks": "081a50d9 0974052c 2088add1 2d1e0b50 34543426 37a94210 4df4c954 4e5cd50d 74229273 74945ca1 7848893f 7b9321b1 83f6f686 91bc8aac 9a684155 9e001aa9 c6bf0aef ca11b1e2 e29e19cb f8a72e26 fddbc86b fe4ffd2a"
+  },
+  "test_review_plan_counts_stepper_hidden_cards": {
+    "expects": 6,
+    "marks": "1d936130 1f78a9b3 69098142 9e8cc076 bb02d0de fb4a4dd6"
+  },
+  "test_review_raster_shows_halo_text": {
+    "expects": 6,
+    "marks": "141db5ec 3308f846 89f7de93 9d7edea6 b8b6fc06 d254b5f5"
+  },
+  "test_review_severity_is_ordinal": {
+    "expects": 8,
+    "marks": "20ad9025 50e67413 517b4bda 695e1a29 6b7383e6 7fcba417 91289f67 912d8203"
+  },
+  "test_same_chapter_link_arms_the_back_chip": {
+    "expects": 5,
+    "marks": "0a6abd08 415350ce 583b6e13 5aa91f50 74aa9910"
+  },
+  "test_same_note_folds_to_one_tooltip": {
+    "expects": 12,
+    "marks": "1f6b74f5 1ff4aa68 35b96427 41e14602 4e3ee060 56070a73 65a46b1a a0061a54 a6569662 adc0f3d2 e35ff4b7 fd6050ef"
+  },
+  "test_scratch_scripts_are_not_shared_tools": {
+    "expects": 5,
+    "marks": "0121fbef 548d0852 5d282aa4 643ccbfd 7c811de3"
+  },
+  "test_screen_deixis_is_caught_and_named_instead": {
+    "expects": 14,
+    "marks": "1a59fba2 4f3c6732 5405c8cf 6b9da01d 6bf51a56 6e97a450 ac732bce b8d08cd3 befe5d38 d74c9be2 d79d4150 dae97b9e dc292551 fd23bd68"
+  },
+  "test_screen_number_map_is_positional": {
+    "expects": 7,
+    "marks": "1f6f7d5f 52cfc280 7ae89a85 8e7b0bda 9141492e 93c1b9d2 fa5e06d6"
+  },
+  "test_script_size_has_a_pixel_floor": {
+    "expects": 10,
+    "marks": "2e3bab16 32828245 39924cc8 3fb33100 488c5d4b 608deb65 d562853e e34ca9be eb64c8d1 f954ba39"
+  },
+  "test_script_tail_gap_is_hair_thin": {
+    "expects": 10,
+    "marks": "08a410f8 0cc85360 28c95494 2dcfe0e3 4ed03e66 6048f79d a9590eeb be0371cc ded8bf76 dfea2e53"
+  },
+  "test_section_binding_ruler_measures_only_what_it_can": {
+    "expects": 5,
+    "marks": "1330706c 42a328b2 442b3c5a 5ccc92a1 7acfcf5c"
+  },
+  "test_selection_tint_is_weaker_than_review": {
+    "expects": 4,
+    "marks": "622a72ac 761901d8 f312fedc fb11b056"
+  },
+  "test_session_brief_states_facts_not_guesses": {
+    "expects": 9,
+    "marks": "3c55057b 508aec52 8326fb0d 9d7a6a62 ac06d44b bb84c1c0 bd024a25 c57eedc3 deeb0a90"
+  },
+  "test_shape_geometry_follows_transform": {
+    "expects": 11,
+    "marks": "091b2d22 14b68628 21ce627f 31469580 809efe1e 85bebacf 8ce8c719 ab36224d af092688 c51678e4 ccb4943f"
+  },
+  "test_shared_folder_mirror_is_machine_driven": {
+    "expects": 35,
+    "marks": "0e7bd86b 15796b66 164ea4c3 239381eb 2b25f064 34143d7b 3d83e746 3e74b894 49c53d2e 4aa23ad5 4b19727f 611904a4 6c5bde1f 7391cffe 7854618b 7ba013dd 84c17e1c 8b283044 8b5b206e 8ebbe6c2 90901d6f 9208a331 992b32fd 9e9a90a8 a217fa30 a34423c1 a3708466 b2091f90 b7765657 bd7c7e4d c26b184d c2e93ff6 ca95b01e e42a20db efbf6484"
+  },
+  "test_shared_sync_gone_paths_need_a_judgment": {
+    "expects": 7,
+    "marks": "1ae34f54 3860fcc9 687ef3df 76c96011 80512f4d d94389ee ef7a6003"
+  },
+  "test_shared_tests_do_not_assume_subject_data": {
+    "expects": 6,
+    "marks": "07af33e9 3f5d449f 443552b0 48aa9f7c 7da45fd6"
+  },
+  "test_shared_vertex_arrowheads_are_not_crowding": {
+    "expects": 4,
+    "marks": "3ad64b6d 470b7761 93e928b7 a8fc7dbe"
+  },
+  "test_shipped_webfont_covers_what_the_screen_shows": {
+    "expects": 18,
+    "marks": "03bfac8d 23bb76d2 3f7215e1 40f4bc49 618bc5f6 628d4025 65515c97 71f9f46c 7d116b6f 84e5c9f7 8c110b7f a9850b61 b422a406 ba5ef812 dc136655 e13820f7 f74eb642 fd54b2af"
+  },
+  "test_si_prefix_and_unit_agreement": {
+    "expects": 11,
+    "marks": "0fb3e0c2 1921336d 2c98b13f 47483e6d 721d8a6a 89c96d16 a047f6a5 a15366fb a1772801 d308e76e fd0b6af0"
+  },
+  "test_sigfig_can_be_waived_where_nothing_is_measured": {
+    "expects": 2,
+    "marks": "8e470272 ae09628c"
+  },
+  "test_slash_fraction_has_a_fixer": {
+    "expects": 9,
+    "marks": "016f8dc5 02908859 05950c8b 090dfe76 28fcfe12 40d98f03 4ed22b26 6501b4e2 9f636cf7"
+  },
+  "test_solution_outline_is_renderable": {
+    "expects": 6,
+    "marks": "11dc3dde 17f46537 492b4fcd a4ef5067 dc70076e f719d557"
+  },
+  "test_source_ref_never_rendered": {
+    "expects": 3,
+    "marks": "5423880a 5fbda97f fd49fe9a"
+  },
+  "test_split_matches_viewer": {
+    "expects": 2,
+    "marks": "433d1e4b a4ddc1d0"
+  },
+  "test_sqrt_is_one_structure": {
+    "expects": 12,
+    "marks": "2602cc7b 296e0938 55351b09 81c75d51 8292d13a 9595c342 97030ff9 a5df5460 b8169d53 debea2b9 dff0dc9f f7033c0f"
+  },
+  "test_sqrt_nesting_two_levels": {
+    "expects": 4,
+    "marks": "0228c447 04501306 0657e6f8 54cbb94c"
+  },
+  "test_stale_shared_folder_name_is_not_left_in_prose": {
+    "expects": 2,
+    "marks": "a7e944dd b27bb3a4"
+  },
+  "test_stamp_audit_declaration_is_real": {
+    "expects": 10,
+    "marks": "074f4b5f 1545a91d 193fe07b 33eb8134 391ffa3f 3a544e49 81faec1e e7672987 f5a06cf3 fca3f6e0"
+  },
+  "test_stepper_dot_hit_area_and_reset_icon": {
+    "expects": 13,
+    "marks": "0334d193 34d2fbf8 3b617ced 4948b3fe 53909c74 6a65d750 7717870a 785da566 a2cfe96a bb1ee45a cefa1d63 e07e6f98 eac22cdb"
+  },
+  "test_strict_lists_are_filled_by_a_tool": {
+    "expects": 8,
+    "marks": "195a26ba 5a23a2d6 5c1b9556 a9908134 ae2fbc9c b648e953 c4c2e936 fe3d3c40"
+  },
+  "test_strict_promotion_covers_all_chapters": {
+    "expects": 15,
+    "marks": "14eea765 1d857ef1 2f3077d0 3f527717 58fc277a 68a1fde9 72b6d1f5 77ce95f6 bb92b558 c116af15 ce64280a d0073930 d2888e4b d60577a8 dc942404"
+  },
+  "test_strict_promotion_does_not_erase_waivers": {
+    "expects": 4,
+    "marks": "481221a0 52dd6d6b a32ac819 ee58fdd2"
+  },
+  "test_stroked_circle_outline_can_hide_text": {
+    "expects": 7,
+    "marks": "190707dd 470c7cf5 6f0a9ee7 76be3246 84415d13 b512a4f4 fc6fb1fc"
+  },
+  "test_subject_declaration_freshness_gate_stays_retired": {
+    "expects": 4,
+    "marks": "486a3d48 4ea415fe c41e9cc5 f3d1a998"
+  },
+  "test_subject_declaration_stays_retired": {
+    "expects": 26,
+    "marks": "07a356f3 2847b767 2997cd0d 3019ebde 32cc4fd2 358d4895 39d8f4de 3fe1af71 4ca89e3d 4f1bee8f 5413772c 67337b50 6fb07ec8 777f5fc3 77f9eafc 7b58b1e2 8992bb56 c59ffe22 d74e6f1d da62ff42 e6bac62b e7cd0e18 e81b4ff0 e952000f eab6762d f9532687"
+  },
+  "test_subject_facts_file_may_have_a_bom": {
+    "expects": 3,
+    "marks": "868216dc 902e12a6 f3c2578a"
+  },
+  "test_subject_facts_survive_creation": {
+    "expects": 10,
+    "marks": "1c0163a6 21fd00f3 26593305 6a6261f4 79523ab7 8e1650a7 c5903f82 ced4a49b e0a7091b fa0bc10c"
+  },
+  "test_subject_progress_reads_hangul_paths": {
+    "expects": 7,
+    "marks": "55e0cba5 5fa31ffe 93e0db7e b7d3e7d9 bfad73a1 eefe79ce efe42240"
+  },
+  "test_subject_registration_is_complete": {
+    "expects": 3,
+    "marks": "269683dc 26c47ff1 d94c5f82"
+  },
+  "test_subject_scan_covers_every_subject": {
+    "expects": 6,
+    "marks": "2665d2a5 349fb82f 3ffd7f2f b0cec8d9 df992035 fe2fcc13"
+  },
+  "test_subject_specific_ui_is_gated": {
+    "expects": 3,
+    "marks": "4494dc7c 5f5dafc9 656f44f6"
+  },
+  "test_subscript_base_must_be_one_the_viewer_renders": {
+    "expects": 6,
+    "marks": "83065f6b 8915f486 926036f5 9fc03a4a c50b7222 d70d7ca3"
+  },
+  "test_subscript_scale_is_measured_too": {
+    "expects": 18,
+    "marks": "072cc309 1188577b 1b253612 34d1972a 43f21906 44c4e3a1 707247be 7127af42 7cebaec9 91e20535 9ed9912a a9a790f0 b0b7e617 bd338b45 bdbcda5c cb87d6da cd7446af dca6c024"
+  },
+  "test_summary_carries_the_formulas": {
+    "expects": 19,
+    "marks": "03bc202f 05e29069 1298940f 1f4c18b1 254be217 2d5aaf10 3097e290 539ef154 8178f343 8b016d2c a5ad13be b36fcc59 be6f8d68 c629db7d c7cef743 dd400c98 ed150807 fbae423e"
+  },
+  "test_summary_is_not_a_source": {
+    "expects": 6,
+    "marks": "0ac8ebd9 0acefc70 437b0308 6439eb79 e758ec7f f5480ecf"
+  },
+  "test_supsub_nesting_is_shared": {
+    "expects": 9,
+    "marks": "49c43e2b 4c1f9f29 6a85f2fe 89afc623 b2dd3a87 bb6f1efb db8242d0 ede34618 fe453257"
+  },
+  "test_svg_generators_pass_their_own_rulers": {
+    "expects": 27,
+    "marks": "0318fa71 0697c7f7 0de8540c 14ad090e 17478a56 1fe46f52 249d9921 2cf944bc 487f3750 4fb5d0fc 5a990a54 5b6887b7 5c9ccc91 685c545e 72d2bdc4 7934b7ed 7990dda7 9253399a 9b8f28ef a3e3fafd a9eac213 af5f26e9 b16841ae c06d2bf4 c51a2693 cfa1c598 d920700d"
+  },
+  "test_svg_must_be_closed": {
+    "expects": 2,
+    "marks": "a2ee0b6b a3405f5b"
+  },
+  "test_svg_raster_review": {
+    "expects": 1,
+    "marks": "0ca1e615"
+  },
+  "test_swallowed_newline": {
+    "expects": 6,
+    "marks": "4284d468 643429cf 64e597b7 9cef988f b1f3c146 d7e7023f"
+  },
+  "test_symbol_macro_eats_its_terminator_space": {
+    "expects": 12,
+    "marks": "30f4485e 545cf43a 5a7b2f79 5f3d95e7 6594ea1d 6b0de64b 6c910371 a3d13fd6 b8ba2235 d8ccfce9 e239c3eb fad2e92b"
+  },
+  "test_symbol_middot_is_reserved_for_units": {
+    "expects": 23,
+    "marks": "17340a53 19737a82 24209725 252c6056 4d1a8372 59be4dc4 59ec4fc4 71113eba 73ef4ebd 76e64d82 7a54bfc6 8075d2dc 86c0128b 975f6556 b8733396 baf98c90 d6724bea deea392f e1525f6d ea83280b f740751d f9dec169 fef083d9"
+  },
+  "test_symbol_product_join_and_operator_spacing": {
+    "expects": 35,
+    "marks": "0b89b23c 0ea9d07e 112e7521 17b51826 24a21b32 26e71c5e 2f70e2a9 337ba0aa 378d11a9 37d987a8 44e5aec0 551cc783 5977b796 5c9defde 6f3c7b60 71c598f4 7546a272 85031b1d 89392d34 9bdc9abc 9e7bc092 9fcb41db a5c5f92d acba4ed4 aeb14961 c21e55bd c62368c1 cf50e59c d138fa25 e116311f e96339db ed49dc0a ed535b32 f2a5fa4a f47fddaa"
+  },
+  "test_symbol_role_follows_the_subject_table": {
+    "expects": 20,
+    "marks": "0c4998e3 10f02996 11935595 4f39ff62 55d3858d 64d7c1db 64db2659 733230cb 741aa11e 786ca035 85f32a2d 90e38edc 9a369421 a36139f8 af7b0135 b02ecef9 b3d13b51 be15ac93 db8f89b9 e26a3b6f"
+  },
+  "test_symbol_split_inside_one_item": {
+    "expects": 9,
+    "marks": "45981ac0 4fefdd34 865ce001 914d4295 a3405f5b a9ab9c9e c080ce91 f2559904 f48dda07"
+  },
+  "test_symbol_used_before_intro": {
+    "expects": 4,
+    "marks": "60859102 9410f9e1 a263cefb c8221979"
+  },
+  "test_sync_common": {
+    "expects": 17,
+    "marks": "06b37c31 13b66da1 37bd1d80 4e43f742 5b0f6dee 7126b05c 7258deda 90f27ce6 9ac3341f a89f4eec a97258dc d1544bbf d1ab3ee5 df24bbe2 e87005a7 eb42cdce ecad1111"
+  },
+  "test_terms_are_paired_with_the_original": {
+    "expects": 9,
+    "marks": "10491faa 1fe46be6 20ef81f7 521f9e47 5355e685 66dea8f3 7362372a 91e8d490 a3405f5b"
+  },
+  "test_text_contrast": {
+    "expects": 5,
+    "marks": "017e9db5 3fe88b41 5c952399 5f30fd37 d8147e86"
+  },
+  "test_text_fraction_is_rejected": {
+    "expects": 37,
+    "marks": "021b15fb 0df396d5 0fec9ee9 13b7e68b 238cdb10 248975af 2a6c9408 2b87b92d 356b643e 40a902cf 4d303036 5d0cc53c 5da189f2 63f45dd1 64347e3d 67cca9d9 6af2fdff 78e0fa74 7ad56433 8ba7b1cc 9330ccb9 94475b88 9733910f a1eb71cb ad260fb2 b824e2c8 b8b48d8d d981badf dbb4ea54 e5f6d5d4 eb6dcaa5 ebda88f6 efd4e94a f4ffa3a7 f529222a fa4b4189 ff9e60e6"
+  },
+  "test_text_scale_floor_shares_the_checker": {
+    "expects": 4,
+    "marks": "1079f67e 18688731 b71ea564 dfbadb3f"
+  },
+  "test_textbook_dir_reaches_new_worktree": {
+    "expects": 22,
+    "marks": "0634ea72 0641043f 13557bb4 2aed6392 633af166 75fa4ab1 7e044cf4 840d76ee 94b619bd a4b5beaa a85992d9 ac509dd7 ba67d2cc bdc622d9 c4283434 c5eac79f dff23b11 e7a56d32 e8669a95 e9f1e97f f8f1e5b1"
+  },
+  "test_textbook_motifs": {
+    "expects": 3,
+    "marks": "27bcd728 d46a3416 f509d0df"
+  },
+  "test_textbook_outline_patterns": {
+    "expects": 7,
+    "marks": "111d7f93 1e9783c8 36a323a4 a0283c15 c133bcd9 ca4908c1 edbe9f95"
+  },
+  "test_textbook_problems_carry_no_original_text": {
+    "expects": 9,
+    "marks": "0f21ab18 33c04021 3a951e8f 64742070 895bc036 a91401ee d7799c89 d9e269da ea9f7f89"
+  },
+  "test_theory_figure_judgment_is_per_section": {
+    "expects": 5,
+    "marks": "74765e9b 7b5d7ab4 b8f9a4d3 bbce2e95 bfe81bf9"
+  },
+  "test_theory_figure_reasons_skip_summary_chapters": {
+    "expects": 7,
+    "marks": "067b292c 1c712148 5ccc92a1 5fa6bfd1 670c459c 9b3ca7fa fa12c0b2"
+  },
+  "test_theory_link_number_matches_order": {
+    "expects": 5,
+    "marks": "188db2f2 725a2411 abeedc36 d78d6330 d913f5a2"
+  },
+  "test_theory_needs_at_least_one_figure": {
+    "expects": 7,
+    "marks": "230a8187 2963449c 482fb7ca bca9ea5c c8b4d99a eece2f62 fb68c06c"
+  },
+  "test_theory_toc_follows_the_reading_line": {
+    "expects": 6,
+    "marks": "157ef78f 1dc48a01 36b9daa1 3875ca8c 7826388e 8af7afe9"
+  },
+  "test_tip_ignores_a_shear_arrow_lying_on_its_face": {
+    "expects": 5,
+    "marks": "04bd60ba 7fcb3215 e2668b58 e43b9d8d e9f8908d"
+  },
+  "test_tip_ignores_the_panel_divider": {
+    "expects": 5,
+    "marks": "2c7b2004 c5964f91 d873da52 e3464b4f f3c6e2f9"
+  },
+  "test_tip_ignores_walls_of_its_own_container": {
+    "expects": 4,
+    "marks": "07cbd5e3 5c732036 f58fa18b"
+  },
+  "test_tip_landing_on_marker_circle": {
+    "expects": 5,
+    "marks": "13d3a523 58d91c1c 5f81f9c0 649e0e8e f0e8c7a8"
+  },
+  "test_tool_failures_are_readable": {
+    "expects": 3,
+    "marks": "e507aef8 f5c0a370 fc3d317f"
+  },
+  "test_tools_do_not_bypass_git_gates": {
+    "expects": 7,
+    "marks": "11424ec1 1e66ccaa 2d9651ea 4f2a8fb1 aaf0ea15 de2b3fc6 f948a66f"
+  },
+  "test_tools_do_not_hardcode_a_subject": {
+    "expects": 2,
+    "marks": "47c7ab28 8a9d3e4e"
+  },
+  "test_type_scale_is_a_short_ladder": {
+    "expects": 7,
+    "marks": "04cf9752 369123ba 735418ba 809ee50e b14ae141 e9e1b984 fbd2f941"
+  },
+  "test_unicode_supsub_rules": {
+    "expects": 17,
+    "marks": "0dd063b7 1340d6e8 15b5c816 2b8017ee 2cef3887 313714d1 362327b5 4dbb639a 5c2abafd 7733c8d3 7d8047f3 830f2079 8339fc57 a3405f5b b02ffbd0 bbfab83f f92ea2f6"
+  },
+  "test_unit_notation_mode": {
+    "expects": 16,
+    "marks": "0ecbc004 0f6b895b 1e45a998 24dc25e9 2e4f8c44 3a6c2c81 3be91bc2 662ae506 6851435e 704040f7 93dff76a a3405f5b ac2cef24 c65c178a f39cbe67 f6fff797"
+  },
+  "test_unpublished_subjects_are_hidden_from_the_bundle_only": {
+    "expects": 8,
+    "marks": "3f9d37bf 55db510b 7fee5bfd 8ab81192 92db0ff3 9d2eeaf2 a7fb6c73 cdf8f085"
+  },
+  "test_unreported_svg_gate": {
+    "expects": 2,
+    "marks": "82b60ede ca555e2f"
+  },
+  "test_unsupported_math_delimiters_are_rejected": {
+    "expects": 3,
+    "marks": "05b9f524 8db4d5dd e8017189"
+  },
+  "test_untagged_dashed_line_is_reported": {
+    "expects": 16,
+    "marks": "205926ed 2935115e 2a8be868 3746da68 47f66095 4daf9325 532286c5 69ddb67b 804e418f 93d5dcf6 96ce466d 9a0daf45 9b882302 b9ee1ac9 e2e81ea5 fdac679e"
+  },
+  "test_untagged_dimension_is_reported": {
+    "expects": 6,
+    "marks": "1e642ee5 433fe362 ce8b5491 dc9ccbd1 e8fb330c fc79ba3c"
+  },
+  "test_untagged_dimension_sees_arrow_ends": {
+    "expects": 5,
+    "marks": "23816845 2dbf8922 8c8e4abf 9e680745 b56249b1"
+  },
+  "test_variables_key_is_a_rendered_formula": {
+    "expects": 10,
+    "marks": "1fcb280b 2ce50c98 33619693 3a2af21a 79c17812 8ce2ff72 a9990c9f bd369994 d659e6b6 f2aeb68d"
+  },
+  "test_verbatim_slots_are_really_verbatim": {
+    "expects": 12,
+    "marks": "0d16a7e5 27c436d7 28ac9c5d 4439a134 75bac891 7d368d08 827a2ef7 9f53aea1 ab8465a9 baa25d15 c46051d7 f22f7a93"
+  },
+  "test_verifier_prefixes_are_not_fake_item_ids": {
+    "expects": 4,
+    "marks": "22dd10c9 40f7f2ae a5006d44 e00a90ae"
+  },
+  "test_verify_all_reports_real_case_counts": {
+    "expects": 6,
+    "marks": "032bd407 0665ebcd 1160d8bf 26d49aba 44d1be3e 7568c32a"
+  },
+  "test_vertical_balance_is_a_build_gate": {
+    "expects": 7,
+    "marks": "0fb3b01a 16309657 8828b751 a7306432 c219babf dacf8394 df7c0661"
+  },
+  "test_viewer_block_forms_match": {
+    "expects": 11,
+    "marks": "20cdf4b6 233c24ff 2a71e8a9 38b1f2bd 48ef9989 57af4e6b 5ae4fda4 6816362b aba3e1d1 adce4c04 fa3f6a6d"
+  },
+  "test_viewer_change_reaches_the_reviewer": {
+    "expects": 13,
+    "marks": "145a24b2 568cfa35 5d142888 6ca6480c 6d40655c 9f06e974 b6642bce b988c316 c46d18ef c58fdc22 d8ae4789 dea9cdad edbc3ee7"
+  },
+  "test_viewer_css_comments_are_balanced": {
+    "expects": 8,
+    "marks": "2900347a 3d0d6ead 4c87cb7d 5253f022 829cbd72 98426f4e a5a8c818 f77da14c"
+  },
+  "test_viewer_is_split_into_shared_assets": {
+    "expects": 22,
+    "marks": "0e7e61f0 1474c11d 14ed8507 281fdf55 36d82c95 400b2532 550469ae 5590d546 7d8b3c89 8b5ca39e 990594d9 9ae5e00b 9dfeddc3 9e15af7f a0dcc9da b1a75c0e bc102b59 c74a1190 d260dc2e e1150325 e17c98bf edf273c4"
+  },
+  "test_viewer_script_actually_parses": {
+    "expects": 6,
+    "marks": "2872a97b 3e7e99af 4c0cc7be 65f92def e657c6a3 fd9330f2"
+  },
+  "test_viewer_survives_empty_collections": {
+    "expects": 12,
+    "marks": "3e04c355 4392dc98 470189f0 7b38d6d3 7e9fa08f a866c53d c3368bf2 c4df0852 c4e5eff4 dd23eac4 e125993c ec2bcc24"
+  },
+  "test_viewer_text_macro_and_last_chapter_line": {
+    "expects": 4,
+    "marks": "72d63546 833d8473 a75e39d1 dbd88721"
+  },
+  "test_wakeup_guard_blocks_a_turn_without_a_wakeup": {
+    "expects": 29,
+    "marks": "048543be 06121b0d 0aa7fa8b 152c44df 1c527b92 224531db 4b39d12c 4dd0081d 541efbbe 558e7722 61f4df06 67fdb199 74f12895 7f2d1f1d 88d466b4 8c9c1ad1 974b9730 976c0ffb 990e24bb 9a136b4b 9fad4d5e ab47aa8b c9e3a67d cab10cf2 cf1054dd dad97a96 f0a6349e f42756cd f8dd2e6b"
+  },
+  "test_warning_waivers": {
+    "expects": 10,
+    "marks": "0a546e90 3d9e224c 9217d18b bb82f3a2 bdc186df bf036873 c06ddc42 d74783eb f13cfb77 fa1808c0"
+  },
+  "test_worktree_folder_names": {
+    "expects": 17,
+    "marks": "14d5bd5e 15013a92 169d7428 26aa6337 26bfab89 38949023 451c4230 554d6110 5b4f1137 62bd1ed2 82276694 a40a6f7a cf503c6e dc438f8b e6d6d23c eb0d7b2b efc681de"
+  },
+  "test_xlink_landing": {
+    "expects": 4,
+    "marks": "70615bed 8b96108f 8f2bf12b 977d0ce0"
+  },
+  "test_xlink_topic_match": {
+    "expects": 9,
+    "marks": "11bf47ee 21831c74 38c0c6f1 4ca5ecc2 4f32724e 55d88964 60bb11e2 d07e4c2e de3f4d28"
+  },
+  "test_xscroll_only_when_overflowing": {
+    "expects": 12,
+    "marks": "131e4a9f 370c4587 3b309df4 3ca025e2 5d9bbdcd 63cd6ada 84e252c8 92413d59 a1f4a5d9 d905a366 f7f3b98e fb2485a1"
+  },
+  "test_zorder": {
+    "expects": 3,
+    "marks": "83c653be a67f1739 f86d750e"
+  }
+}

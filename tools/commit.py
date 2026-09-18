@@ -8,6 +8,9 @@ settings의 ask에서 `git commit`을 빼고 `guard_bash.py`가 과목 브랜치
 `python tools/*.py`는 자동 허용이므로 이 도구 실행에도 프롬프트가 없다.
 
 usage: python tools/commit.py "<message>" <path> [<path> ...]
+분리 통합: python tools/commit.py --integration-owner <작업ID> "<message>" <path> ...
+분리 통합은 커밋에 담당자와 대기 상태를 기록하고 자동 main 덮어쓰기를 수행하지 않는다.
+검사나 통합 완료를 뜻하지 않으며, 담당자가 검증 후 해당 커밋을 직렬 통합해야 한다.
 안전장치:
 - 경로를 **명시**해야 한다(`-A`·`.` 금지). guard를 우회하므로 스스로 과목 경계를 지킨다.
 - 다른 과목 경로(`data/<타과목>`·`site/<타과목>`)는 거부한다(guard와 같은 `foreign_subject_paths`).
@@ -15,14 +18,14 @@ usage: python tools/commit.py "<message>" <path> [<path> ...]
 
 ## ★ 공통이 든 커밋이면 그 자리에서 main 에 반영한다 (2026-08-13 신설)
 
-규칙은 예전부터 *"공통을 고쳤으면 **커밋 후 즉시** main 에 반영한다"* 였다(main 이 정본이고
+규칙은 예전부터 *[발화 생략]* 였다(main 이 정본이고
 다른 과목이 merge 로 받는다). 그런데 그것을 알리는 훅(`.claude/hooks/common_guard.py`)은
 **파일을 고칠 때** 경고했다 — 정작 해야 하는 일은 **커밋한 뒤**라, 그 사이에 다른 일이 끼면
 그대로 잊는다.
 
 **2026-08-13 하루에 두 번 잊었다.** 뷰어 커밋 하나가 그냥 지나갔고, *다른 과목에 주려고 만든
 공통 문서*가 이 브랜치에만 남아 다른 과목 세션이 그것을 겨우 찾아 읽고
-*"이런 건 main 으로 올려놔야 하지 않나"* 라고 지적했다.
+*[발화 생략]* 라고 지적했다.
 
 AGENTS 「방지장치의 트리거는 내가 반드시 하는 일에 건다」가 정확히 이 자리다 —
 **이 리포에서 반드시 하는 일은 커밋**이므로 트리거를 커밋 성공 직후로 옮긴다.
@@ -60,6 +63,7 @@ AGENTS 「방지장치의 트리거는 내가 반드시 하는 일에 건다」�
   (문서·안내 문구뿐), *경로를 명시하라* 는 것이 이 도구의 존재 이유다.
 """
 import os
+import re
 import subprocess
 import sys
 
@@ -105,7 +109,7 @@ def should_sync(branch, changed_names):
     판정의 정본은 `sync_common` 하나다. 여기서 다시 목록을 적지 않는다.
 
     ★★ **main 을 여기서 빼면 안 된다 (열린 날 2026-08-14, 같은 결함의 두 번째 자리).**
-    옛 주석은 *"main 에서는 부르지 않는다 — 거기가 정본이라 옮길 곳이 없다"* 였다. 그 말은
+    옛 주석은 *[발화 생략]* 였다. 그 말은
     **브랜치→main 반영**에 대해서만 참인데, `sync_common` 은 그 일 말고 **공용 폴더 미러**도
     한다. 그래서 이 한 줄이 «main 에서 공통을 고쳐 커밋하는 정상 경로»에서 미러를 통째로 껐다.
     - 같은 판정이 `sync_common.main()` 에도 있었고 거기만 고쳤더니 **여기서 다시 막혔다** —
@@ -118,6 +122,16 @@ def should_sync(branch, changed_names):
 
 
 def main(argv):
+    integration_owner = None
+    if len(argv) > 1 and argv[1] == "--integration-owner":
+        if len(argv) < 5 or not argv[2].strip() or argv[2].startswith("-"):
+            print("--integration-owner 뒤에 담당 작업 ID, 메시지, 명시 경로가 필요하다.")
+            return 2
+        integration_owner = argv[2].strip()
+        if any(c.isspace() for c in integration_owner):
+            print("담당 작업 ID에 공백을 넣을 수 없다.")
+            return 2
+        argv = [argv[0]] + argv[3:]
     if len(argv) < 3:
         # 인자 없는 호출을 «전체 커밋»으로 봐주지 않는다 — 경로를 명시하라는 것이 존재 이유다.
         print('usage: python tools/commit.py "<message>" <path> [<path> ...]')
@@ -152,7 +166,21 @@ def main(argv):
               "(다른 세션 작업일 수 있다): " + ", ".join(others[:4])
               + (" 외 " + str(len(others) - 4) + "건" if len(others) > 4 else ""))
 
+    # ★ 규칙 등록부 게이트 (2026-09-18) — 장 JSON 이 담긴 커밋은 그 장의 미판정이 HEAD 보다 늘면 막는다.
+    #   `rules.py` 가 있는 리포에서만 돈다(공용 폴더 미러에는 없다).
+    chapters = [n for n in mine if re.fullmatch(r"data/[^/]+/ch\d{2}\.json", n)]
+    rules_tool = os.path.join(TOOLS_DIR, "rules.py")
+    if chapters and os.path.isfile(rules_tool):
+        g = subprocess.run([sys.executable, rules_tool, "gate"] + chapters, cwd=ROOT,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if g.returncode != 0:
+            print((g.stdout + g.stderr).strip())
+            print("커밋 안 함 — 스테이징은 남아 있다.")
+            return 1
+
     full = msg if TRAILER in msg else msg + "\n\n" + TRAILER
+    if integration_owner:
+        full += "\nIntegration-Owner: " + integration_owner + "\nIntegration-State: pending"
     c = _git(["commit", "-m", full] + scope)
     print((c.stdout + c.stderr).strip())
     if c.returncode != 0:
@@ -160,7 +188,11 @@ def main(argv):
 
     # ★ 커밋이 성공한 **이 자리**가 트리거다 (위 독스트링 참조).
     # 판정은 **이 커밋에 담긴 것**만 본다 — 남이 스테이징만 해 둔 공통 파일을 옮기면 안 된다.
-    if should_sync(branch, mine):
+    if integration_owner:
+        sha = _git(["rev-parse", "HEAD"]).stdout.strip()
+        print("[통합 대기] " + sha + " · 담당 " + integration_owner
+              + " — 자동 main 반영 없음. 담당자에게 전달하고 검증·통합 결과를 확인할 것.")
+    elif should_sync(branch, mine):
         try:
             rc, why = sync_common.main(), ""
         except Exception as exc:                                     # noqa: BLE001
@@ -172,28 +204,52 @@ def main(argv):
                   "(뒤졌다는 거부면 먼저 `git merge main`).")
 
     # ★ 상호작용 점검도 **이 자리**가 트리거다 (신설 2026-08-15, 사용자 질문:
-    #   *"Claude랑 상호작용은 닫기 점검에 안들어가나? 마지막 Close만? 중간엔?"*).
+    #   *[발화 생략]*).
     #   close 에만 두면 늦고(맥락이 날아간 뒤다) 매 턴은 소음이다. 커밋은 **반드시 하는 일**
     #   이면서 무엇보다 *«이걸 했다»고 주장하는 자리*라, 예고 미이행·미검증과 짝이 맞다.
     #   `--quiet` 라 걸린 게 없으면 한 줄도 안 낸다. **커밋 결과를 뒤집지 않는다** —
     #   이 도구의 종료코드는 «커밋됐나» 하나뿐이라는 계약은 그대로다.
-    #   ★★ **진행 중계도 여기서 알린다** (2026-08-15, 사용자 판정 — 「하드 블로커 대신 커밋」).
+    #   ★★ **진행 중계도 여기서 알린다** (2026-08-15, 사용자 판정 — [발화 생략]).
     #     `close_report` 에도 이 자가 있지만 거기서는 **세기만** 한다. 이유는 하나다:
     #     이 수는 **세션 전체 누적**이라 close 시점엔 이미 확정이고, 다른 close 항목처럼
     #     «고치고 다시 돌리면 초록» 이 **불가능**하다. 못 지우는 빨간불은 게이트가 아니라
     #     벽이고, 벽이 서면 그 아래 멀쩡한 19행까지 같이 무시된다.
     #     → 그래서 «아직 고칠 수 있는 시점»인 여기로 옮겼다. 넘겼으면 한 줄, 아니면 침묵.
-    # ★ 자리는 `TOOLS_DIR` 로 잡는다 — `ROOT/"tools"` 로 박으면 **나루에서 죽는다**(2026-08-24).
+    # ★ 자리는 `TOOLS_DIR` 로 잡는다 — `ROOT/"tools"` 로 박으면 **공용 폴더에서 죽는다**(2026-08-24).
     #   공용 폴더의 같은 파일은 `도구/` 에 사는데 이 줄만 `tools` 를 찾아 매번 되돌려 적혔고,
-    #   그 되돌림이 다음 미러에 또 덮여 **네 번 반복**됐다(나루 `변경일지.md` 2026-08-14·17·20).
+    #   그 되돌림이 다음 미러에 또 덮여 **네 번 반복**됐다(공용 폴더 `변경일지.md` 2026-08-14·17·20).
     #   `TOOLS_DIR` 은 이 파일이 있는 폴더라 두 배치에서 저절로 맞는다 — 한 파일이 양쪽에서 돈다.
-    for tool in ("audit_session_conduct.py", "check_narration.py"):
+    # `close_gates.py` 는 그 리포의 `게이트-실체.txt` 가 「부르는 자 = commit.py」로 선언했을 때만 돈다
+    #   (공용 폴더 2026-09-11 추가). 전공정리는 선언 목록에 build_site·test_checks 가 있어 매 커밋 돌리면 수 분이라 선언 안 한다.
+    tools = ["audit_session_conduct.py", "check_narration.py"]
+    if _declares_commit_gate(ROOT):
+        tools.append("close_gates.py")
+    for tool in tools:
         try:
             subprocess.run([sys.executable, os.path.join(TOOLS_DIR, tool), "--quiet"],
                            cwd=ROOT, check=False)
         except OSError:
             pass
     return 0
+
+
+def _declares_commit_gate(root):
+    """`게이트-실체.txt` 에 `… | …close_gates.py | …commit.py…` 줄이 있나. 선언 파일 자리는 close_gates 가 찾는다."""
+    try:
+        sys.path.insert(0, TOOLS_DIR)
+        from close_gates import decl_path
+        p = decl_path(root)
+    except Exception:
+        return False
+    if not p:
+        return False
+    with open(p, encoding="utf-8", errors="replace") as fh:
+        for ln in fh:
+            parts = [x.strip() for x in ln.split("|")]
+            if (not ln.lstrip().startswith("#") and len(parts) >= 3
+                    and parts[1].endswith("close_gates.py") and "commit.py" in parts[2]):
+                return True
+    return False
 
 
 if __name__ == "__main__":

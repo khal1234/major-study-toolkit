@@ -81,6 +81,12 @@ def no_subject():
             sys.path.insert(0, os.path.join(ROOT, "tools"))
             import audit_content                                               # noqa: E402
             _NO_SUBJECT = not audit_content.CHAPTERS
+        except ModuleNotFoundError:
+            # ★ 공용 폴더 국소 분기(2026-09-11) — **미러 동기화가 이걸 두 번 지웠다**(전공정리
+            #   원본엔 `tools/audit_content.py` 가 실재해 이 가지가 한 번도 안 걸려서다).
+            #   파일 자체가 없는 것은 "판정 못 함"이 아니라 "대상이 아님"이다. 없으면
+            #   `on_disk_chapters()` 가 같은 이유로 또 죽는다 — 되돌아오면 다시 붙인다.
+            _NO_SUBJECT = True
         except Exception:                                  # noqa: BLE001 — 보고를 막지 않는다
             _NO_SUBJECT = False
     return _NO_SUBJECT
@@ -107,7 +113,7 @@ def on_disk_chapters():
          맞았다는 것과 확인했다는 것은 다르다(규칙 11).
       ⑵ **아무것도 안 본다.** ch01~ch03 이 아예 없는 과목(동역학 ch00·ch12~ch18)에서는
          그 세 이름이 공통 목록에 있다는 이유만으로 통과한다. 폴백이 있는 도구가
-         [사용자 발화 인용 생략] 를 [사용자 발화 인용 생략] 으로 찍는 그 부류다.
+         *[발화 생략]* 를 *[발화 생략]* 으로 찍는 그 부류다.
     """
     sys.path.insert(0, os.path.join(ROOT, "tools"))
     import audit_content                                                       # noqa: E402
@@ -131,7 +137,11 @@ def strict_leftovers(chapters, names, list_name):
 
 
 def read_set(module, name):
+    """공용 폴더 국소 분기 — 없으면 `None`(호출부가 이미 `pending is None` 등으로 받는다).
+    미러 동기화가 두 번 지웠다(전공정리 원본엔 이 파일이 실재한다)."""
     path = os.path.join(ROOT, "tools", "buildlib", module)
+    if not os.path.isfile(path):
+        return None
     body = open(path, encoding="utf-8").read()
     m = re.search(re.escape(name) + r"\s*=\s*(set\(\)|\{[^}]*\})", body)
     if not m:
@@ -144,7 +154,7 @@ def read_set(module, name):
 # ★ 미선언 opt-in 승격 키 — 「선언 안 함」과 「해당 없음」이 화면에서 똑같이 보이던 자리
 #   (열린 날 2026-08-13. 고체역학 세션이 실측해 넘긴 제보가 정본이다):
 #
-#   > [사용자 발화 인용 생략]
+#   > *[발화 생략]*
 #
 # **무엇이 새어나갔나.** 이 리포는 검사를 과목별로 승격한다(`data/<과목>/index.json` 의
 # `strictChapters`). 설계 자체는 옳다 — 전 과목 error 로 박으면 남의 빌드가 멈춘다. 문제는
@@ -152,7 +162,7 @@ def read_set(module, name):
 # *범위를 확인하지 않은 0건은 「없다」가 아니라 「거기까지는 없다」이다.*
 # 이 리포는 같은 부류를 한 번 닫았는데(`pendingChapters` — 「보류와 망각을 가르는」 장치)
 # **승격 키 자체가 없는 경우는 그 장치 밖**이었다. 열역학 `index.json` 의
-# `_strictChapters_2026-08-07` 주석이 [사용자 발화 인용 생략] 고
+# `_strictChapters_2026-08-07` 주석이 *[발화 생략]* 고
 # 스스로 적고 있다 — 알고도 못 세던 자리라는 뜻이다.
 #
 # ★ **키 목록을 여기 박지 않는다.** `is_strict_chapter(...)` 호출부에서 **AST 로 뽑는다.**
@@ -170,7 +180,7 @@ def read_set(module, name):
 #     · `전달`  … 판정을 변수에 담아 아래 함수로 넘긴다 — 이 자는 거기까지 못 본다(미검증).
 #
 # ★ **막는 것은 게이트형뿐이다.** 분기형까지 막으면 이미 보이는 것을 두 번 세는 것이고,
-#   경보 피로는 검사기를 죽인다(AGENTS 「감사 ↔ 빌드 검사 대응」이 [사용자 발화 인용 생략] 고 내린 판정과 같은 자다). 미선언 전부는 **나열만** 한다 —
+#   경보 피로는 검사기를 죽인다(AGENTS 「감사 ↔ 빌드 검사 대응」이 *[발화 생략]* 고 내린 판정과 같은 자다). 미선언 전부는 **나열만** 한다 —
 #   고체역학이 요청한 「목록 한 줄」이 그것이다.
 #
 # ★ **사유를 적는 자리는 그 과목의 `index.json`** 이다: `"strictWaivers": {"키": "사유"}`.
@@ -313,6 +323,50 @@ def strict_key_rows(chapters):
     return out
 
 
+def card_overlap_backlog_rows():
+    """과목마다 `(과목, 학기, 선언 챕터 수, 전체 챕터 수, 미판정 쌍 수)` — 순회 범위를 함께 낸다.
+
+    ★ **순회 범위는 `data/<과목>/chNN.json` 전부**다(`audit_conventions.chapters`). 과목을
+      코드에 적지 않는다 — 「공통 도구에 과목별 사실을 박지 않는다」.
+    ★ 「미판정」은 **문턱을 넘었는데 사유가 안 적힌 쌍**이다. 판정이 옳은지는 이 자가 못 본다.
+    """
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import audit_conventions as ac                                          # noqa: E402
+    from buildlib.checks_content import (CARD_OVERLAP_GATE_MIN,             # noqa: E402
+                                         subject_strict_chapters)
+    rows_by_subject, semesters, seen = ac.card_overlap_dist()
+    out = []
+    for subject in sorted(rows_by_subject):
+        chapters = seen.get(subject) or set()
+        subject_dir = os.path.join(ROOT, "data", subject)
+        declared = subject_strict_chapters(os.path.join(subject_dir, "ch00.json"),
+                                           "card_overlap")
+        left = sum(1 for (_ch, _o, _l, _r, score, judged) in rows_by_subject[subject]
+                   if score >= CARD_OVERLAP_GATE_MIN and not judged)
+        out.append((subject, semesters.get(subject, "?"), len(declared), len(chapters), left))
+    return out, CARD_OVERLAP_GATE_MIN
+
+
+def card_overlap_backlog():
+    """화면에 찍을 줄들. 판정은 `card_overlap_backlog_rows` 가 하고 여기는 꼴만 만든다."""
+    rows, gate = card_overlap_backlog_rows()
+    total = sum(r[4] for r in rows)
+    lines = [f"[L] 본문·잘 놓쳐요·떠올리기 겹침 — 미판정 {total}건 "
+             f"(문턱 {gate:.2f} · 순회 과목 {len(rows)}개)",
+             "   ※ 이 게이트는 과목이 `strictChapters.card_overlap` 에 선언해야 돈다 — "
+             "선언 0 인 과목은 빌드가 아무 말도 안 한다."]
+    for subject, semester, n_declared, n_chapters, left in rows:
+        if not left and not n_declared:
+            continue                    # 잔량도 없고 선언도 없다 — 화면에 낼 것이 없다
+        mark = "OK " if not left else "-> "
+        lines.append(f"   {mark}{subject[:22]:<22} {semester:<4} "
+                     f"선언 {n_declared:>2}/{n_chapters:<2}챕터 · 미판정 {left}건")
+    lines.append("   -> 판정은 data/<과목>/card-overlap-verdicts.json 에 "
+                 "「중복 아님 + 사유」 또는 「고쳤다」로 적는다 "
+                 "(후보는 `python tools/audit_conventions.py --class=L`)")
+    return lines
+
+
 def backup_age():
     """마지막 백업이 며칠 전인지 — (상태, 근거). 순수 조회다(백업을 돌리지는 않는다).
 
@@ -324,7 +378,7 @@ def backup_age():
     # ★ 목적지 해석은 **backup_bundle 한 곳**에서만 한다 (2026-08-02).
     #   처음엔 여기서 `backup-dest.txt` 를 직접 읽었는데, 그 파일이 워크트리 안에 있어
     #   **정한 과목에서만 보이고 나머지 과목에서는 계속 '미설정'** 으로 떴다
-    #   (사용자: [사용자 발화 인용 생략]). 해석기를 두 벌 두면 이렇게 갈라진다.
+    #   (사용자: *[발화 생략]*). 해석기를 두 벌 두면 이렇게 갈라진다.
     import backup_bundle                                                    # noqa: E402
     dest = backup_bundle.resolve_dest()
     if not dest:
@@ -353,7 +407,7 @@ def exit_code(hard_failures, blockers):
       박혀 있었고, `hard_failures` 에 들어가는 것은 「브라우저 차단 분류」 **하나뿐**이었다.
       `blockers.append` 는 16곳인데 **어느 것도 종료코드에 안 닿아서** 빌드 실패 · 회귀 실패 ·
       바닥 방어 ✘ · 맨손 범위 주장 · 근거 없는 확정 · 미커밋이 **전부 걸려도 exit 0** 이었다.
-      코드 주석 셋과 원장이 [사용자 발화 인용 생략] 라고 적는데 **그 문장이 기계적으로 거짓**이었다.
+      코드 주석 셋과 원장이 *[발화 생략]* 라고 적는데 **그 문장이 기계적으로 거짓**이었다.
     ★ **함수로 뽑은 이유**: `main()` 은 빌드와 회귀를 실제로 돌려서 회귀가 못 부른다.
       판정만 갈라 두면 «비지 않은 `blockers` 가 exit 를 움직이는가» 를 직접 잰다 —
       **잠금이 없어 새 blocker 를 더해도 아무 회귀가 안 깨지던** 자리가 이것이다.
@@ -429,11 +483,11 @@ def main():
 
     # 1-c) ★ **수락해 놓고 안 민 기준선** (열린 날 2026-08-07, 재발 지적).
     #
-    # 사용자: [사용자 발화 인용 생략]
+    # 사용자: *[발화 생략]*
     #
-    # AGENTS 는 [사용자 발화 인용 생략] 고
+    # AGENTS 는 *[발화 생략]* 고
     # 적어 두었지만 **지켰는지 확인하는 기계가 없었다.** 그래서 세션이 끝날 때 아무도 안 물었고,
-    # 남은 마크를 다음 세션이 [사용자 발화 인용 생략] 으로 문서에 적어 굳혔다. close 는 바로 그 자리다.
+    # 남은 마크를 다음 세션이 *[발화 생략]* 으로 문서에 적어 굳혔다. close 는 바로 그 자리다.
     try:
         if skip_without_subject("기준선 밀기", "잴 챕터가 0개다 — «남은 하이라이트 0건» 은 공허한 참이다"):
             raise _NotApplicable
@@ -466,16 +520,13 @@ def main():
         rows.append(("기준선 밀기", "확인불가", str(exc)[:70]))
 
     # 2) 회귀 테스트
-    if not os.path.isfile("tools/test_checks.py"):
-        rows.append(("회귀 테스트", "해당없음", "test_checks.py는 공개판에 없음(원 프로젝트 전용 회귀 이력)"))
+    code, out = run("tools/test_checks.py")
+    cases = out.count("[ok]") + out.count("[FAIL]")
+    if code == 0:
+        rows.append(("회귀 테스트", "close", f"exit 0 · {cases}케이스 전부 통과"))
     else:
-        code, out = run("tools/test_checks.py")
-        cases = out.count("[ok]") + out.count("[FAIL]")
-        if code == 0:
-            rows.append(("회귀 테스트", "close", f"exit 0 · {cases}케이스 전부 통과"))
-        else:
-            rows.append(("회귀 테스트", "실패", f"{out.count('[FAIL]')}건 실패"))
-            blockers.append("회귀 테스트 실패 — 검사가 과거 결함을 더는 못 잡는다")
+        rows.append(("회귀 테스트", "실패", f"{out.count('[FAIL]')}건 실패"))
+        blockers.append("회귀 테스트 실패 — 검사가 과거 결함을 더는 못 잡는다")
 
     # 2-a) ★ 아무도 안 부르는 검사·도구 (열린 날 2026-08-07, XSanity 에서 역이식).
     #
@@ -493,7 +544,7 @@ def main():
     #
     # **무엇이 새어나갔나:** 「검사 완화·우회는 빨강」은 문장이었고, 회귀 테스트 239개 중
     # 하나를 지워도 빌드·회귀·close 어디도 빨개지지 않았다. 바깥 자료가 짚은 그대로다 —
-    # [사용자 발화 인용 생략]. 막는 게 아니라 **보이게** 하는 자리다.
+    # *[발화 생략]*. 막는 게 아니라 **보이게** 하는 자리다.
     code, out = run("tools/audit_check_erosion.py")
     if code == 0:
         rows.append(("검사 침식", "close", out.strip().splitlines()[-1][:110] if out.strip() else "줄어든 것 없음"))
@@ -516,10 +567,20 @@ def main():
         hits = [l.strip() for l in out.splitlines() if "[근거 없음]" in l]
         rows.append(("수치 근거", "미완", "; ".join(hits[:2])[:110] or head))
 
+    # 2-a4b) 주석·독스트링의 「찾았는데 안 고쳤다」 자백 — 래칫(층 0 「고치기」 · 공용 폴더 이식 2026-09-11).
+    #   씨앗은 빚이라 안 막고 새로 생긴 것만 막는다.
+    code, out = run("tools/check_open_admissions.py")
+    head = out.strip().splitlines()[0][:110] if out.strip() else ""
+    if code == 0:
+        rows.append(("코드 자백", "close", head))
+    else:
+        hits = [l.strip() for l in out.splitlines() if l.startswith("   ") and ":" in l]
+        rows.append(("코드 자백", "미완", "; ".join(hits[:2])[:110] or head))
+
     # 2-a4a) ★ **"done"인데 문풀·연습문제가 비어 있는가** (열린 날 2026-09-02, medesign).
     #
     # **무엇이 새어나갔나:** 빌드·회귀·개인정보 스캔이 전부 초록이라는 것만 보고 "남은 거
-    # 없다"고 보고했다. 사용자: [사용자 발화 인용 생략] — 근거는 댔지만 **엉뚱한 것의
+    # 없다"고 보고했다. 사용자: *[발화 생략]* — 근거는 댔지만 **엉뚱한 것의
     # 근거**였다(품질 게이트 통과 ≠ SUBJECT.md에 적힌 범위를 다 채움). `status: "done"`은
     # 저자가 스스로 매기는 값이라, 이론만 채우고 done을 찍는 것을 막을 장치가 없었다.
     code, out = run("tools/audit_chapter_completeness.py", "--fail-only")
@@ -531,7 +592,52 @@ def main():
         blockers.append(f"문풀·연습문제 미선언 공백 {len(tail)}건 — index.json contentWaivers로 "
                          "사유를 밝히거나 채울 것")
 
-    # 2-a4b) ★★ **게이트가 진짜 게이트인가** — 자 · 문 · 부르는 자 (나루에서 이식 2026-08-26).
+    # 2-a4a1) 「0건」이 「없다」인가 「못 봤다」인가 — 조용한 0건 래칫(2026-09-09).
+    #   사용자: *[발화 생략]*. 과목 이름 오타 하나로 감사가 통째로 죽은 채
+    #   「합계 0건」을 찍는 자리를 센다. 늘면 막고, 줄면 `--accept` 로 기준선을 낮춘다.
+    code, out = run("tools/audit_sweep_reach.py", "--quiet")
+    if code == 0:
+        rows.append(("감사의 순회 범위", "close", "조용한 0건이 기준선 이하"))
+    else:
+        tail = [l for l in (out or "").splitlines() if l.startswith("   · ")]
+        rows.append(("감사의 순회 범위", "미완", f"조용한 0건 {len(tail)}개"))
+        blockers.append("감사가 「없는 과목」을 조용히 통과시킨다 — "
+                        "`python tools/audit_sweep_reach.py`")
+
+    # 2-a4a2) 이론 절 삽화 판정 — **래칫**. 사용자 판정 2026-09-09 [발화 생략].
+    #
+    # 승격 순간 실측이 **893 절**(이론이 있는 장 213 개 중 193 개)이라, 그 자리에서 전부를
+    # blocker 로 걸면 세션이 한 번도 안 닫힌다 — 이 파일 자신의 설계 원칙(「전부 막으면 경보
+    # 피로로 검사기가 죽는다」)과 부딪힌다. 그래서 **승격은 전 과목 동시로 하되 문턱은 래칫**이다:
+    # 되돌아가는 것은 그 자리에서 막히고, 갚는 속도는 루프가 정한다.
+    # 기준선 파일 `docs/이론삽화-절판정-기준선.txt` 를 못 읽으면 **엄한 쪽**으로 넘어진다.
+    code, out = run("tools/audit_theory_figure_reasons.py", "--fail-only")
+    _m = re.search(r"미판정 절 (\d+)개", out or "")
+    _now = int(_m.group(1)) if _m else None
+    _base = None
+    try:
+        with open(os.path.join(ROOT, "docs", "이론삽화-절판정-기준선.txt"), encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    _base = int(line)
+                    break
+    except (OSError, ValueError):
+        _base = None
+    if _now is None or _base is None:
+        rows.append(("이론 삽화 판정", "미완", "기준선이나 실측을 못 읽었다 — 엄한 쪽으로 본다"))
+        blockers.append("이론 절 삽화 판정 눈금을 못 읽었다 — "
+                        "`python tools/audit_theory_figure_reasons.py`")
+    elif _now > _base:
+        rows.append(("이론 삽화 판정", "미완", f"미판정 절 {_now} > 기준선 {_base} — 늘었다"))
+        blockers.append(f"이론 절 삽화 판정이 늘었다 {_base}→{_now} — 새로 쓴 절에 삽화나 사유를 "
+                        "붙일 것(`python tools/audit_theory_figure_reasons.py --fail-only`)")
+    else:
+        rows.append(("이론 삽화 판정", "close",
+                     f"미판정 절 {_now} ≤ 기준선 {_base}"
+                     + (" — 줄었으니 기준선을 낮출 것" if _now < _base else "")))
+
+    # 2-a4b) ★★ **게이트가 진짜 게이트인가** — 자 · 문 · 부르는 자 (공용 폴더에서 이식 2026-08-26).
     #
     # **무엇이 새어나갔나:** `audit_gates`·`check_floor`·`audit_scope_claims`·`audit_guide_size`·
     # `audit_stamps` 다섯이 `tools/` 에 있고 AGENTS 도구 등록부에도 올라 있는데 **부르는 코드가
@@ -577,7 +683,7 @@ def main():
                 elif s:
                     break
         n = len(half)
-        # ★ 꼬리말이 낡지 않게 한다 (2026-08-26). 예전에는 [사용자 발화 인용 생략] 이라
+        # ★ 꼬리말이 낡지 않게 한다 (2026-08-26). 예전에는 *[발화 생략]* 이라
         #   적었는데 그 자리는 「래칫」 칸으로 닫혔다 — 남는 빨강은 이제 **진짜 배선 결함**이다.
         #   틀린 사유를 달아 두면 다음 사람이 그 줄을 «원래 그런 것» 으로 읽고 넘긴다.
         rows.append(("게이트 실체", "참고",
@@ -645,7 +751,7 @@ def main():
     #   거기서 `check_narration --quiet` 가 넘겼을 때만 한 줄 낸다. 그 시점엔 남은 턴에서
     #   실제로 줄일 수 있다(AGENTS 「방지장치의 트리거는 내가 반드시 하는 일에 건다」).
     # ★ **안 막는다는 사실을 여기 적어 두는 것이 실행 규율 17 의 요구다** —
-    #   [사용자 발화 인용 생략]
+    #   *[발화 생략]*
     #   조용히 안 막는 것과 **안 막는다고 밝히는 것**은 다르다.
     # ★ 상한은 실측에서 왔고(발화 1회당 1줄) 표본이 작은 세션은 스스로 판정을 미룬다.
     code, out = run("tools/check_narration.py")
@@ -656,7 +762,7 @@ def main():
         fail = [l for l in lines_out if l.startswith("FAIL")]
         # ★ 상태를 **`참고`** 로 적는다 — `미완` 은 「고치면 닫힌다」는 뜻인데 이 항목은
         #   그 세션 안에서 고칠 수가 없다(위 ★★). 같은 글자를 쓰면 읽는 사람이
-        #   [사용자 발화 인용 생략] 를 반복해 묻게 되고, 그게 경보 피로의 시작이다.
+        #   *[발화 생략]* 를 반복해 묻게 되고, 그게 경보 피로의 시작이다.
         rows.append(("진행 중계", "참고",
                      ((fail[0] if fail else lines_out[0] if lines_out else "")
                       + " — 막지 않는다(커밋에서 알린다)")[:110]))
@@ -697,7 +803,7 @@ def main():
         rows.append(("수치 검산", "확인불가", verifier_err))
     elif not verifier:
         # ★★ **「없다」와 「검산할 것이 있는데 없다」를 가른다** (열린 날 2026-08-25, 사용자 판정 ⓒ).
-        #   위 ★★ 는 「미선언을 blocker 로 안 세운다」를 정했는데, 그 근거는 [사용자 발화 인용 생략] 였다 — **문항이 0개인 과목**을 전제한 말이다.
+        #   위 ★★ 는 「미선언을 blocker 로 안 세운다」를 정했는데, 그 근거는 *[발화 생략]* 였다 — **문항이 0개인 과목**을 전제한 말이다.
         #   2026-08-25 에 전제가 깨졌다: 2-2 두 과목에 문항 40개가 들어왔는데 **검산 도구 자체가
         #   없다.** 그 수치는 초안 회차에 서브에이전트가 손으로 검산한 것뿐이고 아무도 다시 안 본다.
         #   ★ 그런데 「미선언」 한 줄은 문항 0개일 때와 40개일 때가 **글자가 같다** — 빚이 자라도
@@ -738,7 +844,7 @@ def main():
     #   왜 여기 거나: `scan_private` 은 만들어져 있었지만 **아무도 안 불렀다.** 그래서
     #   ⑴ 발행 홈에 학교 이름이 박힌 것 ⑵ 템플릿 개발 주석이 통째로 실린 것이
     #   둘 다 **사람이 발행본을 직접 열어 보고서야** 나왔다(원장 2026-08-14 두 행).
-    #   [사용자 발화 인용 생략](공용 방지장치-설계 9항).
+    #   *[발화 생략]*(공용 방지장치-설계 9항).
     #
     #   ★ **`site/` 만 본다.** 저장소 공유 표면은 별도 `scan_private.py --tracked`가 맡는다.
     #     리포 전체를 훑으면 원장·워크오더의 실사고 기록이 통째로 걸려
@@ -773,9 +879,12 @@ def main():
 
     # 4) strict 승격 잔여 — **실재하는 챕터**를 **빌드와 같은 판정으로** 잰다
     #    (하드코딩·공통목록만 보기의 경위는 on_disk_chapters·strict_leftovers 독스트링).
-    chapters = on_disk_chapters()
+    # ★ 공용 폴더 국소 분기 — 가르는 자(`skip_without_subject`)를 먼저 물어야 한다. 미러
+    #   동기화가 두 번 순서를 되돌렸다(전공정리 원본은 `on_disk_chapters()` 가 안 죽어서
+    #   순서가 안 보인다).
     strict_na = skip_without_subject(
         "strict 승격", "챕터가 0개다 — 여기서 «전 챕터 error» 는 공허한 참이다")
+    chapters = () if strict_na else on_disk_chapters()
     for label, module, name in STRICT_SETS:
         if strict_na:
             break
@@ -877,7 +986,7 @@ def main():
     #    백업은 '이 세션의 결과물이 옳은가'와 무관하고, 목적지를 아직 안 정한 기계도 있다
     #    (git 설정 `backup.dest` 는 커밋되지 않는 기계별 값). 막으면 그 기계에서 close 가 영영 안 난다.
     #    대신 **며칠 지났는지를 눈에 띄게** 적어 세션 닫기 직전에 결정을 받게 한다
-    #    (사용자: [사용자 발화 인용 생략]).
+    #    (사용자: *[발화 생략]*).
     rows.append(("마지막 백업", *backup_age()))
 
     width = max(len(r[0]) for r in rows) + 2
@@ -917,8 +1026,22 @@ def main():
               f"\"{STRICT_WAIVER_FIELD}\": {{\"키\": \"사유\"}} 로 적을 것 "
               "(사유 없는 줄은 예외로 안 친다)")
 
+    # ★ [L] 본문·잘 놓쳐요·떠올리기 겹침 — **과목별 미판정 잔량** (신설 2026-09-07).
+    #   왜 여기 있나: 이 게이트는 **과목이 선언해야 도는 opt-in** 이라(그 판정선의 정본은
+    #   `checks_content.card_overlap_declared` 독스트링), 안 켠 과목은 빌드가 아무 말도 안 한다.
+    #   그 침묵이 이 부류를 여기까지 끌고 온 원인이다 — 자는 이미 후보를 내고 있었는데
+    #   아무것도 막지 않아 아무도 판정하지 않았다(실행 규율 17 「세기만 하는 자」).
+    #   → 켜지 않았어도 **잔량은 매번 화면에 나온다.** 여기서 막지는 않는다: 켠 챕터의
+    #     잔량은 빌드가 이미 error 로 막고, 안 켠 것까지 막으면 경보 피로가 검사기를 죽인다.
+    try:
+        print()
+        for line in card_overlap_backlog():
+            print(line)
+    except Exception as exc:                       # 잔량을 못 세도 close 보고는 계속돼야 한다
+        print(f"\n[L] 겹침 잔량: 셀 수 없음 ({exc})")
+
     # ★ 승격 잔량 — '기계 방지'가 말로만 남은 것들 (열린 날 2026-08-06, 사용자 지적).
-    #   [사용자 발화 인용 생략] — 그날
+    #   *[발화 생략]* — 그날
     #   C31 이 정확히 그렇게 샜다. 잔량을 **매번 세어 보여야** '언젠가'가 숫자가 된다.
     #   막는 것은 `test_ledger_closed_rows_name_a_real_machine`(승격일 이후 행), 여기서는 잔량만 센다.
     try:

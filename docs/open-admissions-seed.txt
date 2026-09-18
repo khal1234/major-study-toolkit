@@ -1,0 +1,6 @@
+# 2026-09-11 소급 면제 — 빚이다. 그 자리를 다시 만지면 고치고 줄을 지운다.
+# 오탐으로 판정한 7줄은 사유와 함께 `docs/open-admissions-allow.txt` 로 옮겼다.
+tools/close_report.py | #   선언한 곳은 아직 없다 — blocker 로 만들면 **남의 과목 close 가 그 자리에서 전부 멈
+tools/test_checks.py | #     기록해야 하는데, 그 값을 만들 자리가 아직 없다.
+tools/verify_fluids_answer.py | 빨개지지 않았다(과목 `.claude/SUBJECT.md` 의 TODO 가 «지금 가장 큰 구멍» 이라 적어
+tools/verify_thermo_answer.py | # 문제 수치는 아직 없다 — ch05 문제를 설계할 때 이 함수들로 검산 사례를 누적한다.

@@ -5,7 +5,7 @@
 
 **왜 이 도구인가.** 공용 폴더에는 *무엇을 가져갈지*(`규칙/무엇을-가져갈까.md`)와
 *가져갔는지*(`기록/도입대장.csv`) 가 **이미 있었다.** 빠진 것은 그 절차를 **시작시키는 자리**다 —
-새 프로젝트가 열려도 아무 일도 안 일어나고, 사람이 [사용자 발화 인용 생략] 고 말해야만 시작됐다.
+새 프로젝트가 열려도 아무 일도 안 일어나고, 사람이 *[발화 생략]* 고 말해야만 시작됐다.
 실측(2026-08-14): 대장에 올라 있는 프로젝트가 **한 개뿐**이었다.
 
 ★ **판정은 절대 기계가 안 한다.** 이 도구는 «판정할 자리»(빈 칸)를 만들고 **미판정을 세기만**
@@ -24,6 +24,7 @@
   실측: 층 0 을 선언하면 17개 → **3개**. 선언이 없거나 **네 물음의 답이 모자라면 전부 묻는다.**
 """
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -34,16 +35,16 @@ sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 HEADER = "프로젝트,항목,판정,사유"
 LEDGER_NAME = "도입대장.csv"
 # ★★ **`훅` 을 2026-08-16 에 넣었다.** 그전에는 («규칙», «기록») 뿐이라 **훅은 대장이 아예
-#   안 물었다** — 나루가 `훅/gate_rerun_guard.py` 를 만들고 `층-배정.txt` 에 층 0 으로 적어
+#   안 물었다** — 공용 폴더가 `훅/gate_rerun_guard.py` 를 만들고 `층-배정.txt` 에 층 0 으로 적어
 #   두었는데 **읽는 자가 없어 아무 프로젝트도 판정을 안 받았다.** 이 폴더가 남에게 대고
-#   [사용자 발화 인용 생략] 이라고 지적한 바로 그 모양이었다.
+#   *[발화 생략]* 이라고 지적한 바로 그 모양이었다.
 # ★ 훅은 **가장 결과가 큰 항목**이다 — 규칙은 안 지켜도 조용하지만 훅은 실제로 막는다.
 #   묻지 않으면 «받았는데 안 걸어서 안 도는» 상태가 영영 안 걸린다.
 # ★ 소음은 층이 잡는다 — 넣으면서 기존 훅 여덟에 층 2 를 배정했다(`기록/층-배정.txt`).
 # ★★★ **`도구` 를 2026-08-24 에 넣었다 — 훅이 2026-08-16 에 겪은 것과 같은 구멍이다.**
 #   그전에는 («규칙», «기록», «훅») 뿐이라 **도구는 대장이 아예 안 물었다.** 하필
 #   **「막는 자」가 전부 `도구/` 에 산다** — `check_narration` 을 Stop 훅에 걸어 놓고도
-#   [사용자 발화 인용 생략] 는 지시를 **기계로 옮길 자리가 없었다**(2026-08-24).
+#   *[발화 생략]* 는 지시를 **기계로 옮길 자리가 없었다**(2026-08-24).
 #   증거: `층-배정.txt` 에 `도구/runtime_note.py`·`도구/audit_serial_waits.py` 두 줄이
 #   **배정만 된 채 아무도 안 물어봤다** — 읽는 자가 없는 배정은 없는 것과 같다.
 #   ★ 소음은 층이 잡는다 — 넣으면서 기존 도구 전부에 층을 배정했다(같은 배치, 위 선례와 같다).
@@ -151,17 +152,17 @@ def shared_items(shared):
 
     ★★ **`기록/` 은 2026-08-14 에 넣었다.** 그전에는 `규칙/` 만 물었고, 그래서 **«규칙»은 넘어가고
       «데인 자국»(실사고 원장)은 안 넘어갔다.** 한 프로젝트가 `AGENTS.md` 를 «안가져옴» 으로
-      판정하며 [사용자 발화 인용 생략] 고 적었는데, 그 지도는 **절 제목
+      판정하며 *[발화 생략]* 고 적었는데, 그 지도는 **절 제목
       수준**이라 *언제 어떻게 데였나* 는 한 줄도 안 실린다. 그래서 규칙을 지키면서도 **이미 판
-      구멍을 다시 팠다(과거에 겪은 실패를 최근에 그대로 반복한 사례).
+      구멍을 다시 팠다**(사용자: *[발화 생략]*).
       규칙만 옮기고 사고 기록을 안 옮기면 다음 프로젝트는 그 값을 처음부터 다시 치른다.
 
     ★ **대장 자신은 항목이 아니다** — 「도입대장을 가져갔는가」를 묻는 칸은 뜻이 없다.
       **층 배정표(`층-배정.txt`)도 같다** — 그건 이 도구가 읽는 자기 배선이지 가져갈 규칙이 아니다.
 
-    ★★ **피드백 원장도 뺀다 (2026-08-16, 사용자 판정으로 정본이 나루로 왔다).**
+    ★★ **피드백 원장도 뺀다 (2026-08-16, 사용자 판정으로 정본이 공용 폴더로 왔다).**
       331KB 를 복사해 가는 물건이 아니라 **조회하는 자리**이기 때문이다
-      (`도구/feedback_lookup.py` — [사용자 발화 인용 생략]).
+      (`도구/feedback_lookup.py` — *[발화 생략]*).
       가져가는 것이 아니므로 «가져갔나» 라는 물음이 성립하지 않는다.
       ★ 이건 **묻는 항목을 줄이는 완화가 아니다** — 원장이 하던 일(재발 판별)은 조회가
         이어받고, 오히려 프로젝트 사이까지 넓어진다. 줄어드는 것은 **복사 판정**뿐이다.
@@ -263,9 +264,112 @@ def status_of(rows, project, items):
     return missing, unjudged, reasonless, parked
 
 
+# ── 판정과 사유가 서로 반대말인 행 (2026-09-05 신설) ─────────────────────────
+#
+# 실사고: 전공정리프로젝트,훅/narration_realtime_nudge.py,**가져옴**,"로컬
+# narration_due.py가 같은 문제를 다른 지점(UserPromptSubmit)에서 **이미 막는다**"
+# — 사유는 «그러니 이건 안 가져와도 된다»는 논리인데 판정은 «가져옴»으로 반대로
+# 찍혀 있었다. 실물 확인(직접 grep)으로도 그 파일은 그 리포 어디에도 없었다.
+#
+# ★ **왜 지금 만드나 — 같은 부류 3회차다.** 2026-08-18(knu-rl-2026)·2026-08-26
+#   (표기 정정)이 이미 "「가져옴」은 판정 기록이지 실물 확인이 아니다"를 잡았고,
+#   그때 처방("확인 문자열 칸을 두고 grep 0건이면 ✘")까지 적었는데 **자동화는
+#   "그 칸이 전 프로젝트에 찰 때 다시 본다"며 미뤄졌다** — 그 뒤로 아무도 다시
+#   안 봤다. 이번 것은 그 처방이 없어도 잡을 수 있는 **더 싼 신호**다: 확인 문자열도
+#   실물 대조도 없이, **행 하나 안에서 판정과 사유가 서로 반대말인지**만 본다.
+# ★ **판정선은 "가져옴"인데 사유에 거절 어투가 있는가**다 — 그 반대(안가져옴인데
+#   사유가 긍정적인 것)는 안 본다. "안가져옴 + 좋은 이유"는 정상적인 판단이고,
+#   "가져옴 + 거절 이유"만 논리적으로 성립할 수 없는 조합이다.
+# ☐ **못 보는 것.** 처음엔 "불필요"·"중복"·"대상이 아니다"도 넣었는데 **실전
+#   가동에서 셋 다 오탐이었다**(다른 경위를 설명하며 그 낱말을 지나가듯 쓴 행 —
+#   예: "사본 불필요"(정상적으로 원본을 직접 읽는 방식)·"git 중복을 냈다"(무관한
+#   회고)). 낱말 하나로는 못 가른다 — **"다른 무언가가 이 항목의 문제를 대신
+#   막는다/처리한다"는 좁은 대체 어투**만 남겼다. 좁힌 대신 넓은 반대 사례(예:
+#   "그래서 안 가져와도 된다" 류의 다른 표현)는 놓칠 수 있다 — 세는 자이지
+#   판정자가 아니다.
+#
+# ★★ **동사 목록에 "담다"·"다루다"를 추가 (2026-09-06, XSanity 재발로 발견).**
+#   XSanity 602행 "가져옴, ...규율만 따르고 문서는 안 옮긴다(6b-3 이 이미 담고
+#   있다)"가 바로 이 모순인데 옛 동사 목록(막다/처리하다/커버하다/해결하다)에
+#   "담다"가 없어 0건으로 새어 나갔다 — 그 판단이 문서에 안 실려 XSanity가 같은
+#   delaySeconds 실수를 재발시킨 뒤에야 드러났다. 같은 검색으로 전공정리프로젝트
+#   632·656행("...이미 다룬다")도 같은 구멍에 있었다 — **한 프로젝트만의 문제가
+#   아니라 동사 목록 자체가 구조적으로 좁았다.** "다루다"도 같이 넣는다.
+CONTRADICTION_RE = re.compile(
+    r"이미\s*[가-힣]{0,6}\s*(막는다|막고|처리한다|처리하고|커버한다|해결한다|"
+    r"담고\s*있다|담는다|다룬다|다루고\s*있다)"
+)
+
+
+def contradictions(rows):
+    """`판정=="가져옴"` 인데 `사유`가 거절 어투인 행. 순수 함수 — 테스트 대상."""
+    return [(p, item, reason) for p, item, verdict, reason in rows
+            if verdict == "가져옴" and CONTRADICTION_RE.search(reason)]
+
+
+def check_contradictions(shared=None):
+    """중앙 대장을 읽어 `contradictions()` 를 사람이 읽는 표로. 프로젝트 인자가 없다 —
+    `--check-contradictions` 는 **대장 전체**를 한 번에 훑는 자리라 특정 리포 관점이 아니다."""
+    shared = Path(shared or os.environ.get("CLAUDE_SHARED_SYSTEM")
+                  or next((p for p in (Path.home() / "Documents" / "naru",
+                                    Path.home() / "Documents" / "Claude")
+                            if p.is_dir()), Path.home() / "Documents" / "naru"))
+    path = ledger_path(shared)
+    if not path.is_file():
+        print("대장을 못 찾았다 — %s" % path)
+        return 1
+    rows = parse(path.read_text(encoding="utf-8", errors="replace"))
+    hits = contradictions(rows)
+    if not hits:
+        print("[판정-사유 모순] 0건")
+        return 0
+    print("[판정-사유 모순] 「가져옴」인데 사유가 거절 어투인 행 %d건 — 판정이 틀렸을 가능성:"
+          % len(hits))
+    for project, item, reason in hits:
+        print("  %s | %s | %s" % (project, item, reason[:80]))
+    return 0
+
+
+def selftest():
+    ok = True
+
+    def chk(desc, cond, got=""):
+        nonlocal ok
+        ok = ok and cond
+        print("  %s %-46s %s" % ("OK  " if cond else "**틀림**", desc, got))
+
+    # ★★ 실사고 재현(2026-09-05) — 전공정리프로젝트,훅/narration_realtime_nudge.py 행.
+    rows = [
+        ("전공정리프로젝트", "훅/narration_realtime_nudge.py", "가져옴",
+         "로컬 narration_due.py가 같은 문제를 다른 지점(UserPromptSubmit)에서 이미 막는다"),
+        ("전공정리프로젝트", "도구/check_narration.py", "가져옴",
+         "로컬 tools/check_narration.py 이미 있다"),
+        ("XSanity", "규칙/공개-전-점검.md", "안가져옴",
+         "적용 대상이 없다. 공개 직전에 다시 판정한다"),
+        ("토익", "규칙/무엇을-가져갈까.md", "가져옴",
+         "그 판정을 이 문서로 한다"),
+    ]
+    hits = contradictions(rows)
+    chk("★★ 양성 — 「가져옴」인데 사유가 거절 어투인 행을 잡는다 (실사고 회귀)",
+        len(hits) == 1 and hits[0][1] == "훅/narration_realtime_nudge.py", str(hits))
+    chk("음성 — 「이미 있다」만으로는 안 걸린다(같은 파일이 로컬에 있다는 정상 사유)",
+        not any(h[1] == "도구/check_narration.py" for h in hits))
+    chk("음성 — 「안가져옴」행은 거절 어투가 정상이라 안 본다",
+        not any(h[0] == "XSanity" for h in hits))
+    chk("음성 — 무관한 「가져옴」행은 안 걸린다",
+        not any(h[0] == "토익" for h in hits))
+
+    print("[자기 검정] %s" % ("전부 통과" if ok else "**틀림**"))
+    return 0 if ok else 1
+
+
 def main():
     flags = [a for a in sys.argv[1:] if a.startswith("--")]
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if "--selftest" in flags:
+        return selftest()
+    if "--check-contradictions" in flags:
+        return check_contradictions()
     root = Path(args[0] if args else ".").resolve()
     shared = Path(os.environ.get("CLAUDE_SHARED_SYSTEM")
                   or next((p for p in (Path.home() / "Documents" / "naru",

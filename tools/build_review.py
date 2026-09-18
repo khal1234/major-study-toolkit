@@ -22,7 +22,7 @@ args = sys.argv[1:] or ["--all"]
 #   열린 날: 같은 날 기준선 장치를 넓히며 `--accept-review-as-built`·`--accept-review-user-saw=`
 #   가 생겼는데, 이 목록이 두 이름을 **정확 일치**로만 보고 있어 셋 다(그리고 전부터 있던
 #   `--accept-review-rev=`·`--accept-review-only=`) 조용히 지나갔다. 이 래퍼의 존재 이유가
-#   *"검수 전에는 기준선을 안 건드린다"* 인데 **이름이 하나 늘 때마다 구멍이 생기는 구조**였다.
+#   *[발화 생략]* 인데 **이름이 하나 늘 때마다 구멍이 생기는 구조**였다.
 #   → 접두로 보면 앞으로 무슨 이름이 붙어도 자동으로 막힌다. **열거는 빠뜨려도 통과되고,
 #     접두는 빠뜨릴 것이 없다** — 이 리포가 오늘 텍스트 분수에서 겪은 것과 같은 부류다.
 for arg in args:
@@ -30,12 +30,16 @@ for arg in args:
         sys.exit(f"거부: {arg} 는 기준선을 옮긴다. 검수 전에는 쓰지 말 것"
                  " (밀어야 하면 tools/build_site.py 를 직접 쓴다 — 거기에는 삼킴 게이트가 있다).")
 
-sys.argv = ["tools/build_site.py"] + args
-try:
-    runpy.run_path("tools/build_site.py", run_name="__main__")
-except SystemExit as e:
-    if e.code:
-        raise
+# --no-build: 빌드 없이 지금 `site/` 산출물의 표시만 센다(표시가 남은 장 찾기 — 전체 빌드 5분을 안 기다린다).
+no_build = "--no-build" in args
+args = [a for a in args if a != "--no-build"]
+if not no_build:
+    sys.argv = ["tools/build_site.py"] + args
+    try:
+        runpy.run_path("tools/build_site.py", run_name="__main__")
+    except SystemExit as e:
+        if e.code:
+            raise
 
 print("\n=== 하이라이트 주입 확인 ===")
 # 과목 하드코딩 금지(2026-07-27: 열역학 고정이라 math 브랜치에서 확인 루프가 통째로 침묵했다).
@@ -47,8 +51,8 @@ from buildlib.review import (marks_from_built_html, visible_collections,   # noq
 
 # ★ **합계만 찍지 않는다** (2026-08-07, 재발 지적으로 열림).
 #   예전 출력은 `본문변경 22` 뿐이라, 그 22 안에 **이미 수락한 이론 10절**이 들어 있다는 것이
-#   화면에 안 보였다. 그래서 전 세션이 그 상태를 *"정상"* 이라고 판단해 넘겼고, 사용자가
-#   *"확인했다고 했는데도 안 옮겨놨더라"* 로 다시 지적했다. **합계는 컬렉션을 감춘다.**
+#   화면에 안 보였다. 그래서 전 세션이 그 상태를 *[발화 생략]* 이라고 판단해 넘겼고, 사용자가
+#   *[발화 생략]* 로 다시 지적했다. **합계는 컬렉션을 감춘다.**
 for p in sorted(glob.glob("site/*/ch*.html")):
     if p.replace("\\", "/").startswith("site/template/"):
         continue
@@ -57,6 +61,8 @@ for p in sorted(glob.glob("site/*/ch*.html")):
     # 주입된 CH JSON의 실제 마커만 정확히 센다.
     changed = len(re.findall(r'"_changed": \[', h))
     diagrams = len(re.findall(r'"_reviewChanged": true', h))
+    if no_build and not (changed or diagrams):
+        continue                        # 세기만 할 때는 표시가 있는 장만 낸다
     print(f"  {p}: 본문변경 {changed} · 삽화배지 {diagrams}")
     ch_path = os.path.join("data", p.replace("\\", "/").split("/")[1],
                            os.path.splitext(os.path.basename(p))[0] + ".json")
@@ -65,7 +71,7 @@ for p in sorted(glob.glob("site/*/ch*.html")):
         continue
     # ★ 숨긴 탭은 **여기 올 수 없다** — `add_review_changes` 가 표시를 아예 안 만든다.
     #   한때 `(숨긴 탭 — 화면에 안 보인다)` 라는 꼬리표를 달아 출력했는데, 그것이
-    #   *"안 본다고 한 것을 보라"* 는 뜻이 되어 사용자 재지적을 받았다(4회차). 라벨로는 못 막는다.
+    #   *[발화 생략]* 는 뜻이 되어 사용자 재지적을 받았다(4회차). 라벨로는 못 막는다.
     #   그래도 방어적으로 확인해 둔다 — 판정이 갈리면 조용히 새는 것이 이 부류의 습성이다.
     shown = set(visible_collections(chapter))
     for name in ("theory", "derivation", "practice", "problems"):

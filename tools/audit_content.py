@@ -20,31 +20,94 @@ from buildlib.checks_content import PROBLEM_DIFFICULTIES, resolve_anchor_text  #
 from buildlib.textutil import _plain_math_text  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+# `sys.exit("SUBJECT=…")` 로 한글 오류를 내게 됐으므로 stderr 도 함께 연다 (2026-09-07).
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def discover_data_dir():
-    """이 워크트리의 과목 데이터 폴더를 찾는다.
-
-    열린 날 2026-07-26 — `data/열역학`으로 **하드코딩**돼 있어 math(공학수학) 워크트리에서는
-    import 시점에 FileNotFoundError로 죽었고, 이 모듈을 import하는 `tools/test_checks.py`가
-    통째로 실패했다. 과목 = 브랜치 = worktree라(AGENTS '과목 병렬 작업') data/ 아래 과목
-    폴더는 워크트리마다 하나뿐이다 — 이름을 박지 말고 찾는다.
-    """
-    base = os.path.join(ROOT, "data")
+def subject_dirs(base=None):
+    """`data/` 아래 chNN.json 을 가진 과목 폴더 **전부**. 순수에 가깝게 — 경로만 돌려준다."""
+    base = base or os.path.join(ROOT, "data")
     if not os.path.isdir(base):
-        return base
+        return []
+    out = []
     for name in sorted(os.listdir(base)):
         subject = os.path.join(base, name)
-        if not os.path.isdir(subject):
+        if not os.path.isdir(subject) or name.startswith("."):
             continue
         if any(re.fullmatch(r"ch\d{2}\.json", f) for f in os.listdir(subject)):
-            return subject
-    return base
+            out.append(subject)
+    return out
+
+
+def only_matches(only, dirs):
+    """`--only` 필터에 맞는 과목 폴더. 순수 함수 — 필터가 없으면 전부."""
+    if not only:
+        return list(dirs)
+    return [d for d in dirs if only in os.path.basename(d)]
+
+
+def reject_unmatched_only(only, dirs, out=None):
+    """`--only` 가 **아무 과목과도 안 맞으면** 그 사실을 찍고 True 를 낸다.
+
+    ★ **조용한 0건을 막는 자리다** (열린 날 2026-09-09, 사용자 *[발화 생략]*).
+      과목 이름을 오타 내면 순회 대상이 0 개가 되고, 그러면 감사가 「합계 — 0건」을 찍으며
+      **정상 종료한다.** 화면에서 「진짜 0건」과 구별되지 않으므로, 오타 하나로 그 감사가
+      통째로 죽은 채 「다 됐다」로 읽힌다. 재는 자는 `tools/audit_sweep_reach.py`.
+
+    ★ **「대상이 아닌 과목」과 다르다.** 선언이 있어야 도는 도구가 선언 없는 과목에서 0 건을
+      내는 것은 정상이고 exit 0 이어야 한다(AGENTS 「알려진 함정」). 여기서 막는 것은
+      **어느 과목과도 안 맞는 이름**, 곧 오타뿐이다.
+    """
+    if not only or only_matches(only, dirs):
+        return False
+    (out or sys.stdout).write(
+        "[대상 없음] `--only=%s` 에 맞는 과목 폴더가 없다 — 이름을 확인할 것\n"
+        "   ※ 0 건이 아니라 **한 과목도 안 봤다**는 뜻이다\n" % only)
+    return True
+
+
+def discover_data_dir():
+    """이 실행이 다룰 과목 데이터 폴더. **환경변수 `SUBJECT` 가 정본이고, 없으면 첫 과목이다.**
+
+    열린 날 2026-07-26 — `data/열역학`으로 **하드코딩**돼 있어 math 워크트리에서 import 시점에
+    죽었다. 그때 전제는 «과목 = 브랜치 = 워크트리라 data/ 아래 과목 폴더는 하나뿐» 이었다.
+
+    ★★ **2026-09-07 평탄화로 그 전제가 깨졌다.** 21과목이 한 트리에 있는데 이 함수는 여전히
+      **첫 폴더 하나**(`계측공학`)를 돌려준다 — 그래서 `audit_content` 를 쓰는 `fix_*`·감사
+      전부가 **한 과목만 보고 「0건」을 찍었다.** 0건이 아니라 **스무 과목을 한 번도 안 본
+      것**인데 출력이 통과와 같았다(AGENTS 「폴백으로 하나만 넣어 두기」 그 자체다).
+      → 부르는 쪽이 `SUBJECT` 로 과목을 **지목**하고, 전 과목 순회는
+      `python tools/for_each_subject.py <도구> [인자…]` 가 맡는다. 이 자는 과목 이름을
+      모르는 채로 남는다.
+    """
+    base = os.path.join(ROOT, "data")
+    want = (os.environ.get("SUBJECT") or "").strip()
+    if want:
+        picked = os.path.join(base, want)
+        if os.path.isdir(picked):
+            return picked
+        sys.exit("SUBJECT='%s' 인데 그런 과목 폴더가 없다 — data/ 아래 이름 그대로 줄 것" % want)
+    subjects = subject_dirs(base)
+    return subjects[0] if subjects else base
 
 
 DATA = discover_data_dir()
+
+
+def chapter_file(arg):
+    """`--chapter` 인자를 장 파일 경로로 푼다 — 경로(`data/<과목>/chNN.json`)면 그대로 쓴다.
+
+    이름뿐(`chNN.json`)이면 `SUBJECT` 가 있거나 과목이 하나일 때만 받는다. 막는 것: 평탄화 뒤 이름만 주면
+    `DATA` 폴백(첫 과목)의 같은 이름 장을 조용히 고치거나 「없는 챕터」로 죽던 것(2026-09-14 set_change_notes).
+    """
+    if os.path.dirname(arg):
+        return os.path.abspath(arg) if os.path.isfile(arg) else os.path.join(ROOT, arg)
+    if not (os.environ.get("SUBJECT") or "").strip() and len(subject_dirs()) > 1:
+        sys.exit("--chapter=%s 로는 과목을 모른다 — data/<과목>/%s 경로로 주거나 SUBJECT=<과목> 을 줄 것"
+                 % (arg, arg))
+    return os.path.join(DATA, arg)
 
 
 def discover_chapters():
@@ -289,7 +352,7 @@ def theory_textbook_refs(sections):
     ★ 확장 2026-08-02 — **세 번째 같은 부류.** 이번에는 `§` 기호가 전제였다.
     동역학 sourceRef 는 `Hibbeler 12.7 (교재 p.73-76)` 라 절 기호를 쓰지 않는데,
     정규식이 `§` 를 **필수**로 요구해 표식 0건 → 감사가 `[unverified]` 만 찍고 있었다.
-    (사용자 지적으로 드러났다: [사용자 발화 인용 생략] — 감사가 돌았다면 그 사실이 진작 신고됐어야 한다.)
+    (사용자 지적으로 드러났다: *[발화 생략]* — 감사가 돌았다면 그 사실이 진작 신고됐어야 한다.)
 
     **그래서 `§` 를 선택으로 바꾸되 쪽 번호는 뺀다.** `§` 만 지우면 `(pp.2-8)`·`(교재 p.73-76)`
     의 쪽 범위가 절 번호로 먹힌다(회귀 테스트가 이 부작용을 즉시 잡았다).
@@ -460,7 +523,7 @@ def audit_rule_reach():
         if not VERBOSE and len(hits) > 5:
             print(f"    ... 외 {len(hits) - 5}건")
     print(f"\n총 {total}건. 각각 판정할 것 — "
-          "작업 중 지켜야 하면 AGENTS.md로 옮기고, 셋업/복붙 전용이면 그대로 둔다.")
+          "작업 중 지켜야 하면 CLAUDE.md로 옮기고, 셋업/복붙 전용이면 그대로 둔다.")
 
 
 # ---------------------------------------------------------------- 7. 삽화 배치 지도
@@ -581,7 +644,7 @@ def audit_difficulty(chapters, tolerance=0.12):
 
 # ------------------------------------------------- 7. 이해도 점검 답 길이
 # 상한 근거 (열린 날 2026-07-29). 사용자 지적:
-#   [사용자 발화 인용 생략]
+#   *[발화 생략]*
 # 품질 계약 §2는 '완결된 문장'만 요구하고 **길이를 말하지 않았다.** 그래서 성실하게 쓸수록
 # 길어졌고, 복습용 장치가 서술형 답안이 됐다. 용도에서 상한을 역산해 못 박는다.
 CHECK_ANSWER_MAX = {"recall": 60, "connect": 160, "explain": 200}
@@ -593,7 +656,7 @@ def visible_answer_len(ans):
     **무엇이 새어나갔나.** 이 자는 `len(ans)` 를 그대로 썼다 — 즉 `\\(T = \\frac{1}{2}mv^{2}\\)`
     를 **25자**로 센다. 화면에는 `T = 1/2 mv²` 로 8자쯤 나오는데도 그렇다. 그래서 수식이 든
     답은 **글이 짧아도 상한을 넘고**, 수식이 없는 답만 실제 길이로 평가됐다. 상한의 근거가
-    [사용자 발화 인용 생략] 인데 **읽히지 않는 것을 세고 있었으므로 재는 대상이 어긋난 것**이다.
+    *[발화 생략]* 인데 **읽히지 않는 것을 세고 있었으므로 재는 대상이 어긋난 것**이다.
 
     실측(2026-08-08 동역학): 신고 6건 중 **3건이 이 오탐**이었다 — `cc-f-angular-recall` 은
     67자로 신고됐지만 화면 글자는 34자다(수식 마크업 39자 중 33자가 안 보인다).

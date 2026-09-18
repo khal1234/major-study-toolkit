@@ -3,6 +3,7 @@
 import html
 import math
 import re
+import unicodedata
 
 from .textutil import _plain_math_text
 
@@ -49,7 +50,7 @@ SVG_LAYOUT_STRICT_CHAPTERS = {"ch00.json", "ch01.json", "ch02.json", "ch03.json"
 #   나머지 목록에는 이미 들어 있다. 못 올리는 이유는 데이터가 아니라 **자가 못 보기 때문**이다:
 #   `_plot_axes` 는 L자 축을 **하나의 `<path>`** 로 그린 것만 축으로 인정하는데, 동역학 ch12 의
 #   v-t·v-s 선도는 축을 `<line>` **두 개**로 그린다. 그래서 이 챕터의 선도는 검사 대상에조차
-#   들지 않고, 지금 올리면 「0건」이 **"위반이 없다"가 아니라 "한 건도 안 봤다"** 가 된다
+#   들지 않고, 지금 올리면 `0건` 이 **"위반이 없다"가 아니라 "한 건도 안 봤다"** 가 된다
 #   (AGENTS 규칙 11 · `PDF_FOR` 폴백 실사고와 같은 부류 — 통과와 미측정이 같은 출력이 된다).
 #   → 검사를 여는 **것은 thermo 의 몫이다**(공통 1차 관리 주체). `<line>` 쌍도 축으로 인정하도록
 #     `_plot_axes` 를 넓히면 **다른 과목의 안 보이던 선도가 한꺼번에 드러나** 그 빌드가 멈출 수
@@ -64,7 +65,7 @@ def _attr(attrs, name, default=None):
 
 # ★★ 글자 폭 계수는 **브라우저에서 잰 값**이다 (교정 2026-08-07).
 #
-#   열린 계기: 사용자가 같은 자리를 두 번 지적했다 — [사용자 발화 인용 생략](ch01 유도 8번).
+#   열린 계기: 사용자가 같은 자리를 두 번 지적했다 — *[발화 생략]*(ch01 유도 8번).
 #   실측하니 겹침이 아니라 **벌어짐**이었고(브라우저 기준 1.9em), 그 구멍을 만든 것이
 #   이 근사자였다. 분수를 붙이려 하면 빌드가 '글자끼리 겹침'으로 막고, 빌드를 만족시키면
 #   화면에 구멍이 남는다 — **자가 실제보다 넓게 재고 있었기 때문**이다.
@@ -105,7 +106,7 @@ _CHAR_W_NARROW = {"·": 0.273, "(": 0.41, ")": 0.41, "[": 0.41, "]": 0.41,
 #     두 번째는 이 주석을 이미 적어 두고도 반복했다).
 #   즉 한글·공백이 든 한 줄 수식은 조각 폭이 통째로 어긋나고, 그 어긋남은 **분수가 앞 글자
 #   쪽으로 밀려드는 것**으로 나타난다. 사용자가 든 캡션(`정지 상태 → P_gas = P_atm + mg/A`)은
-#   공백 7 + 한글 4 라 어긋남이 19px(1.9em)였다 — [사용자 발화 인용 생략] 가 그것이다.
+#   공백 7 + 한글 4 라 어긋남이 19px(1.9em)였다 — *[발화 생략]* 가 그것이다.
 #
 #   ★ **그 캡션이 화면에서 멀쩡해 보였던 이유가 이 부류의 정체다** — 손으로 조립된 줄이라
 #     생성기를 안 탔고 그래서 `font-family` 가 없었다. 자(Pretendard)와 렌더 글꼴이 우연히
@@ -144,6 +145,50 @@ def _char_w(ch, fs, mono=False, cjk_w=None):
     if ch in "iIljtf.,:;|'":
         return fs * 0.32
     return fs * 0.60
+
+# 그려지지 않는 컨테이너 — 안의 도형은 **틀(template)** 이지 화면의 그림이 아니다.
+_NON_RENDERED_TAGS = ("defs", "pattern", "clipPath", "mask", "marker", "symbol")
+_DRAWABLE_CACHE = {}
+
+
+def _drawable(svg):
+    """`<defs>`·`<pattern>` 같은 **안 그려지는 자리를 지운** SVG 문자열.
+
+    ★★ **원점 유령 조각의 정체다** (밝힌 날 2026-09-08). 교차 감사가 삽화 10개에서
+      *[발화 생략]* 고 신고했는데, 원인은 파서가 아니라 **순회 범위**
+      였다: 빗금 무늬를 이렇게 선언한다 —
+
+          <defs><pattern id='hatch-va' …><line x1='0' y1='0' x2='0' y2='8'/></pattern></defs>
+
+      우리 수집기는 문자열 전체를 훑으므로 그 **틀 안의 선**을 도형으로 세었다. 그 선은
+      화면 어디에도 그렇게 그려지지 않는다 — 무늬로 채워질 뿐이다. 그래서 원점 근처에
+      **아무도 안 그린 선분**이 생겼고, 그 근처 글자의 여백·교차 판정이 그것을 상대로 났다.
+
+    ★ **길이를 바꾸지 않고 지운다.** 자리표시로 같은 길이의 공백을 넣으면 모든 `m.start()`
+      가 원본과 같은 뜻을 유지한다 — `_svg_texts` 의 `pos`·`end` 로 원본을 잘라 고치는
+      도구(`fix_dim_label`)가 그대로 돈다.
+    """
+    hit = _DRAWABLE_CACHE.get(svg)
+    if hit is not None:
+        return hit
+    out = svg
+    for tag in _NON_RENDERED_TAGS:
+        depth, start = 0, None
+        for m in re.finditer(r"<(/?)" + tag + r"\b([^>]*?)(/?)>", out, re.I | re.S):
+            if m.group(1):
+                depth = max(0, depth - 1)
+                if depth == 0 and start is not None:
+                    out = out[:start] + " " * (m.end() - start) + out[m.end():]
+                    start = None
+            elif m.group(3) != "/":
+                if depth == 0:
+                    start = m.start()
+                depth += 1
+    if len(_DRAWABLE_CACHE) > 256:
+        _DRAWABLE_CACHE.clear()
+    _DRAWABLE_CACHE[svg] = out
+    return out
+
 
 def _inherited_attr(svg, pos, name, pattern=None):
     """`pos`의 요소가 조상 <g>에서 물려받는 속성값 (없으면 None).
@@ -191,11 +236,18 @@ def _effective(svg, pos, attrs, name, default=None):
 
 
 def _svg_texts(svg):
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 글자는 화면에 없다
     items = []
     for m in re.finditer(r"<text([^>]*)>(.*?)</text>", svg, re.S):
         attrs, inner = m.group(1), m.group(2)
-        if "transform" in attrs:  # 회전·이동 텍스트는 bbox 추정 불가 — 검사 제외
-            continue
+        # ★★ **회전·이동한 글자도 센다** (고친 날 2026-09-08). 그전 한 줄은 «bbox 추정 불가»
+        #   라며 `continue` 했는데, 그것은 **상자를 못 잰다**가 아니라 **안 돌렸다**였다 —
+        #   상자는 지금도 그대로 잴 수 있고 네 모서리를 변환에 태우면 된다.
+        #   그 한 줄 때문에 실측 4개의 글자가 **어느 충돌 검사에도 안 들어가** 있었다
+        #   (축 제목처럼 세로로 세운 라벨이 대개 그렇다 — 겹치기 쉬운 자리다).
+        #   ☐ 다만 **가로 리듬 검사(캡션 블록 묶기·눈금 고정)에서는 뺀다** — `rot` 표시가
+        #     그 표시다. 돌아간 라벨은 캡션 블록의 줄이 아니라 도형에 붙은 이름이라,
+        #     같은 축에 정렬됐는지를 묻는 자리에 넣으면 그 자가 시끄러워진다.
         s = re.sub(r"<[^>]+>", "", inner)
         s = s.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
         # ★ **수치 문자 참조도 풀어야 폭이 맞는다** (열린 날 2026-08-24, ee ch04).
@@ -228,6 +280,10 @@ def _svg_texts(svg):
             # 끝 오프셋은 **글자를 옮기는 도구**가 쓴다(`tools/fix_dim_label.py` 가 치수 라벨을
             # 치수 그룹 안으로 옮긴다). 잘라낸 사본으로는 원본에서의 자리를 되찾을 수 없다.
             "end": m.end(),
+            # 좌표 변환 — 상자를 네 모서리째 여기에 태운다(`_text_bbox`).
+            "mat": _element_matrix(svg, m.start(), attrs),
+            # 돌아간 글자인가 — 가로 리듬 검사는 이 표시를 보고 건너뛴다.
+            "rot": bool(_attr(attrs, "transform")) or bool(_ancestor_transforms(svg, m.start())),
         })
     return items
 
@@ -267,6 +323,7 @@ def _svg_opaque_shapes_ordered(svg, viewbox):
     통과시킨다(_svg_filled_shapes의 contained 예외). 같은 지적이 3회 반복된 원인이다.
     반투명(fill-opacity<0.9) 도형은 밑이 비치므로 제외한다.
     """
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 도형은 화면에 없다
     vx, vy, vw, vh = viewbox
     out = []
 
@@ -310,7 +367,7 @@ def _svg_opaque_shapes_ordered(svg, viewbox):
 
 # ★★ **잘림은 「이 PC 의 글꼴」이 아니라 「가장 넓게 그리는 글꼴」로 재야 한다** (2026-08-12).
 #
-#   사용자: [사용자 발화 인용 생략]. 이 PC 에는
+#   사용자: *[발화 생략]*. 이 PC 에는
 #   Pretendard 가 있어 검사도 렌더도 *안 잘린다* 고 답했는데, 그 폰트가 없는 기기에서는 잘린다.
 #   실측(같은 브라우저에서 `font-family` 만 바꿔 그 삽화의 실제 마크업으로, viewBox 폭 700):
 #       Pretendard 289.1 (여유 +21.2) · Noto Sans KR 306.8 (+12.3)
@@ -341,8 +398,119 @@ def _text_bbox(it, cjk_w=None):
     #   '글자끼리 겹침'으로 신고했다(ch01 피스톤 캡션 실측). 같은 대상을 두 자로 재면 갈라진다.
     w = run_width(it.get("raw", it["s"]), it["fs"], it.get("mono", False), cjk_w)
     x0 = it["x"] - (w / 2 if it["anchor"] == "middle" else w if it["anchor"] == "end" else 0)
-    return (x0, it["y"] - it["fs"] * TEXT_BOX_ASCENT_RATIO,
-            x0 + w, it["y"] + it["fs"] * TEXT_BOX_DESCENT_RATIO)
+    y0 = it["y"] - it["fs"] * TEXT_BOX_ASCENT_RATIO
+    x1, y1 = x0 + w, it["y"] + it["fs"] * TEXT_BOX_DESCENT_RATIO
+    mat = it.get("mat")
+    if mat is None:
+        return (x0, y0, x1, y1)
+    # ★ 돌아간 글자는 **네 모서리를 태워** 그 바깥 상자를 쓴다 (2026-09-08).
+    #   돌린 상자를 그대로 쓰지 않는 이유는 이 리포의 충돌 판정이 전부 축 정렬 상자이기
+    #   때문이다. 바깥 상자는 45도에서 가장 헐거워지지만(√2 배) **없는 것보다 낫다** —
+    #   그전에는 이 글자들이 아무 검사에도 안 들어갔다.
+    pts = [mat.point_in_matrix_space(p)
+           for p in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
+    xs = [float(p.x) for p in pts]
+    ys = [float(p.y) for p in pts]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def _rect_corners_in(mat, rect):
+    """축 정렬 사각형의 네 모서리를 그 변환에 태워 **다각형**으로 돌려준다."""
+    x0, y0, x1, y1 = rect
+    pts = []
+    for p in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
+        q = mat.point_in_matrix_space(p)
+        pts.append((float(q.x), float(q.y)))
+    return pts
+
+
+def _poly_x_rect(poly, rect):
+    """볼록 다각형과 축 정렬 사각형이 겹치나 — **분리축**으로 정확히 본다.
+
+    바깥 상자로 어림하면 기울어진 도형이 크게 부풀어 멀쩡한 라벨을 신고한다
+    (`_text_frame` 독스트링의 그 자리). 축은 넷이면 된다: 사각형의 x·y 와
+    다각형 변의 법선들.
+    """
+    rx = (rect[0], rect[2])
+    ry = (rect[1], rect[3])
+    if max(p[0] for p in poly) <= rx[0] or min(p[0] for p in poly) >= rx[1]:
+        return False
+    if max(p[1] for p in poly) <= ry[0] or min(p[1] for p in poly) >= ry[1]:
+        return False
+    corners = ((rect[0], rect[1]), (rect[2], rect[1]),
+               (rect[2], rect[3]), (rect[0], rect[3]))
+    for i in range(len(poly)):
+        ax, ay = poly[i]
+        bx, by = poly[(i + 1) % len(poly)]
+        nx, ny = -(by - ay), (bx - ax)            # 변의 법선
+        if nx == 0 and ny == 0:
+            continue
+        pa = [nx * px + ny * py for px, py in poly]
+        pb = [nx * px + ny * py for px, py in corners]
+        if max(pa) <= min(pb) or min(pa) >= max(pb):
+            return False
+    return True
+
+
+def _point_in_poly(pt, poly):
+    """볼록 다각형 안인가 — 모든 변에 대해 같은 쪽이면 안이다."""
+    sign = 0
+    for i in range(len(poly)):
+        ax, ay = poly[i]
+        bx, by = poly[(i + 1) % len(poly)]
+        cross = (bx - ax) * (pt[1] - ay) - (by - ay) * (pt[0] - ax)
+        if cross == 0:
+            continue
+        cur = 1 if cross > 0 else -1
+        if sign == 0:
+            sign = cur
+        elif sign != cur:
+            return False
+    return True
+
+
+def _text_world_poly(it, local_box, inv):
+    """글자 상자를 **화면 좌표**의 네 점으로. 안 돌아간 글자면 그냥 그 상자의 모서리다."""
+    x0, y0, x1, y1 = local_box
+    corners = ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+    mat = it.get("mat")
+    if inv is None or mat is None:
+        return list(corners)
+    out = []
+    for p in corners:
+        q = mat.point_in_matrix_space(p)
+        out.append((float(q.x), float(q.y)))
+    return out
+
+
+def _text_frame(it, cjk_w=None):
+    """돌아간 글자를 **자기 좌표계에서** 재기 위한 `(역행렬, 안 돌린 상자)`.
+
+    ★★ **바깥 상자로는 게이트를 못 만든다** (2026-09-08, 실측으로 정정). 회전한 라벨의
+      축 정렬 바깥 상자는 실물보다 훨씬 크다 — 실측: 응용유체 `fig-ch09-separation` 의
+      「순압력구배」(18px 다섯 글자, 실제 90x18)를 -40도 돌리면 바깥 상자가 **81x72** 가
+      된다. 그 상자로 재면 그 라벨은 원기둥 **어디에 놓아도** 걸리고, 고칠 방법이 없는
+      신고가 된다 — 자가 그렇게 되면 사람은 자를 끄게 된다.
+    ★ 그래서 **글자를 돌리는 대신 도형을 되돌린다.** 선분을 역행렬에 태워 라벨의 좌표계로
+      가져오면 상자는 다시 축에 정렬되고, 기존 축 정렬 판정을 그대로 쓸 수 있다.
+      결과는 근사가 아니라 **정확한 판정**이다.
+
+    돌아가지 않은 글자는 `(None, 바깥상자)` 라 부르는 쪽이 갈라지지 않는다.
+    """
+    box = _text_bbox(it, cjk_w)
+    mat = it.get("mat")
+    if mat is None:
+        return None, box
+    w = run_width(it.get("raw", it["s"]), it["fs"], it.get("mono", False), cjk_w)
+    x0 = it["x"] - (w / 2 if it["anchor"] == "middle" else w if it["anchor"] == "end" else 0)
+    local = (x0, it["y"] - it["fs"] * TEXT_BOX_ASCENT_RATIO,
+             x0 + w, it["y"] + it["fs"] * TEXT_BOX_DESCENT_RATIO)
+    try:
+        inv = _SvgMatrix(mat)
+        inv.inverse()
+    except Exception:                                           # noqa: BLE001
+        return None, box                  # 못 뒤집으면 바깥 상자로 — 느슨한 쪽이 안전하다
+    return inv, local
 
 def _bezier_points(p0, ctrls, steps):
     """de Casteljau — 2차·3차 모두 같은 코드로 편다. 순수 함수(테스트가 직접 부른다)."""
@@ -364,8 +532,251 @@ def _bezier_steps(points):
     return max(4, min(24, int(length / 6.0) + 1))
 
 
+# 곡선을 펼 때 현 하나의 최대 길이(사용자 좌표). **고른 값이고 회귀가 상한을 정했다.**
+#   `test_checks.py` 의 「펴진 폴리라인이 곡선 중점을 1.5px 안에서 지난다」가 자다 —
+#   처음에 4.0 으로 잡았더니 **1.86px** 로 그 회귀를 깼다(2026-09-08).
+#   1.5 면 반지름 40~140 구간에서 현-호 벌어짐이 0.002~0.007 로 회귀 여유 안에 든다.
+_CURVE_CHORD_MAX = 1.5
+_CURVE_STEPS_MIN, _CURVE_STEPS_MAX = 8, 512
+
+try:
+    from svgelements import Matrix as _SvgMatrix, Path as _SvgPath
+except ImportError as _exc:                                     # pragma: no cover
+    raise ImportError(
+        "svgelements 가 필요하다 — `python -m pip install svgelements`"
+        " (매니페스트 `requirements.txt`). 2026-09-08 에 경로 기하 읽기를 이 라이브러리로"
+        " 옮겼다 — 직접 쓴 파서는 호(A)를 현으로 근사했다.") from _exc
+
+
+def _ancestor_transforms(svg, pos):
+    """`pos` 의 요소를 감싼 `<g>` 들의 `transform` — **바깥에서 안쪽 순서로**.
+
+    `_inherited_attr` 과 같은 스택 걷기인데 **되짚어 첫 값을 쓰지 않고 전부 모은다** —
+    좌표 변환은 상속이 아니라 **합성**이기 때문이다(가장 안쪽 것만 쓰면 바깥 이동이 사라진다).
+    """
+    stack = []
+    for m in re.finditer(r"<(/?)g\b([^>]*?)(/?)>", svg[:pos]):
+        if m.group(1):
+            if stack:
+                stack.pop()
+        elif not m.group(3):                      # 자체 종료(<g …/>)는 자식을 갖지 않는다
+            stack.append(_attr(m.group(2), "transform"))
+    return [t for t in stack if t]
+
+
+def _element_matrix(svg, pos, attrs):
+    """이 요소에 실제로 걸리는 좌표 변환(없으면 `None`).
+
+    ★★ **열린 날 2026-09-08 — 형상 수집기가 `transform` 을 통째로 무시하고 있었다.**
+      `_svg_segments` 는 `x`·`y`·`d` 에 적힌 **변환 전 좌표**를 그대로 선분으로 삼았다.
+      그래서 돌려 놓거나 옮겨 놓은 도형은 **화면에 있는 자리가 아닌 곳**에 있는 것으로
+      검사받았고, 그 자리의 글자 충돌·여백 판정이 전부 엉뚱한 좌표에서 났다.
+      실측(전 과목): `transform` 이 걸린 요소 38개 — `<path>` 12 · `<ellipse>` 10 ·
+      `<text>` 4 · `<g>` 4 · `<rect>` 3(나머지는 그 안의 것). 원·타원만 자기 코드로
+      회전을 따로 풀고 있었고(`_stroked_ellipse_segments`), 나머지는 아무도 안 봤다.
+
+    ★ **직접 파싱하지 않는다.** `rotate`·`translate`·`scale` 이 이어 붙은 문자열
+      (실측: `translate(…) rotate(…) translate(…) scale(…) translate(…)`)을 손으로 읽으면
+      또 하나의 자작 파서가 생긴다 — `svgelements.Matrix` 가 SVG/CSS 규격대로 읽는다.
+    """
+    parts = _ancestor_transforms(svg, pos)
+    own = _attr(attrs, "transform")
+    if own:
+        parts.append(own)
+    if not parts:
+        return None
+    try:
+        return _SvgMatrix(" ".join(parts))
+    except Exception:                                           # noqa: BLE001
+        return None                       # 못 읽는 변환은 **없는 것으로 두지 않고** 원좌표를 쓴다
+
+
+def _moved(mat, segs):
+    """선분 목록에 변환을 먹인다. `mat` 이 없으면 그대로 돌려준다."""
+    if mat is None:
+        return list(segs)
+    out = []
+    for x1, y1, x2, y2 in segs:
+        a = mat.point_in_matrix_space((x1, y1))
+        b = mat.point_in_matrix_space((x2, y2))
+        out.append((float(a.x), float(a.y), float(b.x), float(b.y)))
+    return out
+
+
 def _path_polyline(dstr):
-    """path의 d를 선분 목록으로 편다.
+    """path 의 `d` 를 선분 목록으로 편다. **경로 기하는 `svgelements` 가 읽는다**(2026-09-08).
+
+    바뀐 것은 **정확도뿐이고 무엇을 세는지는 그대로다.**
+
+    ⑴ **호(`A`)를 실제로 편다.** 옛 파서는 시작점-끝점 **현**으로 봤다(그 독스트링이
+       *[발화 생략]* 라고 적어 뒀는데, 그 뒤 `svg_arc_arrow.py` 가
+       각도 호를 쓰기 시작해 전제가 깨졌다).
+    ⑵ **표본이 곡률을 따라간다** — 현 길이 상한으로 자른다(위 상수).
+    ⑶ 상대 명령·`S`/`T` 반사·`M` 뒤 잉여 좌표쌍 같은 규격 구석을 라이브러리가 맡는다.
+
+    ★ **한 번 되돌린 자리다.** 2026-09-08 첫 시도는 이 함수와 `_svg_segments` 를 **함께**
+      갈아서 잠금 회귀 7건을 깼고, 어느 쪽이 깼는지 못 갈랐다. 그래서 **함수 하나씩** 옮기고
+      매번 `python tools/test_checks.py --fail-only` 를 수용 기준으로 삼는다.
+
+    ☐ 이 함수가 안 보는 것: `<path>` 밖의 도형(`circle`·`ellipse`·`polygon`·`polyline`)과
+      `transform`. 그건 `_svg_segments` 쪽 일이고 **다음 단계**다.
+    """
+    # ★★ **순서를 지켜 돌려준다.** 곧은 것 뒤에 굽은 것을 이어 붙였더니
+    #   `_polyline_points` 가 그 순서를 그대로 점 목록으로 읽어 **경로 끝에서 시작점으로
+    #   되돌아가는 가짜 구간**이 생겼고, 형태 검사가 멀쩡한 곡선을 신고했다
+    #   (2026-09-08 회귀 `(384,157)→(95,239)`). 이 함수의 계약은 **경로 순서**다.
+    return [seg for seg, _curved in _path_pieces(dstr)]
+
+
+# 글자와 **굽은 둘레** 사이의 최소 여백(삽화 좌표 고정). **사용자가 고른 값이다.**
+#   판정 표본 `docs/삽화-판정-표본.html` 축 A(원 둘레, 겹침/2/6/12) → «3번»(=6),
+#   `-2.html` 축 E(사선 위 점의 이름표, 수선 방향 2/6/10) → «17번»(=6),
+#   `-3.html` 축 F(12px 글자, 겹침/3/6) → «21번»(=6) — **글자 크기에 안 비례한다.**
+#   직선 쪽은 같은 표본 축 C 에서 `0.5em` 이라 **두 눈금의 성질이 다르다**(하나는 고정,
+#   하나는 글자 크기를 따른다). 정본은 `docs/삽화-규격.md` 「여백 눈금은 사용자 판정으로」.
+CURVED_OUTLINE_LABEL_GAP = 6.0
+
+
+def _path_polyline_classified(dstr):
+    """`_path_polyline` 과 같되 **곧은 조각과 굽은 조각을 갈라** 돌려준다.
+
+    왜 가르나 — 라벨 여백(F1)의 문턱이 둘에서 다르기 때문이다(위 상수).
+    사용자가 같은 날 두 축을 따로 보고 **다른 답**을 냈다: 직선은 `0.5em`, 굽은 것은 6.
+
+    ★ 여기서는 순서가 필요 없다(거리만 잰다). **순서가 필요한 쪽은 `_path_polyline`** 이고,
+      그래서 둘 다 `_path_pieces` 하나에서 갈라져 나온다.
+    """
+    pieces = _path_pieces(dstr)
+    return ([seg for seg, curved in pieces if not curved],
+            [seg for seg, curved in pieces if curved])
+
+
+def _path_pieces(dstr):
+    """`(선분, 굽었나)` 를 **경로 순서대로**. `_path_polyline` 과 분류판이 함께 쓰는 뿌리."""
+    if not dstr:
+        return []
+    try:
+        pieces = list(_SvgPath(dstr).segments())
+    except Exception:                                           # noqa: BLE001
+        return [(seg, False) for seg in _path_polyline_legacy(dstr)]
+    # ★ `svgelements` 는 `Z` 가 없는 경로에도 `Close` 조각을 붙일 수 있다. 그것을 선분으로
+    #   세면 **끝점에서 시작점으로 돌아가는 가짜 현**이 생기고, 그 현은 x 를 크게 되돌려
+    #   형태 검사(단조성)를 깨뜨린다 — 2026-09-08 회귀가 그 자리에서 잡았다
+    #   (`(384,157)→(95,239)`, 뒤엣것이 그 경로의 `M` 시작점이었다).
+    #   옛 손파서와 같은 규칙으로 맞춘다: **`d` 에 `Z` 가 있을 때만** 닫는 현을 센다.
+    has_close = bool(re.search(r"[Zz]", dstr))
+    out = []
+    for piece in pieces:
+        name = type(piece).__name__
+        if name == "Move" or (name == "Close" and not has_close):
+            continue
+        start, end = getattr(piece, "start", None), getattr(piece, "end", None)
+        if start is None or end is None:
+            continue
+        if name in ("Line", "Close"):
+            out.append(((float(start.x), float(start.y),
+                         float(end.x), float(end.y)), False))
+            continue
+        try:
+            length = float(piece.length(error=1e-3))
+        except Exception:                                       # noqa: BLE001
+            length = _distance((float(start.x), float(start.y)),
+                               (float(end.x), float(end.y)))
+        steps = int(max(_CURVE_STEPS_MIN,
+                        min(_CURVE_STEPS_MAX, math.ceil(length / _CURVE_CHORD_MAX))))
+        prev = (float(start.x), float(start.y))
+        for i in range(1, steps + 1):
+            try:
+                pt = piece.point(i / steps)
+            except Exception:                                   # noqa: BLE001
+                break
+            cur = (float(pt.x), float(pt.y))
+            out.append(((prev[0], prev[1], cur[0], cur[1]), True))
+            prev = cur
+    return out
+
+
+def _svg_segments_split(svg):
+    """형상선을 **곧은 것 / 굽은 것**으로 갈라 돌려준다 — F1 의 문턱이 둘에서 다르다."""
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 도형은 화면에 없다
+    straight, curved = [], []
+    for m in re.finditer(r"<rect([^>]*?)/?>", svg):
+        a = m.group(1)
+        if _effective(svg, m.start(), a, "stroke") in (None, "none"):
+            continue
+        x, y = float(_attr(a, "x", "0")), float(_attr(a, "y", "0"))
+        w, h = float(_attr(a, "width", "0")), float(_attr(a, "height", "0"))
+        straight.extend(_moved(_element_matrix(svg, m.start(), a),
+                               ((x, y, x + w, y), (x + w, y, x + w, y + h),
+                                (x + w, y + h, x, y + h), (x, y + h, x, y))))
+    for m in re.finditer(r"<line([^>]*?)/?>", svg):
+        a = m.group(1)
+        straight.extend(_moved(_element_matrix(svg, m.start(), a),
+                               [tuple(float(_attr(a, k, "0"))
+                                      for k in ("x1", "y1", "x2", "y2"))]))
+    for m in re.finditer(r"<path([^>]*?)/?>", svg):
+        a = m.group(1)
+        dstr = _attr(a, "d")
+        if dstr:
+            mat = _element_matrix(svg, m.start(), a)
+            s_part, c_part = _path_polyline_classified(dstr)
+            straight.extend(_moved(mat, s_part))
+            curved.extend(_moved(mat, c_part))
+    straight.extend(_polygon_segments(svg))
+    curved.extend(_stroked_ellipse_segments(svg))
+    return straight, curved
+
+
+def _curved_shape_boxes(svg):
+    """테두리가 있는 `<circle>`·`<ellipse>` 의 바깥 상자 — **글자가 그 안에 통째로 들었나**만 본다.
+
+    안에 든 글자는 「테두리에서 몇 떨어졌나」로 재면 안 된다(그 판정은 «가운데인가» 다).
+    상자로 근사하는 것이라 모서리 쪽은 느슨하지만, **느슨한 쪽이 안전한 방향**이다 —
+    새 검사가 멀쩡한 조판을 막는 것보다 한 건 놓치는 쪽이 낫다.
+    """
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 도형은 화면에 없다
+    out = []
+    for tag, rx_name, ry_name in (("circle", "r", "r"), ("ellipse", "rx", "ry")):
+        for m in re.finditer(r"<" + tag + r"([^>]*?)/?>", svg):
+            a = m.group(1)
+            if _effective(svg, m.start(), a, "stroke") in (None, "none"):
+                continue
+            cx, cy = float(_attr(a, "cx", "0")), float(_attr(a, "cy", "0"))
+            rx, ry = float(_attr(a, rx_name, "0")), float(_attr(a, ry_name, "0"))
+            if rx > 0 and ry > 0:
+                out.append((cx - rx, cy - ry, cx + rx, cy + ry))
+    return out
+
+
+def _polygon_segments(svg):
+    """`<polygon>`·`<polyline>` 의 변. **읽는 코드가 아예 없던 자리다**(2026-09-08).
+
+    실측(785삽화): `polyline` 16개. 적어 보이지만 그 중 하나가 전기전자 `fig-ee04-tau-read`
+    의 지수 곡선이었고, 「63% 지점」 라벨이 그 위에 얹힌 것을 **아무 자도 못 봤다**.
+    개수가 아니라 «그 자리에 자가 없었다» 가 요점이다.
+    """
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 도형은 화면에 없다
+    out = []
+    for tag in ("polygon", "polyline"):
+        for m in re.finditer(r"<" + tag + r"([^>]*?)/?>", svg):
+            a = m.group(1)
+            if _effective(svg, m.start(), a, "stroke") in (None, "none"):
+                continue
+            nums = [float(v) for v in re.findall(r"-?\d*\.?\d+(?:e-?\d+)?",
+                                                 _attr(a, "points", ""))]
+            pts = list(zip(nums[0::2], nums[1::2]))
+            if len(pts) < 2:
+                continue
+            if tag == "polygon":
+                pts.append(pts[0])                    # 닫힌 도형은 마지막 변도 있다
+            out.extend(_moved(_element_matrix(svg, m.start(), a),
+                              [(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1])
+                               for i in range(len(pts) - 1)]))
+    return out
+
+
+def _path_polyline_legacy(dstr):
+    """옛 손파서 — `svgelements` 가 그 `d` 를 못 읽을 때만(조용히 0을 내지 않기 위해).
 
     ★ 곡선을 실제로 편다 (열린 날 2026-07-29, thermo-ch03 세션 보고).
       예전에는 `C/S/Q/T` 를 **시작점-끝점 직선(현)** 으로만 봤다. 볼록한 곡선일수록 오차가
@@ -440,7 +851,83 @@ def _path_polyline(dstr):
             cmd = "l" if rel else "L"  # M 뒤 잉여 좌표쌍은 L로 처리 (SVG 스펙)
     return segs
 
-def _svg_segments(svg):
+def _svg_segments_by_element(svg):
+    """형상선을 **그린 요소별로 묶어** 돌려준다 — `[[선분, …], …]`.
+
+    ★★ **왜 필요한가 — 「한 끝은 안, 다른 끝은 밖」은 조각이 아니라 「그린 것」의 성질이다**
+      (열린 날 2026-09-08). 원 윤곽 관통 판정이 **선분 하나**를 놓고 그 둘을 물었는데,
+      경로 표본이 촘촘해지자(현 1.5) 어떤 조각도 «±3 밖» 을 못 채워 **관통이 통째로 안
+      잡혔다.** 그래서 그 검사만 옛 성긴 파서를 쓰는 빚이 남아 있었다 — 자를 정확하게 만들수록
+      검사가 죽는 구조였고, 그건 표본 수가 아니라 **묻는 단위**가 틀린 것이다.
+      요소로 묶어 물으면 «이 선/경로가 원을 가로지르나» 가 되어 **표본 수와 무관**해진다.
+    """
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 도형은 화면에 없다
+    out = []
+    for m in re.finditer(r"<rect([^>]*?)/?>", svg):
+        a = m.group(1)
+        if _effective(svg, m.start(), a, "stroke") in (None, "none"):
+            continue
+        x, y = float(_attr(a, "x", "0")), float(_attr(a, "y", "0"))
+        w, h = float(_attr(a, "width", "0")), float(_attr(a, "height", "0"))
+        out.append(_moved(_element_matrix(svg, m.start(), a),
+                          ((x, y, x + w, y), (x + w, y, x + w, y + h),
+                           (x + w, y + h, x, y + h), (x, y + h, x, y))))
+    for m in re.finditer(r"<line([^>]*?)/?>", svg):
+        a = m.group(1)
+        out.append(_moved(_element_matrix(svg, m.start(), a),
+                          [tuple(float(_attr(a, k, "0"))
+                                 for k in ("x1", "y1", "x2", "y2"))]))
+    for m in re.finditer(r"<path([^>]*?)/?>", svg):
+        a = m.group(1)
+        dstr = _attr(a, "d")
+        if dstr:
+            # ★ **부분경로(`M` 으로 새로 시작하는 조각)마다 따로 묶는다.** 한 `<path>` 에
+            #   여러 도막을 담는 삽화가 있어서, 통째로 묶으면 서로 다른 도막의 안/밖이
+            #   섞여 «가로지른다» 가 된다.
+            for sub in _path_subpaths(dstr):
+                segs = _moved(_element_matrix(svg, m.start(), a), _path_polyline(sub))
+                if segs:
+                    out.append(segs)
+    for group in _polygon_segments_by_element(svg):
+        out.append(group)
+    return [g for g in out if g]
+
+
+def _polygon_segments_by_element(svg):
+    """`<polygon>`·`<polyline>` 의 변을 요소별로 묶어."""
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 도형은 화면에 없다
+    out = []
+    for tag in ("polygon", "polyline"):
+        for m in re.finditer(r"<" + tag + r"([^>]*?)/?>", svg):
+            a = m.group(1)
+            if _effective(svg, m.start(), a, "stroke") in (None, "none"):
+                continue
+            nums = [float(v) for v in re.findall(r"-?\d*\.?\d+(?:e-?\d+)?",
+                                                 _attr(a, "points", ""))]
+            pts = list(zip(nums[0::2], nums[1::2]))
+            if len(pts) < 2:
+                continue
+            if tag == "polygon":
+                pts.append(pts[0])
+            out.append(_moved(_element_matrix(svg, m.start(), a),
+                              [(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1])
+                               for i in range(len(pts) - 1)]))
+    return out
+
+
+def _svg_segments_coarse(svg):
+    """`_svg_segments` 와 같되 **곡선을 옛 성긴 표본으로** 편다.
+
+    ☒ **쓰는 자리가 없어졌다 (2026-09-08).** 원 윤곽 관통 판정이 요소 단위로 바뀌면서
+      성긴 표본이 필요 없어졌다(`_svg_segments_by_element` 독스트링이 정본). 함수는
+      옛 파서를 부르는 통로로만 남아 있고, 지우기 전에 **한 판 더 돌려 볼 자리**다.
+    """
+    return _svg_segments(svg, _flatten=_path_polyline_legacy)
+
+
+def _svg_segments(svg, _flatten=None):
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 도형은 화면에 없다
+    flatten = _flatten or _path_polyline
     segs = []
     # Stroke-only rectangles are common control-volume and system-boundary outlines.
     # They used to be omitted, so a label could straddle a vertical boundary unnoticed.
@@ -451,18 +938,152 @@ def _svg_segments(svg):
             continue
         x, y = float(_attr(a, "x", "0")), float(_attr(a, "y", "0"))
         w, h = float(_attr(a, "width", "0")), float(_attr(a, "height", "0"))
-        segs.extend(((x, y, x + w, y), (x + w, y, x + w, y + h),
-                     (x + w, y + h, x, y + h), (x, y + h, x, y)))
+        # ★ 변환은 여기서 먹인다 — 안 먹이면 **돌려 놓은 상자가 화면에 없는 자리**로 잡힌다
+        #   (`_element_matrix` 독스트링이 정본).
+        segs.extend(_moved(_element_matrix(svg, m.start(), a),
+                           ((x, y, x + w, y), (x + w, y, x + w, y + h),
+                            (x + w, y + h, x, y + h), (x, y + h, x, y))))
     for m in re.finditer(r"<line([^>]*?)/?>", svg):
         a = m.group(1)
-        segs.append(tuple(float(_attr(a, k, "0")) for k in ("x1", "y1", "x2", "y2")))
+        segs.extend(_moved(_element_matrix(svg, m.start(), a),
+                           [tuple(float(_attr(a, k, "0"))
+                                  for k in ("x1", "y1", "x2", "y2"))]))
     for m in re.finditer(r"<path([^>]*?)/?>", svg):
-        dstr = _attr(m.group(1), "d")
+        a = m.group(1)
+        dstr = _attr(a, "d")
         if dstr:
-            segs.extend(_path_polyline(dstr))
+            segs.extend(_moved(_element_matrix(svg, m.start(), a), flatten(dstr)))
+    if _flatten is None:                 # 성긴 판(원 관통 판정)은 옛 범위를 그대로 둔다
+        segs.extend(_polygon_segments(svg))
     return segs
 
+
+# 원 둘레를 폴리라인으로 근사할 때 쓰는 조각 수. **고른 값**이다(잰 값이 아니다).
+# 근거: 조각 하나가 벌어지는 각이 360/32 = 11.25°이고, 그때 현과 호의 최대 벌어짐은
+# r(1-cos(11.25°/2)) = r x 0.00482 이다. 이 리포의 원 반지름은 대개 60~140 이므로
+# 오차는 0.3~0.7 단위 — 글자 상자(가장 작은 글자도 한 변이 9 단위 이상)로 판정하는
+# 자리에서는 판정을 뒤집지 못한다. 조각을 늘리면 정확도가 아니라 시간만 는다.
+_ELLIPSE_SEGMENTS = 32
+
+
+def _stroked_ellipse_segments(svg):
+    """테두리만 있는 `<circle>`·`<ellipse>` 의 둘레를 선분 목록으로 돌려준다.
+
+    ★ 열린 날 2026-09-08. **이 리포에서 원 윤곽은 어떤 글자 충돌 검사도 안 받고 있었다.**
+
+    사용자 지적: *[발화 생략]* — 응용고체역학 `fig-11-mohr-circle` 의
+    `σ1`·`σ2` 라벨이 원 둘레 위에 앉아 있었는데 빌드는 초록이었다.
+
+    **왜 안 걸렸나 — 자가 도형을 못 봤다.** 두 수집기가 원을 서로에게 미뤘다:
+
+    - `_svg_segments` 는 `rect`·`line`·`path` 만 모았다 — 원은 아예 안 봤다.
+    - `_svg_filled_shapes` 는 원을 보지만 `fill:none` 이면 건너뛴다.
+
+    그래서 **테두리만 있는 원은 두 자 어디에도 안 들어갔다.** 「글자가 선/패스와 교차」·
+    F1 여백·F4 셋이 전부 그 원에 대해 침묵했다. 모어원·풀리·관 단면·베어링처럼
+    원을 윤곽으로 쓰는 삽화 전부가 같은 구멍 안에 있었다(한 삽화의 문제가 아니다).
+
+    회전은 여기서 함께 받는다 — `transform='rotate(deg [cx cy])'` 를 실제로 적용해
+    표본점을 돌린다. 회전 타원을 도형 검사가 못 보던 것(2026-09-07 인계 111행)의
+    절반이 이 자리에서 같이 닫힌다(나머지 절반은 `_svg_filled_shapes` 쪽이다).
+    """
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 도형은 화면에 없다
+    out = []
+    for tag, rx_name, ry_name in (("circle", "r", "r"), ("ellipse", "rx", "ry")):
+        for m in re.finditer(r"<" + tag + r"([^>]*?)/?>", svg):
+            a = m.group(1)
+            if _effective(svg, m.start(), a, "stroke") in (None, "none"):
+                continue
+            # 시간율의 점은 **글자의 일부**다 — `_svg_filled_shapes` 가 두는 예외와 같은 자리.
+            if "rate-dot" in _attr(a, "class", ""):
+                continue
+            cx, cy = float(_attr(a, "cx", "0")), float(_attr(a, "cy", "0"))
+            rx, ry = float(_attr(a, rx_name, "0")), float(_attr(a, ry_name, "0"))
+            if rx <= 0 or ry <= 0:
+                continue
+            rot = re.search(r"rotate\(\s*(-?[\d.]+)(?:[\s,]+(-?[\d.]+)[\s,]+(-?[\d.]+))?\s*\)",
+                            _attr(a, "transform", ""))
+            th = math.radians(float(rot.group(1))) if rot else 0.0
+            ox = float(rot.group(2)) if rot and rot.group(2) is not None else 0.0
+            oy = float(rot.group(3)) if rot and rot.group(3) is not None else 0.0
+            cos_t, sin_t = math.cos(th), math.sin(th)
+            pts = []
+            for i in range(_ELLIPSE_SEGMENTS + 1):
+                ang = 2 * math.pi * i / _ELLIPSE_SEGMENTS
+                px, py = cx + rx * math.cos(ang), cy + ry * math.sin(ang)
+                dx, dy = px - ox, py - oy
+                pts.append((ox + dx * cos_t - dy * sin_t, oy + dx * sin_t + dy * cos_t))
+            out.extend((pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1])
+                       for i in range(_ELLIPSE_SEGMENTS))
+    return out
+
+def _filled_ellipses(svg, viewbox):
+    """채운 `<circle>`·`<ellipse>` 를 `(cx, cy, rx, ry, 바깥상자)` 로.
+
+    ★★ **원을 사각형으로 재던 자리다** (열린 날 2026-09-08). `_svg_filled_shapes` 는 원을
+      **바깥 사각형**으로 담는다 — 그 사각형의 네 모서리는 원 밖이므로, 원 옆 대각선
+      자리에 놓은 라벨이 «도형 경계에 걸침» 으로 신고된다. 실측: 응용유체
+      `fig-ch09-separation` 의 「순압력구배」를 원 밖 25 에 놓았는데도 걸렸다(원 반지름 80,
+      바깥 사각형 160x160 의 모서리 자리). **그림이 옳은데 자가 틀린 신고**라, 그것을 피해
+      라벨을 옮기면 자가 조판을 정하게 된다.
+    ★ 바깥 상자를 함께 돌려주는 이유는 **같은 도형을 두 번 세지 않기 위해서**다 —
+      부르는 쪽이 `_svg_filled_shapes` 의 그 사각형을 빼고 이 원으로 판정한다.
+    """
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 도형은 화면에 없다
+    vx, vy, vw, vh = viewbox
+    out = []
+    for tag, rx_name, ry_name in (("circle", "r", "r"), ("ellipse", "rx", "ry")):
+        for m in re.finditer(r"<" + tag + r"([^>]*?)/?>", svg):
+            a = m.group(1)
+            fill = _effective(svg, m.start(), a, "fill")
+            if fill is None or fill == "none":
+                continue
+            if "rate-dot" in _attr(a, "class", ""):
+                continue                       # 시간율의 점은 글자의 일부다(아래 주석이 정본)
+            cx, cy = float(_attr(a, "cx", "0")), float(_attr(a, "cy", "0"))
+            rx, ry = float(_attr(a, rx_name, "0")), float(_attr(a, ry_name, "0"))
+            if rx <= 0 or ry <= 0:
+                continue
+            box = (cx - rx, cy - ry, cx + rx, cy + ry)
+            if box[0] <= vx and box[1] <= vy and box[2] >= vx + vw and box[3] >= vy + vh:
+                continue                       # 배경판
+            out.append((cx, cy, rx, ry, box))
+    return out
+
+
+def _pt_seg_dist(px, py, ax, ay, bx, by):
+    """점에서 선분까지의 거리 — 순수 함수."""
+    dx, dy = bx - ax, by - ay
+    l2 = dx * dx + dy * dy
+    if l2 == 0:
+        return math.hypot(px - ax, py - ay)
+    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / l2))
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+
+def _poly_x_ellipse(poly, cx, cy, rx, ry):
+    """볼록 다각형과 채운 타원이 `(겹치나, 통째로 들었나)`.
+
+    타원을 **단위원으로 만드는 자리**로 옮겨서 본다(중심을 원점으로, 반지름으로 나눈다).
+    그 자리에서 다각형은 여전히 볼록하므로 판정이 정확하다 — 바깥 상자로 어림하지 않는다.
+    """
+    if rx <= 0 or ry <= 0:
+        return False, False
+    pts = [((x - cx) / rx, (y - cy) / ry) for x, y in poly]
+    if all(px * px + py * py <= 1.0 for px, py in pts):
+        return True, True
+    if _point_in_poly((0.0, 0.0), pts):
+        return True, False
+    for i in range(len(pts)):
+        ax, ay = pts[i]
+        bx, by = pts[(i + 1) % len(pts)]
+        if _pt_seg_dist(0.0, 0.0, ax, ay, bx, by) <= 1.0:
+            return True, False
+    return False, False
+
+
 def _svg_filled_shapes(svg, viewbox):
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 도형은 화면에 없다
     vx, vy, vw, vh = viewbox
     shapes = []
 
@@ -490,7 +1111,7 @@ def _svg_filled_shapes(svg, viewbox):
                 continue
             # ★ 시간율의 점(`class='rate-dot'`)은 **글자의 일부**이지 도형이 아니다
             #   (열린 날 2026-08-12). 삽화에서도 뷰어처럼 점을 그리기로 하자마자,
-            #   그 점이 자기가 얹힌 글자에 대해 [사용자 발화 인용 생략] 을 6건 냈다.
+            #   그 점이 자기가 얹힌 글자에 대해 *[발화 생략]* 을 6건 냈다.
             #   `<g class='frac'>` 의 분수선이 자기 분자·분모에게 '선'이 아닌 것과 같은 자리다 —
             #   **태깅이 없으면 정상 조판이 전부 위반으로 신고된다.**
             if "rate-dot" in _attr(a, "class", ""):
@@ -552,9 +1173,31 @@ def _numeric_unit_labels(texts):
     return [t["s"] for t in texts if re.search(pattern, t["s"])]
 
 
+# ── 공용 등축 프리미티브 ────────────────────────────────────────────────────────────
+#
+# **왜 도구인가.** `docs/삽화-규격.md` 「3D(등축투영)를 쓰는 조건」이 *[발화 생략]* 라고 이미 적어 뒀는데,
+# **그 프리미티브가 없었다.** `iso_cuboid`·`iso_ellipse` 는 2026-08 에 이름만 생기고
+# (열역학 `figure-spec-4.workorder.md`) 아무도 안 불렀다 — 그 삽화조차 좌표를 박아 넣었다.
+# 부활시킨 자리는 3D 하한 배치(2026-09-07, 신호 3개짜리 8건)다.
+#
+# ★ **투영은 캐비닛(cabinet)이다 — 앞면이 찌그러지지 않는다.** 이 리포의 3D 조건은 셋 다
+#   «단면»에 걸려 있어(단면적 A · 부피 변화 · 유동+단면), **단면이 참모양으로 보이는 것**이
+#   진짜 등축(세 축 모두 기울이기)보다 읽기 쉽다. 원단면은 원으로, 사각단면은 직사각형으로
+#   그려지고 깊이만 오른쪽 위로 물러난다.
+# ★ 깊이의 기울기 `0.58` 은 **고른 값**이다 — tan30° = 0.577 에 맞춘 값이고, 이 리포의 첫
+#   등축 삽화(열역학 `fig-mass-flow-column`)가 쓴 값과 같다. 새 값을 고르면 옛 삽화와
+#   갈라진다(갈라짐이 이 부류의 재발 원인이다).
+ISO_DEPTH_RISE = 0.58            # 깊이 1 만큼 물러날 때 화면에서 올라가는 양 (tan30°)
+
+
+def iso_depth_offset(depth):
+    """깊이 → 화면 변위 (dx, dy). 순수 함수 — 자와 생성기가 같은 값을 쓴다."""
+    return (depth, -depth * ISO_DEPTH_RISE)
+
+
 def iso_cuboid(x, y, width, depth, height):
-    """Reusable isometric cuboid faces (top, front, side) as SVG path data."""
-    dx, dy = depth, -depth * 0.58
+    """직육면체 세 면(top·front·side)의 path data. `(x, y)` 는 앞면 **왼쪽 위**."""
+    dx, dy = iso_depth_offset(depth)
     top = f"M{x} {y} L{x + width} {y} L{x + width + dx} {y + dy} L{x + dx} {y + dy} Z"
     front = f"M{x} {y} L{x + width} {y} L{x + width} {y + height} L{x} {y + height} Z"
     side = (f"M{x + width} {y} L{x + width + dx} {y + dy} "
@@ -563,8 +1206,127 @@ def iso_cuboid(x, y, width, depth, height):
 
 
 def iso_ellipse(cx, cy, rx, ry):
-    """Reusable SVG ellipse attributes for a section normal to an isometric axis."""
+    """등축 축에 수직인 단면의 타원 속성. 캐비닛 투영에서 앞단면은 `rx == ry`(참원)다."""
     return {"cx": cx, "cy": cy, "rx": rx, "ry": ry}
+
+
+def iso_tube(x, y, r, depth):
+    """깊이 축을 따라 누운 **원통**의 기하. `(x, y)` 는 앞단면 중심.
+
+    돌려주는 것: 앞·뒤 단면 원 `(cx, cy, r)` 과 실루엣 두 줄. 실루엣은 깊이 방향에
+    **수직**으로 반지름만큼 밀어 낸 평행선이다 — 캐비닛 투영에서 원통의 옆선은 언제나
+    이 둘이고, 손으로 잡으면 삽화마다 접점이 어긋난다(그 어긋남이 이 부류의 재발 형태다).
+    """
+    dx, dy = iso_depth_offset(depth)
+    length = math.hypot(dx, dy) or 1.0
+    nx, ny = -dy / length, dx / length
+    return {"near": (x, y, r), "far": (x + dx, y + dy, r),
+            "axis": (dx, dy),
+            "silhouette": [((x + nx * r, y + ny * r), (x + dx + nx * r, y + dy + ny * r)),
+                           ((x - nx * r, y - ny * r), (x + dx - nx * r, y + dy - ny * r))]}
+
+
+def iso_tube_svg(x, y, r, depth, wall="#cbd5e0", face="#eef1f5",
+                 stroke="#3a4252", stroke_width=2.0, face_stroke=None):
+    """누운 원통 한 벌. **그리는 순서가 규격이다** — 뒤단면 → 몸통 → 앞단면.
+
+    순서를 바꾸면 뒤단면 테두리가 몸통 위로 떠서 «관 속에 원이 하나 더 있는» 그림이 된다
+    (빌드의 가림 검사는 글자만 본다 — 도형끼리는 사람이 본다).
+    `face` 는 앞단면(단면적 A)의 색이다. 벽과 다른 색을 주는 것이 규격이다
+    (`docs/삽화-규격.md` 「색으로 구분한다 — 단면·유체·벽을 무채색으로 겹쳐 그리지 않는다」).
+    """
+    g = iso_tube(x, y, r, depth)
+    (fx, fy, _), (sx, sy) = g["far"], g["silhouette"][0][0]
+    (ex, ey) = g["silhouette"][0][1]
+    (sx2, sy2), (ex2, ey2) = g["silhouette"][1]
+    body = (f"M{_fmt(sx)} {_fmt(sy)} L{_fmt(ex)} {_fmt(ey)} "
+            f"L{_fmt(ex2)} {_fmt(ey2)} L{_fmt(sx2)} {_fmt(sy2)} Z")
+    # ★ 몸통은 **테두리 없이 채우기만** 하고 옆선을 따로 긋는다. 닫힌 path 를 그대로
+    #   그으면 뒤단면 자리에 **현(弦)이 한 줄 남아** 「관 끝에 띠가 하나 둘린」 그림이 된다
+    #   (2026-09-07 첫 실사용 렌더에서 눈으로 잡았다 — 자는 이것을 못 본다).
+    #   같은 이유로 뒤단면 원은 몸통보다 **먼저** 그린다: 그 원의 앞쪽 절반 테두리를
+    #   몸통 채우기가 덮어 주므로 남는 것은 끝머리 반원뿐이다.
+    return ("<g class='iso-tube'>"
+            f"<circle cx='{_fmt(fx)}' cy='{_fmt(fy)}' r='{_fmt(r)}' fill='{wall}' "
+            f"stroke='{stroke}' stroke-width='{_fmt(stroke_width)}'/>"
+            f"<path d='{body}' fill='{wall}' stroke='none'/>"
+            f"<line x1='{_fmt(sx)}' y1='{_fmt(sy)}' x2='{_fmt(ex)}' y2='{_fmt(ey)}' "
+            f"stroke='{stroke}' stroke-width='{_fmt(stroke_width)}'/>"
+            f"<line x1='{_fmt(sx2)}' y1='{_fmt(sy2)}' x2='{_fmt(ex2)}' y2='{_fmt(ey2)}' "
+            f"stroke='{stroke}' stroke-width='{_fmt(stroke_width)}'/>"
+            f"<circle cx='{_fmt(x)}' cy='{_fmt(y)}' r='{_fmt(r)}' fill='{face}' "
+            f"stroke='{face_stroke or stroke}' stroke-width='{_fmt(stroke_width)}'/>"
+            "</g>")
+
+
+# ★ 축이 **화면 안에 누운** 관 — 갈래관·분기·노즐처럼 방향이 여럿인 배관에 쓴다.
+#   `iso_tube` 는 축이 깊이 방향 하나뿐이라 Y 분기를 못 그린다.
+# ★ 단면의 납작한 정도는 `ISO_DEPTH_RISE` 를 **그대로 다시 쓴다** — 참등축에서 주평면 안의
+#   원은 단축/장축 = tan30° = 0.577 인 타원으로 투영되고, 깊이 기울기와 같은 수다.
+#   상수를 따로 고르면 같은 그림 안에서 두 규칙이 갈린다.
+ISO_SECTION_SQUASH = ISO_DEPTH_RISE
+
+
+def iso_pipe(x1, y1, x2, y2, r):
+    """양 끝이 `(x1,y1)`·`(x2,y2)` 인 관의 기하. 단면은 축에 수직인 **타원**이다.
+
+    돌려주는 것: 실루엣 두 줄 · 양 끝 단면의 `(cx, cy, rx, ry, deg)`.
+    `deg` 는 타원을 축 방향으로 돌리는 각이다(장축 = 축에 수직인 지름 `r`).
+    """
+    vx, vy = x2 - x1, y2 - y1
+    length = math.hypot(vx, vy) or 1.0
+    ux, uy = vx / length, vy / length
+    nx, ny = -uy, ux
+    deg = math.degrees(math.atan2(vy, vx))
+    return {"axis": (ux, uy), "deg": deg,
+            "near": (x1, y1, r * ISO_SECTION_SQUASH, r, deg),
+            "far": (x2, y2, r * ISO_SECTION_SQUASH, r, deg),
+            "silhouette": [((x1 + nx * r, y1 + ny * r), (x2 + nx * r, y2 + ny * r)),
+                           ((x1 - nx * r, y1 - ny * r), (x2 - nx * r, y2 - ny * r))]}
+
+
+def _iso_cap(cap, fill, stroke, sw):
+    cx, cy, rx, ry, deg = cap
+    return (f"<ellipse cx='{_fmt(cx)}' cy='{_fmt(cy)}' rx='{_fmt(rx)}' ry='{_fmt(ry)}' "
+            f"transform='rotate({_fmt(deg)} {_fmt(cx)} {_fmt(cy)})' fill='{fill}' "
+            f"stroke='{stroke}' stroke-width='{_fmt(sw)}'/>")
+
+
+def iso_pipe_svg(x1, y1, x2, y2, r, wall="#cbd5e0", face="#eef1f5", stroke="#3a4252",
+                 stroke_width=2.0, near_cap=True, far_cap=True, far_fill=None):
+    """누운 관 한 벌. 순서는 `iso_tube` 와 같다 — 먼 단면 → 몸통 → 옆선 → 가까운 단면.
+
+    `near_cap`·`far_cap` 을 끄면 그쪽 끝이 **열린 채**로 다른 관에 이어진다(분기·합류).
+    끈 쪽에는 테두리가 안 남으므로 이어 붙인 자리가 이음매 없이 보인다.
+    """
+    g = iso_pipe(x1, y1, x2, y2, r)
+    (ax, ay), (bx, by) = g["silhouette"][0]
+    (cx2, cy2), (dx2, dy2) = g["silhouette"][1]
+    body = (f"M{_fmt(ax)} {_fmt(ay)} L{_fmt(bx)} {_fmt(by)} "
+            f"L{_fmt(dx2)} {_fmt(dy2)} L{_fmt(cx2)} {_fmt(cy2)} Z")
+    out = ["<g class='iso-pipe'>"]
+    if far_cap:
+        out.append(_iso_cap(g["far"], far_fill or wall, stroke, stroke_width))
+    out.append(f"<path d='{body}' fill='{wall}' stroke='none'/>")
+    out.append(f"<line x1='{_fmt(ax)}' y1='{_fmt(ay)}' x2='{_fmt(bx)}' y2='{_fmt(by)}' "
+               f"stroke='{stroke}' stroke-width='{_fmt(stroke_width)}'/>")
+    out.append(f"<line x1='{_fmt(cx2)}' y1='{_fmt(cy2)}' x2='{_fmt(dx2)}' y2='{_fmt(dy2)}' "
+               f"stroke='{stroke}' stroke-width='{_fmt(stroke_width)}'/>")
+    if near_cap:
+        out.append(_iso_cap(g["near"], face, stroke, stroke_width))
+    out.append("</g>")
+    return "".join(out)
+
+
+def iso_cuboid_svg(x, y, width, depth, height, front="#eef1f5", top="#dbe3ea",
+                   side="#c7d2dc", stroke="#3a4252", stroke_width=2.0):
+    """직육면체 한 벌. 순서는 top → side → front (앞면이 마지막에 덮는다)."""
+    f = iso_cuboid(x, y, width, depth, height)
+    return ("<g class='iso-box'>"
+            + "".join(f"<path d='{f[k]}' fill='{c}' stroke='{stroke}' "
+                      f"stroke-width='{_fmt(stroke_width)}' stroke-linejoin='round'/>"
+                      for k, c in (("top", top), ("side", side), ("front", front)))
+            + "</g>")
 
 
 # ★ 삽화 안의 분수를 조판하는 **공용 프리미티브** (신설 2026-07-30 — 검사 C9 와 한 쌍).
@@ -585,7 +1347,7 @@ def iso_ellipse(cx, cy, rx, ry):
 #     C7(치수선 태깅 누락)에는 걸리지 않는다. 30px 미만이면 치수 본선 후보도 아니다.
 # ★★ 분자·분모 baseline 도 **산문 렌더러 실측값**이다 (2026-08-02, 사용자 3회차 지적).
 #
-#   사용자: [사용자 발화 인용 생략]
+#   사용자: *[발화 생략]*
 #
 #   실측(브라우저 probe, 산문 `.frac` fs 15.5) — 분자 baseline 이 분수선 위로 **0.407em**,
 #   분모 baseline 이 아래로 **1.065em**. 옛 삽화 값은 0.36 / 0.90 이었고, 이게 **눈에 보이는
@@ -607,10 +1369,10 @@ def iso_ellipse(cx, cy, rx, ry):
 FRACTION_NUM_BASE = 0.386                        # 분자 baseline 이 축 위로 (em)
 FRACTION_DEN_BASE = 0.386 + 0.71                 # = 1.096. 숫자 높이 0.71 만큼 더 내려야 틈이 같다
 # ★★ 아래 세 값은 **산문 렌더러(`.frac`·`.frac-num`)를 브라우저에서 실측한 값**이다
-#     (열린 날 2026-08-02, 사용자: [사용자 발화 인용 생략]).
+#     (열린 날 2026-08-02, 사용자: *[발화 생략]*).
 #
 #   ★ **맞춰야 할 자가 옆에 있었다.** 2026-08-01 에는 `RELATION_GAP = 0.28`(TeX thickmuskip)을
-#     근거로 여백을 **넓혔는데**, 정작 사용자가 [사용자 발화 인용 생략] 고 한 것은 TeX 이 아니라
+#     근거로 여백을 **넓혔는데**, 정작 사용자가 *[발화 생략]* 고 한 것은 TeX 이 아니라
 #     **이 뷰어의 산문 렌더러**였다. 같은 화면에 나란히 보이는 그것을 재면 됐다.
 #
 #   ★ 그리고 방향이 반대였다. 실측(fs 15.5) 대조 —
@@ -618,17 +1380,17 @@ FRACTION_DEN_BASE = 0.386 + 0.71                 # = 1.096. 숫자 높이 0.71 �
 #       분수선 굵기      산문 **0.065em** vs 삽화 0.09em  (1.38배)
 #       분수 양옆 여백    산문 **0.129em** vs 삽화 0.28em  (2.2배)
 #     즉 `=` 에서 분자 글자까지 **산문 0.32em vs 삽화 0.58em** — 삽화가 거의 두 배였다.
-#     인박스 R-8 은 [사용자 발화 인용 생략] 로 읽었지만 답답함의 원인은 **폰트 크기**(실효 15.9px)였고,
+#     인박스 R-8 은 *[발화 생략]* 로 읽었지만 답답함의 원인은 **폰트 크기**(실효 15.9px)였고,
 #     그건 따로 고쳤다. 여백은 건드리지 말았어야 했다.
 #
 #   ★ 관계/이항 구분도 없앴다 — **산문 렌더러에는 그 구분이 없다**(`margin:0 2px` 하나뿐).
 #     기준이 산문이면 규칙도 산문의 것이어야 한다. TeX 규칙을 절반만 흉내 내면 둘 다 아니게 된다.
 FRACTION_SIDE_PAD = 0.194    # 분수선이 글자보다 좌우로 더 나오는 양 (em) — 산문 실측
 FRACTION_BAR_MIN = 1.0       # 분수선 굵기 하한 (px)
-# ★ 분수선의 세로 위치 — **산문과 같은 자리**로 내렸다 (2026-08-02, 사용자 판정 "삽화를 고쳐라").
+# ★ 분수선의 세로 위치 — **산문과 같은 자리**로 내렸다 (2026-08-02, 사용자 판정 [발화 생략]).
 #
 # ★★ **고쳐 놓고도 어긋나 있었다 — 상수를 「남의 글꼴」로 계산했기 때문이다** (2026-08-07 재측정).
-#   사용자: [사용자 발화 인용 생략] **맞는 지적이었다.**
+#   사용자: *[발화 생략]* **맞는 지적이었다.**
 #
 #   2026-08-02 의 계산은 `=` 잉크가 baseline 위 **0.17~0.52em**(중심 0.345)이라는 값을 썼는데,
 #   그건 **산문이 쓰는 글꼴(Cascadia Code)** 의 값이다. 삽화는 아래 `MATH_FONT` 가 스택을
@@ -641,13 +1403,14 @@ FRACTION_BAR_MIN = 1.0       # 분수선 굵기 하한 (px)
 #   **0.103em 아래**. 새 글꼴의 `=` 잉크는 0.17~0.52em 이므로 이 값이 산문을 그대로 재현한다.
 FRACTION_AXIS = 0.242        # 보통 글자 baseline 에서 수식 중심선까지 (em) — 산문 실측
 # ★ 수식 글꼴 — **산문 수식과 같은 등폭 글꼴을 쓴다** (2026-08-02, 사용자 지적:
-#   [사용자 발화 인용 생략]).
+#   *[발화 생략]*).
 #
-# ★★ **그때 스택을 줄인 것이 이 부류의 뿌리였다** (2026-08-07). 옛 주석은 [사용자 발화 인용 생략] 고 적어 두었는데,
+# ★★ **그때 스택을 줄인 것이 이 부류의 뿌리였다** (2026-08-07). 옛 주석은 *"따옴표가 필요한
+#   이름(`"SF Mono"` 등)은 SVG 속성 안에서 인용 충돌을 만들 수 있어 뺐다"* 고 적어 두었는데,
 #   ⑴ **작은따옴표로 감싼 속성 안의 큰따옴표는 XML 에서 정상**이라 그 걱정은 근거가 없었고
 #   ⑵ 이름을 빼자 **Windows 에서 산문은 Cascadia Code, 삽화는 Consolas** 로 갈렸다.
 #   실측 차이(2026-08-07): advance 0.586 vs 0.550 · `=` 잉크 0.17~0.52 vs 0.14~0.40.
-#   즉 [사용자 발화 인용 생략] 고 선언해 놓고 두 글꼴을 쓰고 있었고, 그 위에서 계산한 상수가
+#   즉 *[발화 생략]* 고 선언해 놓고 두 글꼴을 쓰고 있었고, 그 위에서 계산한 상수가
 #   전부 한쪽 글꼴 기준이 됐다(위 `FRACTION_AXIS` · 아래 `MONO_W`).
 #
 #   ☞ **뷰어 CSS 의 선언을 글자 그대로 옮긴다.** 특정 글꼴 이름을 고르는 것이 아니라
@@ -709,7 +1472,7 @@ def run_width(text, fs, mono=False, cjk_w=None):
 
 # ★★ 유니코드 위첨자(`²`)를 **산문 `<sup>` 과 같은 조판**으로 바꾼다 (열린 날 2026-08-02).
 #
-#   사용자: [사용자 발화 인용 생략] — **맞았다.**
+#   사용자: *[발화 생략]* — **맞았다.**
 #   실측(등폭 글꼴, canvas TextMetrics):
 #       유니코드 `²` 글리프 높이 **0.40em**  vs  산문 `<sup>` 실효 높이 0.65×0.833 = **0.541em**
 #       → 삽화 제곱이 **26% 작다.** `V` 자체는 0.64em 로 같은데 제곱만 작아
@@ -868,7 +1631,7 @@ def svg_math_line(x, y, expr, fs, fill="#2c3a44", weight=None, anchor="middle"):
             before_frac = (i + 1 < len(tokens) and tokens[i + 1][0] == "f"
                            and "<tspan" not in a)
             # ★★ 분수 앞뒤의 **공백을 먹지 않는다** (열린 날 2026-08-02, 사용자 지적:
-            #   [사용자 발화 인용 생략]).
+            #   *[발화 생략]*).
             #
             #   SVG 는 글자 앞뒤 공백을 지우므로 공백 폭만큼 x 를 밀어 줘야 하는데,
             #   ⑴ 분수 **뒤** 조각은 `lead = 0.0` 으로 **앞 공백을 통째로 버렸고**
@@ -914,7 +1677,7 @@ def svg_math_line(x, y, expr, fs, fill="#2c3a44", weight=None, anchor="middle"):
 
 # ★★ 삽화 수식이 **지금 규격과 어긋난 자리** (열린 날 2026-08-02, 동역학 ch12).
 #
-#   사용자: [사용자 발화 인용 생략] — 같은 부류가 다른 과목에서 그대로 나왔다.
+#   사용자: *[발화 생략]* — 같은 부류가 다른 과목에서 그대로 나왔다.
 #
 #   **원인은 빠뜨림이 아니라 「생성기만 고치고 자를 안 만든 것」이다.** 2026-08-02 에 위
 #   `svg_fraction`·`svg_math_line` 이 글꼴(등폭)·분수선 굵기·중심선·위첨자 조판을 산문에 맞춰
@@ -962,7 +1725,7 @@ def _standalone_texts(svg):
 
 # ★★ **낱개 라벨은 삽화 자신의 글꼴을 따른다** — 자를 좁힌 날 2026-08-05 (부류31, 열역학 ch02).
 #
-#   사용자: [사용자 발화 인용 생략] → **맞는 지적이라 되돌렸다.**
+#   사용자: *[발화 생략]* → **맞는 지적이라 되돌렸다.**
 #
 #   **무엇이 틀렸나.** 이 자리의 옛 자는 *관계 기호(`=≈≠≤≥∫∑→`)가 든 모든 `<text>`* 를 '식'으로
 #   보고 산문 수식 글꼴(등폭)로 올리라고 신고했다(열역학 전 챕터 89건). 그런데 R-16 을 연
@@ -1090,7 +1853,7 @@ def figure_math_typesetting_hits(svg):
 
 # ★★ **간격이 묶음을 만든다** — 색으로 묶어 놓고 간격이 그것을 부정하면 결함 (열린 날 2026-08-02).
 #
-#   사용자(동역학 ch12 `fig-sva-chain`): [사용자 발화 인용 생략]
+#   사용자(동역학 ch12 `fig-sva-chain`): *[발화 생략]*
 #
 #   실측(그 삽화): 같은 색 쌍 **7.7px** · 색이 바뀌는 쌍 **6.7px** — **거꾸로였다.**
 #   독자는 색으로 한 묶음을 보고 간격으로 다른 묶음을 본다. 두 신호가 어긋나면 위계가 안 읽힌다.
@@ -1102,14 +1865,14 @@ def figure_math_typesetting_hits(svg):
 #
 # ★ 판정을 **절대값이 아니라 비교**로 한다. "0.5em/1.5em을 지켰는가"로 물으면 삽화마다 폰트와
 #   여유가 달라 오탐이 쏟아진다(라벨 여백 자가 391건 중 91건 오탐이었던 선례). 물어야 할 것은
-#   [사용자 발화 인용 생략] 하나뿐이고, 그건 그 삽화 안에서 자족적으로 판정된다.
+#   *[발화 생략]* 하나뿐이고, 그건 그 삽화 안에서 자족적으로 판정된다.
 GROUPING_MIN_RATIO = 1.5     # 색 경계의 간격은 같은 색 이웃 간격의 이 배 이상이어야 한다
 GROUPING_X_OVERLAP = 0.35    # 가로로 이만큼 겹쳐야 '같은 세로 줄기'로 본다
 GROUPING_X_TOL = 2.0         # 기준 x 가 이보다 어긋나면 같은 축에 정렬된 블록이 아니다
 GROUPING_MAX_GAP_EM = 3.0    # 이보다 멀면 이웃이 아니다(다른 도해)
 # ★★ **눈금선이 자리를 정한 라벨은 이 자의 대상이 아니다** (좁힌 날 2026-08-02, ch01 실측).
 #
-#   이 검사의 전제는 [사용자 발화 인용 생략] 이다. 그런데 눈금축의 라벨은 다르다 —
+#   이 검사의 전제는 *[발화 생략]* 이다. 그런데 눈금축의 라벨은 다르다 —
 #   `Pabs = ?` 가 `Patm = 88 kPa` 아래 몇 px 에 있는지는 **압력값이 정하는 것**이고
 #   조판으로 바꿀 수 있는 값이 아니다. 옮기면 그림이 물리적으로 틀려진다.
 #
@@ -1183,10 +1946,16 @@ def _text_stacks(svg):
 
     눈금선이 높이를 정한 라벨도 뺀다 — 위 `_tick_pinned` 주석이 정본.
     서로 다른 칸에 든 글자는 잇지 않는다 — 위 `_container_of` 주석이 정본.
+
+    ★ **돌아간 글자(`rot`)도 뺀다** (2026-09-08, 회전 글자를 검사에 들이면서). 이 자가 묻는
+      것은 «캡션 블록의 줄들이 같은 축에 정렬돼 한 리듬으로 서 있나» 인데, 세로로 세운 축
+      제목 같은 것은 **블록의 줄이 아니라 도형에 붙은 이름**이다. 넣으면 그 자가 시끄러워질
+      뿐이고, 그 글자를 정말 봐야 하는 자리(충돌·여백)는 상자로 이미 본다.
     """
     frac = [(s, e) for s, e, _b in _tagged_group_spans(svg, ("frac",))]
     items = [it for it in _svg_texts(svg)
-             if it["s"].strip() and not any(s <= it["pos"] < e for s, e in frac)]
+             if it["s"].strip() and not it.get("rot")
+             and not any(s <= it["pos"] < e for s, e in frac)]
     for it in items:
         it["box"] = _text_bbox(it)
     ticks = _horizontal_ticks(svg)
@@ -1213,7 +1982,7 @@ def _text_stacks(svg):
                 continue
             # ★ **둘 다 칸 안에 있고 칸이 다를 때만** 끊는다 (조인 날 2026-08-02, 양성 대조 실패).
             #   처음에는 `a["cell"] != b["cell"]` 로 끊었는데, 그러면 **칸 밖의 패널 제목**과
-            #   칸 안의 첫 줄도 남남이 되어 [사용자 발화 인용 생략] 라는 정상 신고까지
+            #   칸 안의 첫 줄도 남남이 되어 *[발화 생략]* 라는 정상 신고까지
             #   함께 꺼졌다. 좁히려던 것은 **칸을 건너뛴 이웃**이지 칸의 안팎이 아니다.
             if a["cell"] is not None and b["cell"] is not None and a["cell"] != b["cell"]:
                 continue                                   # 칸 경계가 곧 블록 경계다
@@ -1274,11 +2043,11 @@ def figure_text_grouping_hits(svg):
 
 # ★ C31. **짝을 이루는 라벨이 자기 도형에서 같은 거리에 놓였는가** (열린 날 2026-08-05, R-24·R-26).
 #
-# 사용자(`fig-02-q02`): [사용자 발화 인용 생략] · (`fig-02-q03`) [사용자 발화 인용 생략]
+# 사용자(`fig-02-q02`): *[발화 생략]* · (`fig-02-q03`) *[발화 생략]*
 #
 # ★ **왜 기존 자가 통과시켰나 — 자가 「하한」만 본다.** 라벨 여백 자(F1)는 *1.0em 이상인가*만
 #   묻는다. 그래서 실측 2.53em 과 1.43em 이 **둘 다 통과**했다. 그런데 AGENTS 「여백·라벨 규격」이
-#   요구하는 것은 절대값이 아니라 **비교**다 — [사용자 발화 인용 생략] **물어본 적이 없는 것**이지 빠뜨린 것이 아니다.
+#   요구하는 것은 절대값이 아니라 **비교**다 — *[발화 생략]* **물어본 적이 없는 것**이지 빠뜨린 것이 아니다.
 #
 # ★ 판정을 **비율**로 하는 것은 C21(색 묶음)에서 이미 검증된 형태다. 절대값으로 물으면
 #   삽화마다 폰트·여유가 달라 오탐이 쏟아진다(라벨 여백 자 391건 중 91건 오탐 선례).
@@ -1364,7 +2133,7 @@ def figure_label_pair_gap_hits(svg):
 
 # ★ C28. **칸 안 글자 덩어리가 칸의 세로 중앙인가** (열린 날 2026-08-04, R-74).
 #
-# 사용자 지적(2장 4절 `fig-name-at-boundary`): [사용자 발화 인용 생략]
+# 사용자 지적(2장 4절 `fig-name-at-boundary`): *[발화 생략]*
 # 실측 — `계`(fs 12.5, baseline 82.25) + `U`(fs 14.5, baseline 107.02) 두 줄의 덩어리 중심이
 # **91.5** 인데 사각형(`y=60~160`)의 중심은 **110** 이었다. **18.5 위로 치우쳐 있었다.**
 #
@@ -1390,7 +2159,7 @@ def figure_label_pair_gap_hits(svg):
 #   **비교 대상이 아닌 것을 재지 않는 것이 이 자의 정확도를 만든다.**
 BOX_INNER_MARGIN = 1.5           # 칸 테두리와 겹치는 선은 '안에 든 그림'이 아니다
 # ★★★ **0.5 → 0.3, 그리고 재는 상자를 「em 상자」에서 「잉크」로 바꿨다** (2026-08-13, 같은 지적 4회차).
-#   사용자: [사용자 발화 인용 생략]
+#   사용자: *[발화 생략]*
 #   실측(ch01 `fig-ch01-q05-situation`): 칸 y=58~146(중심 102) · `탱크` fs 13 baseline 101.
 #   ⑴ **자가 다른 것을 재고 있었다.** `_text_bbox` 는 겹침 판정용 **em 상자**(위 0.78em ·
 #      아래 0.24em)라 중심이 baseline − 0.27em 이다. 그런데 이 리포가 *글자를 선에 맞출 때* 쓰는
@@ -1406,7 +2175,7 @@ BOX_CENTER_TOL_EM = 0.3          # 덩어리 중심과 칸 중심의 허용 어�
 BOX_INK_ASCENT = 0.73            # 잉크 상자 — 규약(baseline = 중심 + 0.35em)과 같은 중심을 준다
 BOX_INK_DESCENT = 0.03
 # ★★ 칸 높이 / 글자 덩어리 높이 — 넘으면 '패널'로 보고 묻지 않는다.
-#   **3 → 10 (2026-08-05, 사용자 재지적:** [사용자 발화 인용 생략]). 실측 `fig-in-out-subscripts`: 칸 90px 에 `계` 한 줄(12px)뿐이라
+#   **3 → 10 (2026-08-05, 사용자 재지적:** *[발화 생략]*). 실측 `fig-in-out-subscripts`: 칸 90px 에 `계` 한 줄(12px)뿐이라
 #   **높이비 7.5** 로 옛 문턱 3 을 훌쩍 넘어 '패널'로 면제됐다 — 그런데 그건 계 상자이지
 #   패널이 아니었고 글자가 **28px 위로** 떠 있었다. 같은 지적 2회차이므로 문턱을 데이터로 다시 잡는다.
 #   ★ 두 극을 재서 그 사이로 정했다: 진짜 계 상자 **7.35** vs 진짜 패널 제목 **24.7**
@@ -1418,12 +2187,12 @@ BOX_CENTER_MAX_RATIO = 10.0
 
 # ★ C29. **축류팬은 조각 하나로만 그린다** (열린 날 2026-08-04, 인박스 R-39).
 #
-# 사용자: [사용자 발화 인용 생략]
+# 사용자: *[발화 생략]*
 #
 # ★ 원인은 **팬을 그릴 때마다 좌표를 새로 잡은 것**이다. 실측 — `fig-02-p05` 는 곡선 날개에
 #   허브/링 0.238, `fig-02-q13` 은 **삼각형 날개**에 0.21 이었다. 같은 사물인데 정본이 없었다.
 #   AGENTS 가 3D 프리미티브에 대해 적어 둔 진단과 같다:
-#   [사용자 발화 인용 생략]
+#   *[발화 생략]*
 #
 # ★ 형상의 정본은 R-17 을 닫으며 다시 정의한 `fig-02-p05` 다. 세 가지가 규격이다 —
 #   ⑴ **뿌리는 허브 원 안쪽의 현**(손 좌표로 찍으면 허브 반지름과 무관해져 한쪽은 묻히고
@@ -1526,7 +2295,7 @@ def symbol_below_caption_rows(svg):
     """한 묶음 안에서 **굵은 글자(기호·제목)가 안 굵은 글자 아래**에 놓인 자리. 순수 함수.
 
     열린 날 2026-08-04 — 사용자(`fig-name-at-boundary`):
-    [사용자 발화 인용 생략]
+    *[발화 생략]*
 
     ★ **판정이 아니라 후보다.** `이름 위 / 기호 아래` 가 옳은 자리도 있다(흐름도의 단계 이름처럼).
       그래서 자는 세기만 하고 사람이 본다 — R-24(짝 라벨 비교 검사)가 열려 있는 동안의 눈이다.
@@ -1597,7 +2366,7 @@ def figure_box_centering(svg, hide_reveal=False):
     규격을 데이터로 정할 수 있다. 판정만 내보내면 '왜 그 문턱인가'를 아무도 되짚을 수 없다.
 
     ★★ `hide_reveal` — **독자가 처음 보는 상태**로 잰다 (열린 날 2026-08-04, 사용자 재지적:
-      [사용자 발화 인용 생략]). 문풀 삽화의 조건 수치는 `data-reveal` 이라
+      *[발화 생략]*). 문풀 삽화의 조건 수치는 `data-reveal` 이라
       뷰어가 `visibility:hidden` 으로 가려 두고 버튼을 눌러야 나온다. 정적 SVG 만 재면
       **화면에 없는 글자까지 덩어리에 넣어** 중앙을 계산하므로, 기본 화면에서는 오히려 치우친다.
       실측 사고: `fig-p08-bourdon-stack` 을 두 줄 기준으로 맞췄더니 기본 화면의 `탱크` 한 줄이
@@ -1676,8 +2445,8 @@ def figure_box_centering_x(svg, hide_reveal=False):
     """칸별 **가로** 어긋남 — (칸, 덩어리 폭, 왼 여백, 오른 여백, 어긋남, 최대 fs, 미리보기).
 
     ★★ **왜 이 자가 생겼나 (2026-08-13, 사용자 재지적).** C28 이 **세로만** 보고 있었다 —
-      신고 문구가 전부 [사용자 발화 인용 생략] 다. 그래서 `기체`·`진공` 처럼 가로로
-      치우친 글자는 **아무도 안 봤고**, 같은 지적이 되풀이됐다. 사용자: [사용자 발화 인용 생략] → **또 빠뜨린 것이 아니라 자가 반쪽이었다.**
+      신고 문구가 전부 *[발화 생략]* 다. 그래서 `기체`·`진공` 처럼 가로로
+      치우친 글자는 **아무도 안 봤고**, 같은 지적이 되풀이됐다. 사용자: *[발화 생략]* → **또 빠뜨린 것이 아니라 자가 반쪽이었다.**
     ★ 세로는 **잉크**로 재고(어센트·디센트가 글꼴마다 다르다) 가로는 **글자 상자**로 잰다 —
       가로에서는 상자 폭이 곧 잉크 폭에 가깝다.
     ★ **줄마다 x 앵커가 다른 칸은 대상이 아니다** — 왼쪽 정렬해 둔 목록을 가운데로 끌면
@@ -1762,13 +2531,13 @@ def figure_box_center_hits(svg):
 
 # ★ 삽화 글자 크기는 절대 px이 아니라 **화면 실효 크기**로 잰다 (열린 날 2026-07-28).
 #
-# 사용자 지적 두 개가 상반돼 보였다 — [사용자 발화 인용 생략](문풀)과
-# [사용자 발화 인용 생략](연습문제). **둘 다 맞았다.**
+# 사용자 지적 두 개가 상반돼 보였다 — *[발화 생략]*(문풀)과
+# *[발화 생략]*(연습문제). **둘 다 맞았다.**
 #
 # 뷰어가 `.diagram-box svg{width:100%}` 로 SVG를 컨테이너 폭에 맞춰 스케일한다. 그러므로
 # 화면에서 보이는 크기는 `font-size x (박스폭 / viewBox폭)` 이고, **SVG 안의 절대 px은
 # 화면 크기와 아무 관계가 없다.** 예전 검사(`12px 미만` error · `16px 초과` warn)는
-# 잴 수 없는 것을 재고 있었고, 그래서 [사용자 발화 인용 생략] 와 [사용자 발화 인용 생략] 가 동시에 참일 수 있었다.
+# 잴 수 없는 것을 재고 있었고, 그래서 *[발화 생략]* 와 *[발화 생략]* 가 동시에 참일 수 있었다.
 #
 # 실측(2026-07-28): 문풀 `fig-01-p01` 20.4px vs 연습문제 `fig-ch01-q09` 9.97px —
 # 둘 다 12~16px 범위 안이라 예전 검사는 **한 건도 잡지 못했다**. 게다가 연습문제 박스만
@@ -1781,7 +2550,7 @@ DIMENSION_LINE_MAX_WIDTH = 1.5   # 치수선·치수보조선은 형상선(2~2.5
 
 # ★ 파선이 허용되는 **역할** 목록 (신설 2026-07-30, ch02 이관 중 확장).
 #
-# 규칙의 요지는 [사용자 발화 인용 생략] 이지 [사용자 발화 인용 생략] 가 아니다.
+# 규칙의 요지는 *[발화 생략]* 이지 *[발화 생략]* 가 아니다.
 # 처음에는 `dim`·`hidden-edge` 둘만 뒀는데, ch02 를 훑어 보니 **치수도 숨은선도 아닌**
 # 정당한 파선이 세 종류 더 있었다 — 이걸 전부 실선으로 바꾸면 구분선이 진짜 외곽선처럼 보인다.
 # 어휘가 모자라서 데이터를 틀리게 고칠 뻔한 것이므로, 완화가 아니라 **어휘를 채우는 것**이다.
@@ -1811,15 +2580,15 @@ FIGURE_TEXT_MAX_PX = 19.0
 
 # ★ 화살표 크기 규격 — **화면 실효 px** (신설 2026-08-02). 근거는 전 챕터 실측이다:
 #   ch01 화살촉 137개의 **중앙값 12.8**, 사용자가 좋다고 본 `fig-abs-gage-vacuum-bars` **13.6**,
-#   [사용자 발화 인용 생략] 이라 지적한 `fig-state-postulate-plane` **19.1**.
+#   *[발화 생략]* 이라 지적한 `fig-state-postulate-plane` **19.1**.
 #   → 중심 13.5, 허용 11~16. 19.1·20.4 는 걸리고 13.6 은 통과한다.
 # 폭은 길이에 비례해야 삼각형 인상이 일정하다(실측 대부분 폭 = 길이).
-# 꼬리는 사용자 지적 [사용자 발화 인용 생략] — 실측 `fig-adiabatic-vs-isothermal` 6.7px 로
+# 꼬리는 사용자 지적 *[발화 생략]* — 실측 `fig-adiabatic-vs-isothermal` 6.7px 로
 #   **화살촉(13.3)의 절반**이었다. 머리보다 짧은 꼬리는 화살표로 안 읽힌다 → 1.5배를 하한으로.
 # ★ 하한은 **11 → 8 로 낮췄다** (같은 날, 첫 적용에서 곧바로 드러났다).
 #   11 로 잡으니 `fig-closed-open-isolated` 의 화살촉 12개가 8.4 → 13.5 로 커졌고,
 #   그 삽화는 **✗ 표식을 화살표 위에 얹는 설계**라 커진 머리와 겹쳐 빌드가 깨졌다.
-#   사용자가 지적한 것은 [사용자 발화 인용 생략](19.1)와 [사용자 발화 인용 생략] 였지 저 삽화가 아니다.
+#   사용자가 지적한 것은 *[발화 생략]*(19.1)와 *[발화 생략]* 였지 저 삽화가 아니다.
 #   → **상한과 꼬리 비율이 이 규격의 본체**이고, 하한은 '보이지도 않는 머리'만 거른다.
 #   (AGENTS 「검사가 결함을 유도하던 자리」 — 지적받지 않은 삽화를 흔드는 규격은 규격이 아니다.)
 ARROW_HEAD_MIN_PX = 8.0
@@ -1830,8 +2599,8 @@ ARROW_WIDTH_RATIO_MAX = 1.3
 # ★★★ **치수 화살촉은 방향 화살촉보다 가늘다 — 폭 비는 아래 상수 옆 주석이 정본이다.**
 #   대상은 `class='dim'`·`id='dim-…'` 로 **저자가 선언한** 그룹 안의 화살촉뿐이다 —
 #   이름으로 추측하지 않는다(태깅이 없으면 규격이 안 걸리는 것은 치수선 자체와 같은 규약).
-#   왜 갈랐나: 치수 화살촉은 [사용자 발화 인용 생략] 를 가리키는 표식이라 잉크가 적을수록 좋고,
-#   방향 화살촉은 [사용자 발화 인용 생략] 라는 뜻을 실어야 해서 면적이 필요하다. 한 밴드로 묶으면
+#   왜 갈랐나: 치수 화살촉은 *[발화 생략]* 를 가리키는 표식이라 잉크가 적을수록 좋고,
+#   방향 화살촉은 *[발화 생략]* 라는 뜻을 실어야 해서 면적이 필요하다. 한 밴드로 묶으면
 #   둘 중 하나는 반드시 어색해진다 — 그게 사용자가 두 번 짚은 그 느낌이었다.
 # 치수 라벨과 자기 치수선 사이의 **글자 상자** 하한. 일반 라벨(0.5em)과 다른 이유는
 # 아래 F1 주석이 정본이다 — 제도에서 치수 문자는 치수선에 바짝 붙는다.
@@ -1839,9 +2608,15 @@ ARROW_WIDTH_RATIO_MAX = 1.3
 #   아래로 내려간다. `ℓ`·숫자처럼 디센더가 없는 글자는 상자 0.10em 이 **잉크로는 0.3em** 이다.
 #   (잉크로 재는 자로 바꾸는 것이 옳지만 그건 F1 전체를 손대는 일이라 따로 판정받는다.)
 DIM_LABEL_GAP_MIN_EM = 0.10
+# 치수 라벨이 **세로 선 옆**에 붙을 때의 하한(글자 상자 기준).
+# 문턱 근거(고른 값): 위 0.10em 은 상자가 디센더만큼 잉크보다 내려가 **잉크로 0.3em** 이 되는
+#   세로 간격이다. 옆 간격은 상자 = 잉크라 0.10em 이 그대로 1.7px 로 보인다(2026-09-14 기계공작법
+#   ch10 `fig-10-cooling-curves` 「응고 범위」, 사용자 *[발화 생략]*).
+#   그래서 옆 간격은 가로 라벨이 받는 **잉크 0.3em** 과 같게 둔다.
+DIM_SIDE_LABEL_GAP_MIN_EM = 0.30
 # ★★ 폭 비 — **0.60 으로 정착했다 (2026-08-13, 네 번의 판정을 거쳤다).**
-#   ⑴ 1.00 → 0.80(지적한 자리만) ⑵ [사용자 발화 인용 생략] → 관례 3:1 근거로 **0.35**, 전 챕터
-#   ⑶ [사용자 발화 인용 생략] → [사용자 발화 인용 생략] → 0.80 복구 ⑷ [사용자 발화 인용 생략] → **0.60**
+#   ⑴ 1.00 → 0.80(지적한 자리만) ⑵ *[발화 생략]* → 관례 3:1 근거로 **0.35**, 전 챕터
+#   ⑶ *[발화 생략]* → *[발화 생략]* → 0.80 복구 ⑷ *[발화 생략]* → **0.60**
 #   ★ 0.60 은 관례(0.33)와 원래 값(0.80) 사이에서 **사용자가 화면을 보고 고른 값**이다.
 #   ★★ 값을 근거만 보고 되돌리지 말 것 — ⑵ 가 정확히 그 실패다. 관례는 종이·잉크의 자이고
 #     이 자료는 화면이라, **관례는 출발점이고 판정은 눈이 한다.**
@@ -1851,8 +2626,8 @@ DIM_ARROW_WIDTH_RATIO_TARGET = 0.60
 ARROW_TAIL_MIN_RATIO = 1.5
 
 # ★ 본문 대비 하한 (신설 2026-07-30). 사용자 지적이 두 방향으로 왔다:
-#   2026-07-29 [사용자 발화 인용 생략] → 캡션을 라벨의 0.85배로 일괄 축소
-#   2026-07-30 [사용자 발화 인용 생략]
+#   2026-07-29 *[발화 생략]* → 캡션을 라벨의 0.85배로 일괄 축소
+#   2026-07-30 *[발화 생략]*
 # **두 지적 다 맞다.** 어긋난 것은 위계가 아니라 **바닥**이었다.
 # 실측(2026-07-30, 브라우저 getComputedStyle): 이론 본문 15.5px · 문제 본문 15px.
 # 그런데 삽화 글자 규격의 하한은 13px이라, **삽화 라벨이 본문보다 작아도 규격을 통과**했다.
@@ -1923,11 +2698,11 @@ def text_runs(t):
     `dy`(그 조각을 감싼 tspan 들의 **자기 dy 합**) · `own_dy`(가장 안쪽 tspan 의 dy).
 
     ★ **열린 날 2026-08-13 — 첨자 크기를 아무도 재지 않고 있었다.**
-      사용자: [사용자 발화 인용 생략] 실측이 그대로였다 —
+      사용자: *[발화 생략]* 실측이 그대로였다 —
       `fig-q13-piston-spring-fbd` 는 viewBox 폭 380 이라 화면 배율이 612/380 = 1.61 이고,
       부모 `<text font-size='10'>` 은 실효 16.1px 로 규격(13~19)을 **통과**하는데
       `font-size='78%'` 첨자는 7.8 SVG px → 실효 **12.6px** 로 하한 미만이었다.
-      `check_svg` 는 [사용자 발화 인용 생략] 고
+      `check_svg` 는 *[발화 생략]* 고
       주석에 적어 두고 정말로 부모만 쟀다 — **빠뜨림이 아니라 빠뜨려도 통과되는 구조**다(규칙 7⑷).
       자를 넓혀 첨자도 같은 눈금(화면 실효 px)으로 재게 한다.
 
@@ -1971,14 +2746,14 @@ def text_runs(t):
 #     13.0px        93 / 36     = 본문 하한 그대로
 #
 # ★ 판정 ⓐ — **따로 두어 아끼는 것이 삽화 3개뿐이다.** 12.9 와 13.0 의 차이가 조각 2개·삽화
-#   2개라, [사용자 발화 인용 생략] 는 별도 눈금을 만들 값어치가 없다. 느슨한 쪽(12.09)은
-#   사용자가 [사용자 발화 인용 생략] 고 지적한 `fig-q13-piston-spring-fbd` 의 **12.6px 을 통과시킨다** —
+#   2개라, *[발화 생략]* 는 별도 눈금을 만들 값어치가 없다. 느슨한 쪽(12.09)은
+#   사용자가 *[발화 생략]* 고 지적한 `fig-q13-piston-spring-fbd` 의 **12.6px 을 통과시킨다** —
 #   지적을 재현하지 못하는 하한은 하한이 아니다.
 # ★ 판정 ⓑ — 그래도 **상수는 따로 둔다.** 값이 우연히 가까운 것이지 같은 근거가 아니기 때문이다.
 #   본문 하한 13.0 은 *읽히는 최소 크기*이고, 이 값은 **두 기존 바를 곱해서 나온다**:
 #       본문 바 `FIGURE_TEXT_BODY_PX` 15.5  ×  이 리포가 삽화 첨자에 쓰는 비율 0.83
 #       (`SUPERSCRIPT_RATIO`, 산문 <sup> 실측에서 온 값) = **12.87 → 12.9**
-#   즉 [사용자 발화 인용 생략] 다.
+#   즉 *[발화 생략]* 다.
 #   ★ 상수를 곱셈식으로 **쓰지 않고** 숫자로 박는다 — `SUPERSCRIPT_RATIO` 는 조판용이라
 #     누가 바꾸면 이 자가 조용히 느슨해진다(자를 남의 상수에 매달지 않는다).
 #
@@ -1991,6 +2766,95 @@ def text_runs(t):
 #   (`data/<과목>/index.json` 의 `strictChapters.subtext_scale`)이고, 경고는 `close_report` 가
 #   close 를 막으므로 묻히지 않는다.
 FIGURE_SUBTEXT_MIN_PX = 12.9
+
+# ★ **소문자 밑의 숫자 첨자는 따로 잰다** (사용자 판정 2026-09-11).
+#   σ·τ·x 는 x-height 글자이고 숫자는 대문자 높이라, 같은 0.83 비율이어도 숫자가 커 보인다
+#   (지적: 응고 ch11 `σx1` 의 `1`). 비율과 하한 둘 다 사용자 승인 값이다.
+#   ☐ 윗첨자(dy<0, `m²` 류)는 안 본다 — 판정이 아래첨자에만 내려졌다.
+DIGIT_UNDER_LOWER_RATIO = 0.70              # 승인 2026-09-11 — 밑글자(소문자) 크기의 70%
+FIGURE_SUBTEXT_LOWER_BASE_MIN_PX = 10.5     # 승인 2026-09-11 — 뷰어 산문 `--script-floor` 와 같은 값
+DIGIT_UNDER_LOWER_TOL = 1.03                # 퍼센트를 소수 한 자리로 올려 적을 때의 여유(1% 안쪽) + 여분
+
+
+def script_runs(t):
+    """`<text>` 하나를 조각으로 펴고 조각마다 **앞 글자**와 **기준선에서 내려간 거리**를 단다.
+
+    순수 함수. `text_runs` 와 달리 dy 를 SVG 규칙대로 **누적**한다 — 닫힌 tspan 의 dy 도 뒤 글자를
+    옮긴다(`σ<tspan dy>x</tspan><tspan>1</tspan>` 의 `1` 은 dy 가 없어도 아래첨자다).
+    조각: `s` · `fs` · `depth` · `shift`(양수면 기준선 아래) · `prev`(바로 앞 글자) · `prev_fs`.
+    """
+    runs = []
+    cur_fs = float(t.get("fs") or 12.0)
+    stack = []
+    shift, prev, prev_fs = 0.0, "", cur_fs
+    for m in re.finditer(r"<[^>]+>|[^<]+", t.get("raw", "") or ""):
+        token = m.group(0)
+        if not token.startswith("<"):
+            plain = (token.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">"))
+            if plain.strip():
+                runs.append({"s": plain, "fs": cur_fs, "depth": len(stack), "shift": shift,
+                             "prev": prev, "prev_fs": prev_fs})
+                prev, prev_fs = plain.rstrip()[-1], cur_fs
+        elif token.startswith("</"):
+            if stack:
+                cur_fs = stack.pop()
+        elif not token.endswith("/>"):
+            stack.append(cur_fs)
+            cur_fs = _scaled_font_size(_attr(token, "font-size"), cur_fs)
+            try:
+                shift += float(_attr(token, "dy", "0") or 0.0)
+            except ValueError:
+                pass
+    return runs
+
+
+def digit_under_lower(run):
+    """소문자 바로 뒤에 붙은 **숫자만의 아래첨자**인가."""
+    s = run["s"].strip()
+    return (run["depth"] >= 1 and run["shift"] > 0 and s.isascii() and s.isdigit()
+            and bool(run["prev"]) and unicodedata.category(run["prev"]) == "Ll")
+
+
+def digit_subscript_target(prev_fs, scale):
+    """그 첨자가 가져야 할 SVG font-size — 비율과 하한 중 큰 쪽."""
+    return max(DIGIT_UNDER_LOWER_RATIO * prev_fs, FIGURE_SUBTEXT_LOWER_BASE_MIN_PX / scale)
+
+
+def digit_subscript_ratio_issues(fig_id, view_width, texts):
+    """소문자 밑 숫자 첨자가 규격(0.70배)보다 큰 자리. 순수 함수 — 테스트가 직접 부른다."""
+    if not view_width:
+        return []
+    scale = FIGURE_RENDER_WIDTH / view_width
+    found = []
+    for t in texts:
+        for run in script_runs(t):
+            if not digit_under_lower(run):
+                continue
+            want = digit_subscript_target(run["prev_fs"], scale)
+            if run["fs"] > want * DIGIT_UNDER_LOWER_TOL:
+                found.append(run["prev"] + run["s"].strip()
+                             + "(" + format(run["fs"] / run["prev_fs"], ".2f") + "배)")
+    if not found:
+        return []
+    return [fig_id + ": 소문자 밑 숫자 첨자가 크다 — 밑글자의 " + format(DIGIT_UNDER_LOWER_RATIO, ".2f")
+            + "배(하한 " + format(FIGURE_SUBTEXT_LOWER_BASE_MIN_PX, ".1f") + "px)여야 한다 · "
+            + str(len(found)) + "곳: " + ", ".join(found[:6]) + (" 외" if len(found) > 6 else "")
+            + " · 처방 `python tools/fix_digit_subscript.py --apply`"]
+
+
+def _view_width(svg):
+    head = svg[svg.find("<svg"):svg.find(">") + 1] if "<svg" in svg else ""
+    vb = _attr(head, "viewBox")
+    try:
+        return float(vb.split()[2]) if vb else None
+    except (IndexError, ValueError):
+        return None
+
+
+def digit_subscript_ratio_hits(fig_id, svg):
+    """SVG 한 장. `check_content` 의 삽화 순회가 부른다(`…_hits` 규약)."""
+    vw = _view_width(svg or "")
+    return digit_subscript_ratio_issues(fig_id, vw, _svg_texts(svg)) if vw else []
 
 
 def figure_text_scale_issues(fig_id, view_width, texts):
@@ -2026,24 +2890,26 @@ def figure_subtext_scale_issues(fig_id, view_width, texts):
     #   (실행 규율 12: 비싼 것은 왕복 수가 아니라 출력의 크기다). 실측 91 조각 → 40 줄.
     groups = {}
     for t in texts:
-        for run in text_runs(t):
+        for run in script_runs(t):
             if run["depth"] == 0:
                 continue                       # 부모 <text> 몫은 위 검사가 본다
-            if run["fs"] * scale < FIGURE_SUBTEXT_MIN_PX:
-                groups.setdefault(round(run["fs"], 4), []).append(run["s"].strip()[:20])
+            floor = (FIGURE_SUBTEXT_LOWER_BASE_MIN_PX if digit_under_lower(run)
+                     else FIGURE_SUBTEXT_MIN_PX)
+            if run["fs"] * scale < floor:
+                groups.setdefault((round(run["fs"], 4), floor), []).append(run["s"].strip()[:20])
     out = []
-    need = FIGURE_SUBTEXT_MIN_PX / scale
-    for fs in sorted(groups):
-        labels = sorted(set(groups[fs]))
+    for fs, floor in sorted(groups):
+        labels = sorted(set(groups[(fs, floor)]))
+        need = floor / scale
         # ★ 소수 **두 자리**로 찍는다 — 첨자 크기는 부모 × 비율이라 값이 하한에 0.05px 차이로
-        #   붙는 경우가 실제로 나온다(실측 3건). 한 자리로 찍으면 [사용자 발화 인용 생략] 처럼
+        #   붙는 경우가 실제로 나온다(실측 3건). 한 자리로 찍으면 *[발화 생략]* 처럼
         #   **검사가 고장 난 것처럼 읽힌다.**
         out.append(
             fig_id + ": 첨자 화면 실효 " + format(fs * scale, ".2f") + "px — 하한 "
-            + format(FIGURE_SUBTEXT_MIN_PX, ".2f") + "px"
+            + format(floor, ".2f") + "px"
             + " (viewBox 폭 " + format(view_width, ".0f") + "이면 font-size "
             + format(need, ".2f") + " 이상, 지금 " + format(fs, ".2f") + ")"
-            + " — " + str(len(groups[fs])) + "곳: " + ", ".join(repr(s) for s in labels[:6])
+            + " — " + str(len(groups[(fs, floor)])) + "곳: " + ", ".join(repr(s) for s in labels[:6])
             + (" 외" if len(labels) > 6 else ""))
     return out
 
@@ -2070,6 +2936,60 @@ VIEWER_FIGURE_WIDTH = 612.0
 FIGURE_EDGE_MARGIN_PX = 4.0
 
 
+def balance_issue(fig_id, svg, out):
+    """세로 균형(위 여백 == 아래 여백)을 **빌드 게이트로** 잰다 (승격 2026-09-08).
+
+    ★★ **부르는 자리가 `check_svg` 가 아니다.** `check_svg` 는 **조각**에도 불린다 —
+      생성기 자체 검사가 치수선 한 벌을 임의의 캔버스에 얹어 부르고, 슬라이드·동작
+      프레임도 그 길로 온다. 조각을 감싼 캔버스의 여백은 **저자가 정한 것이 아니므로**
+      균형을 물을 대상이 아니다(실측: 게이트를 `check_svg` 안에 두자 생성기 자체 검사
+      셋이 곧바로 빨강이 됐다 — 그 셋은 그림이 아니라 **시험용 판**이다).
+      → **저장된 삽화를 훑는 자리**(`checks_content` 의 `_iter_diagrams` 순회)에서만 부른다.
+        균형은 「저자가 판을 어떻게 잡았나」의 판정이고, 그 판은 저장된 삽화에만 있다.
+
+    ★★ **왜 승격하나.** 이 판정은 그동안 감사(`audit_figure_balance.py`)에만 있었고,
+      감사는 사람이 부를 때만 돈다 — 그래서 이탈이 **253건**까지 쌓였다(788삽화 중 32%).
+      한 번 다 고친 지금이 게이트를 세울 자리다. 안 세우면 다음 삽화부터 다시 쌓인다
+      (AGENTS 「close 의 정의」 — 데이터를 고치는 것은 인스턴스를 지우는 것이지 close 가
+      아니다).
+    ★ **자를 새로 만들지 않는다** — 감사와 같은 `_content_extent`·`BALANCE_TOL_PX` 를
+      그대로 쓴다. 같은 것을 두 곳에서 재면 반드시 갈라지고, 그러면 「감사는 초록인데
+      빌드가 빨강」이 된다.
+    ☐ **콘텐츠가 판 밖으로 나간 삽화는 여기서 함께 걸린다** — 여백이 음수면 차이도 커진다.
+      처방은 다르다(판을 다시 잡는 일이지 배분이 아니다). 그래서 문구에 실제 값을 적는다.
+
+    ☒☒ **슬라이드 프레임(`[단계 N]`)은 안 본다 — 빚이 아니라 닫힌 판정이다** (2026-09-08).
+      게이트를 켜자 프레임에서 10장·72건이 떴고 처음에는 «아무도 안 보던 자리» 로 적었다.
+      그런데 프레임이 무엇인지 다시 재니(`slide_step_figures`) **같은 SVG 에서 몇 묶음을
+      숨긴 것**이라 **viewBox 가 구조상 하나다.** 그러면 프레임마다 균형을 맞추는 것은
+      ⑴ 판이 하나뿐이라 **불가능**하고 ⑵ 가능하더라도 **단계를 넘길 때 그림이 튀므로
+      틀린 목표**다. 슬라이드의 판은 모든 단계가 함께 쓰는 하나이고, 그 하나를 재는 것이
+      옳다 — 그래서 프레임은 건너뛰고 **저장된 SVG**(전부 켠 상태)를 잰다.
+      ☞ 진짜 구멍은 다른 데 있었다: **슬라이드 카드의 그림 자체가 어느 순회에도 없었다**
+        (`_iter_diagrams` 는 `diagrams[]` 만 훑는다). 그쪽은 `checks_content` 에서 따로
+        불러 닫았다.
+    """
+    if fig_id.endswith("]"):
+        return
+    try:
+        from audit_figure_balance import BALANCE_TOL_PX, _content_extent, _viewbox
+    except Exception:                                           # noqa: BLE001
+        return                       # 감사 모듈을 못 부르면 조용히 넘긴다(빌드를 죽이지 않는다)
+    vb = _viewbox(svg)
+    if not vb or len(vb) != 4:
+        return
+    vx, vy, vw, vh = vb
+    top, bottom = _content_extent(svg, vb)
+    if top is None:
+        return
+    pad_top, pad_bottom = top - vy, (vy + vh) - bottom
+    if abs(pad_bottom - pad_top) <= BALANCE_TOL_PX:
+        return
+    out.append(fig_id + ": 세로 균형 — 위 %.1f / 아래 %.1f (허용 %g)"
+               % (pad_top, pad_bottom, BALANCE_TOL_PX)
+               + " — `python tools/fix_figure_vertical_balance.py --apply` 로 맞출 것")
+
+
 def check_svg(fig_id, svg, errors, warnings, *, layout_strict=False, numeric_labels=None,
               halo_gap_strict=False, clearance_strict=False):
     out = errors if fig_id not in PENDING_FIG_FIXES else warnings
@@ -2077,10 +2997,18 @@ def check_svg(fig_id, svg, errors, warnings, *, layout_strict=False, numeric_lab
     if not vb:
         out.append(fig_id + ": viewBox 없음")
         return
+    # ★★ **닫는 태그가 없는 삽화가 있었다** (열린 날 2026-09-08). 스마트생산 `ch08
+    #   fig-ch08-arm-wrist-split` 이 `</svg>` 없이 끝나 있었다. **브라우저는 관대해서 그대로
+    #   그려 주고**, 우리 검사는 전부 정규식이라 아무도 안 걸렸다 — 규격 라이브러리로 읽으려
+    #   하자 그제야 «no element found» 로 드러났다(교차 감사 2026-09-08).
+    #   ☞ 이런 것은 **지금 안 아프다가 도구를 바꾸는 날 한꺼번에 아프다.** 그날 고치면
+    #     원인이 「새 도구가 이상하다」로 잘못 읽힌다.
+    if svg.count("<svg") != svg.count("</svg>"):
+        out.append(fig_id + ": `</svg>` 가 없다 — 브라우저는 봐주지만 규격 파서는 못 읽는다")
     vx, vy, vw, vh = [float(v) for v in vb.split()]
     texts = _svg_texts(svg)
     # 여기는 부모 `<text>` 만 본다. **첨자(`<tspan>`)는 `figure_subtext_scale_issues` 가 따로 잰다** —
-    # 예전에는 이 자리에 [사용자 발화 인용 생략] 고
+    # 예전에는 이 자리에 *[발화 생략]* 고
     # 적혀 있었는데, 그 문장이 곧 사각지대였다(경위는 `text_runs` 독스트링이 정본).
     # 첨자 쪽은 승격이 과목별이라 신고 통로가 갈린다 — 그래서 `checks_content` 의 삽화 순회에서 부른다.
     for issue in figure_text_scale_issues(fig_id, vw, texts):
@@ -2089,7 +3017,7 @@ def check_svg(fig_id, svg, errors, warnings, *, layout_strict=False, numeric_lab
     for t, b in zip(texts, boxes):
         if b[0] < vx or b[1] < vy or b[2] > vx + vw or b[3] > vy + vh:
             out.append(fig_id + ": 글자 viewBox 이탈 — " + repr(t["s"][:20]))
-    # ★★ **여유가 0이면 화면에서는 잘린다** (열린 날 2026-08-12, 사용자: [사용자 발화 인용 생략]).
+    # ★★ **여유가 0이면 화면에서는 잘린다** (열린 날 2026-08-12, 사용자: *[발화 생략]*).
     #   ★ 검사는 **이미 있었다** — 바로 위 「viewBox 이탈」이다. 그런데 그 자는 *넘었는가* 만
     #     보고 **딱 붙은 것은 통과**시킨다. 실측(브라우저 렌더): 그 캡션은 오른쪽 끝에 여유가
     #     사실상 0이라 이탈은 아니지만, 뷰어에서는 상자 테두리·반올림에 먹혀 잘려 보인다.
@@ -2126,18 +3054,72 @@ def check_svg(fig_id, svg, errors, warnings, *, layout_strict=False, numeric_lab
     #   「치수선 라벨은 0.94em(잉크)」 라는 **별도 규격**이 이미 있다).
     #   ★ 두 자가 서로 다른 것을 재고 있었다: 0.94em 은 **잉크**, F1 은 **글자 상자**다.
     #     글자 상자는 잉크보다 아래로 더 내려가므로(디센더 자리), 잉크로 0.94em 이어도
-    #     상자로는 0.5em 을 못 넘는 자리가 생긴다 — 사용자가 «더 내려» 를 세 번 말한 이유다.
+    #     상자로는 0.5em 을 못 넘는 자리가 생긴다 — 사용자가 [발화 생략] 를 세 번 말한 이유다.
     #   ★ 완화가 아니라 **역할을 가른 것**이다. 대상은 `class='dim'`·`id='dim-…'` 안,
     #     즉 **저자가 치수라고 선언한** 글자뿐이고 나머지는 0.5em 그대로다
     #     (치수 화살촉에 별도 규격을 준 것과 같은 자리·같은 근거).
     dim_spans = [(s, e) for s, e, _b in _tagged_group_spans(svg, ("dim",))]
-    for t, b in zip(texts, boxes):
+    straight_segs, curved_segs = _svg_segments_split(svg)
+    place_spans = [(s, e) for s, e, _b in _tagged_group_spans(svg, ("at-place",))]
+    curved_boxes = _curved_shape_boxes(svg)
+    for t, b_out in zip(texts, boxes):
+        # ★ 돌아간 글자는 **도형을 되돌려** 잰다 — `_text_frame` 독스트링이 정본.
+        #   바깥 상자로 재면 −17도짜리 라벨의 상자가 17 → 46 으로 부풀어, 선에서 36 이나
+        #   떨어진 글자가 「0.5em 미만」으로 신고된다(2026-09-08 동역학 `fig-vs-slope-trap`).
+        inv, b = _text_frame(t)
         own = {seg for (gs, ge), seg in frac_bars if gs <= t["pos"] < ge}
-        nearest = min((_segment_to_rect_distance(seg, b) for seg in segs if seg not in own),
+        nearest = min((_segment_to_rect_distance(
+                           seg if inv is None else _moved(inv, [seg])[0], b)
+                       for seg in straight_segs if seg not in own),
                       default=None)
         in_dim = any(s <= t["pos"] < e for s, e in dim_spans)
         floor = (DIM_LABEL_GAP_MIN_EM if in_dim else .5)
-        if nearest is not None and 0 < nearest < t["fs"] * floor:
+        # ★ **굽은 둘레는 문턱이 다르다** — 사용자 판정 6(고정). 직선 쪽 `0.5em`(글자 17이면
+        #   8.5)을 곡선에도 그대로 대면, 사용자가 표본에서 [발화 생략] 고 한 6~8.5 구간까지 막는다.
+        #   축이 다르면 눈금도 따로 잰다(정본 `docs/삽화-규격.md`).
+        #   ☒ **자리가 곧 뜻인 글자는 뺀다** — `<g class='at-place'>` 안의 글자.
+        #     실측 2026-09-08: 기계재료 `fig-secondary-bonds` 의 쌍극자 `+`·`−` 는 타원
+        #     **양 끝**에 있어야 «한쪽이 +, 반대쪽이 −» 가 되고, 가운데로 옮기면 그림이
+        #     뜻을 잃는다. 사용자 판정(표본 D [발화 생략])은 **도형을 이름 짓는 글자**를
+        #     두고 한 것이라 이 부류에 그대로 대면 안 된다.
+        #     기계는 이름표와 자리표를 못 가른다 → **저자가 태그로 선언한다**
+        #     (`dim`·`rate-dot` 이 이미 같은 형태다).
+        #   ☒ **원 «안»에 통째로 든 글자도 뺀다 — 그건 다른 축이다.**
+        #     사용자 판정(표본 D)은 [발화 생략] 이었는데, 그건 **가운데인가**를 묻는 것이지
+        #     **테두리에서 몇 떨어졌나**가 아니다. 둘을 같은 자로 재면 원이 글자에 꼭 맞는
+        #     삽화가 통째로 걸린다 — 실측: 기계재료 `fig-q07-slip` 의 이온 `+`·`−` 는
+        #     **정확히 가운데인데** 원이 작아 테두리까지 4.7 이라 신고됐다.
+        #     ☐ **빚: «얼마나 벗어나면 가운데가 아닌가» 는 아직 기계가 안 잰다.**
+        #       재려면 표본을 한 벌 더 그려(어긋남을 눈금으로) 판정을 받아야 한다.
+        inside = any(bx0 <= b_out[0] and by0 <= b_out[1]
+                     and bx1 >= b_out[2] and by1 >= b_out[3]
+                     for bx0, by0, bx1, by1 in curved_boxes)
+        at_place = inside or any(s <= t["pos"] < e for s, e in place_spans)
+        near_c = None if at_place else \
+            min((_segment_to_rect_distance(
+                     seg if inv is None else _moved(inv, [seg])[0], b)
+                 for seg in curved_segs), default=None)
+        if near_c is not None and 0 < near_c < CURVED_OUTLINE_LABEL_GAP:
+            hard_c = (layout_strict and (halo_gap_strict or not t["halo"])
+                      and fig_id.split(" ")[0] not in PENDING_FIG_FIXES)
+            (errors if hard_c else warnings).append(
+                fig_id + ": [layout F1c] 굽은 둘레와의 여백 < %g " % CURVED_OUTLINE_LABEL_GAP
+                + repr(t["s"][:20]))
+        side = None
+        if in_dim and inv is None:
+            for sx0, sy0, sx1, sy1 in straight_segs:
+                if abs(sx0 - sx1) > 0.5 or max(sy0, sy1) < b[1] or min(sy0, sy1) > b[3]:
+                    continue
+                g = b[0] - sx0 if sx0 <= b[0] else (sx0 - b[2] if sx0 >= b[2] else 0.0)
+                if 0 < g and (side is None or g < side):
+                    side = g
+        if side is not None and side < t["fs"] * DIM_SIDE_LABEL_GAP_MIN_EM:
+            # 보류(사람 판정 대기): 전 과목 소급 `fix_dim_label_gap.py --apply` 가 bulk_apply_guard 에
+            #   막혀 경고로만 낸다 — 응용열역학 미커밋 정리 판정이 나면 F1 과 같은 hard 로 올린다.
+            warnings.append(
+                fig_id + ": [layout F1] text-to-line gap < %.2gem (치수 라벨 옆 세로선) "
+                % DIM_SIDE_LABEL_GAP_MIN_EM + repr(t["s"][:20]))
+        elif nearest is not None and 0 < nearest < t["fs"] * floor:
             # halo 글자는 지금까지 이 검사를 아예 안 받았다. 한꺼번에 error로 올리면 기존
             # 챕터가 통째로 막히므로, 정리를 마친 챕터부터 halo_gap_strict 로 승격한다.
             hard = (layout_strict and (halo_gap_strict or not t["halo"])
@@ -2145,21 +3127,64 @@ def check_svg(fig_id, svg, errors, warnings, *, layout_strict=False, numeric_lab
             (errors if hard else warnings).append(
                 fig_id + ": [layout F1] text-to-line gap < %.2gem " % floor
                 + ("(치수 라벨) " if in_dim else "") + repr(t["s"][:20]))
-    for t, b in zip(texts, boxes):
+    # ★ 2026-09-08 — 원 둘레는 **교차 검사에만** 넣는다. F1(0.5em 여백)에는 안 넣는다.
+    #   이 자를 처음 켰을 때 F1 이 21과목에서 무더기로 터졌는데, 실측하니 대부분
+    #   **점 표식**(`r=3~4` 가 최다 인구 · 원자·핀·격자점)에 붙은 라벨이었다 —
+    #   그 라벨은 그 점을 **가리키는** 것이라 0.5em 을 띄우면 오히려 어느 점의 이름인지
+    #   흐려진다. 반지름으로 표식과 도형을 가르려 했으나 `r=5~9` 구간이 138건으로
+    #   두터워 **깨끗한 경계가 없었다**(기계재료의 원자는 도형이면서 표식이다).
+    #   그래서 이번에 닫는 것은 사용자가 실제로 지적한 것 하나다 — **둘레가 글자를 지나간다.**
+    #   교차는 반지름과 무관하게 결함이고(작은 표식은 애초에 글자를 관통하지 않는다),
+    #   판정이 모호하지 않다. ☐ **원 둘레의 0.5em 여백은 아직 아무도 안 잰다** —
+    #   열어 두는 빚이고, 재려면 표식/도형을 반지름이 아니라 **태그**로 갈라야 한다
+    #   (`rate-dot` 이 이미 그 형태다).
+    cross_segs = segs + _stroked_ellipse_segments(svg)
+    # ★ 돌아간 글자는 **도형을 되돌려** 잰다 — `_text_frame` 독스트링이 정본
+    #   (바깥 상자로 재면 고칠 수 없는 신고가 된다).
+    frames = [_text_frame(t) for t in texts]
+    for t, (inv, b) in zip(texts, frames):
         if t["halo"]:
             continue  # halo(paint-order:stroke) 적용 글자는 선 위에 있어도 읽힘 — 통과
-        for s in segs:
-            if _seg_x_rect(s, b):
+        for s in cross_segs:
+            if _seg_x_rect(s if inv is None else _moved(inv, [s])[0], b):
                 out.append(fig_id + ": 글자가 선/패스와 교차(halo 필요) — " + repr(t["s"][:20]))
                 break
-    for t, b in zip(texts, boxes):
+    ellipses = _filled_ellipses(svg, (vx, vy, vw, vh))
+    ell_boxes = {e[4] for e in ellipses}         # 같은 도형을 두 번 세지 않는다
+    for t, (inv, b) in zip(texts, frames):
+        hit = False
         for shape in _svg_filled_shapes(svg, (vx, vy, vw, vh)):
-            if not _rect_x_rect(b, shape):
-                continue
-            contained = shape[0] <= b[0] and shape[1] <= b[1] and shape[2] >= b[2] and shape[3] >= b[3]
+            if shape in ell_boxes:
+                continue                         # 아래에서 **원으로** 정확히 본다
+            if inv is None:
+                if not _rect_x_rect(b, shape):
+                    continue
+                contained = (shape[0] <= b[0] and shape[1] <= b[1]
+                             and shape[2] >= b[2] and shape[3] >= b[3])
+            else:
+                # ★ 라벨 좌표계에서 도형은 **기울어진 사각형**이다. 그 바깥 상자로 재면
+                #   40도에서 160 짜리 원이 225 로 부풀어, 원 밖 105 에 놓은 라벨까지
+                #   신고된다(2026-09-08 실측). 분리축으로 정확히 판정한다.
+                poly = _rect_corners_in(inv, shape)
+                if not _poly_x_rect(poly, b):
+                    continue
+                contained = all(_point_in_poly(p, poly)
+                                for p in ((b[0], b[1]), (b[2], b[1]),
+                                          (b[2], b[3]), (b[0], b[3])))
             if not contained:
-                out.append(fig_id + ": 글자가 도형 경계에 걸침 — " + repr(t["s"][:20]))
+                hit = True
                 break
+        if not hit and ellipses:
+            # ★ 원은 **원으로 잰다** — 바깥 사각형의 모서리는 원 밖이라, 그 자리에 놓은
+            #   라벨이 걸리면 자가 조판을 정하게 된다(`_filled_ellipses` 독스트링이 정본).
+            world = _text_world_poly(t, b, inv)
+            for cx, cy, rx, ry, _bx in ellipses:
+                touches, inside_all = _poly_x_ellipse(world, cx, cy, rx, ry)
+                if touches and not inside_all:
+                    hit = True
+                    break
+        if hit:
+            out.append(fig_id + ": 글자가 도형 경계에 걸침 — " + repr(t["s"][:20]))
 
     # z-order: 글자보다 나중에 그려진 불투명 도형이 글자를 덮는가 (겹침 지적 3회의 원인)
     for t, b in zip(texts, boxes):
@@ -2179,8 +3204,11 @@ def check_svg(fig_id, svg, errors, warnings, *, layout_strict=False, numeric_lab
     # 특정할 수 없으니 이 경고는 '6-B 대기'로 무기한 방치됐다(ch02 fig-char-cases·fig-resonance가
     # 그 상태로 남아 있었다). 바로 위 두 검사(도형 경계 걸침 / 뒤 도형에 가려짐)는 처음부터
     # 글자를 찍고 있었다 — F4만 예외였다. 이름을 남기지 않는 경고는 고쳐지지 않는다.
-    for t, b in zip(texts, boxes):
-        if any(_seg_x_rect(seg, b) for seg in segs):
+    # ★ 돌아간 글자는 여기서도 **도형을 되돌려** 잰다 (2026-09-08). 위 두 검사만 고치고
+    #   여기를 두면 같은 글자에 대해 자가 둘로 갈린다 — 그것이 이 파일이 여러 번 겪은 부류다.
+    for t, (inv, b) in zip(texts, frames):
+        if any(_seg_x_rect(seg if inv is None else _moved(inv, [seg])[0], b)
+               for seg in cross_segs):
             warnings.append(
                 fig_id + ": [layout F4] 글자 상자를 선이 지나감"
                 + (" (halo 있음 — 의도한 것인지 확인)" if t["halo"] else " (halo 없음)")
@@ -2206,7 +3234,7 @@ def _svg_path_signature(dstr):
 
 # ── 지시선(leader) — AGENTS 삽화 표준 「지시선」 (열린 날 2026-08-06) ────────────
 #
-# 사용자: [사용자 발화 인용 생략]
+# 사용자: *[발화 생략]*
 #
 # **관찰이 맞았다** — 이 리포의 삽화는 라벨을 대상 옆에 붙이는 방식뿐이고, 대상을 가리키는
 # 선은 치수선(`class='dim'`) 밖에 없었다. 1:1 근접 배치가 기본인 것은 옳지만(지시선은 잉크와
@@ -2217,12 +3245,48 @@ def _svg_path_signature(dstr):
 #   지시선 항목이 없었다. 규격이 없으면 그릴 때마다 갈라지므로 안 쓰는 쪽이 안전했던 셈이다.
 #   그래서 규격을 두고 **태깅한 것만** 잰다(`class='dim'` 선례 — 태깅이 없으면 아무도 안 본다).
 LEADER_MAX_WIDTH = 1.2        # 가는 실선. 형상선(2~2.5)과 굵기로 구별된다
-LEADER_DOT_MAX_R = 3.0        # 대상 쪽 끝은 점 — 채운 화살촉을 쓰지 않는다(방향과 혼동된다)
-LEADER_DOT_TOL = 2.5          # 끝점과 점이 이만큼 안이면 '붙었다'로 본다
+LEADER_DOT_MAX_R = 3.0        # 칸 안을 가리키는 끝의 점 반지름 상한
+LEADER_DOT_TOL = 2.5          # 끝점과 점(또는 화살촉 밑변 중앙)이 이만큼 안이면 '붙었다'로 본다
+# 대상 쪽 끝의 모양은 **무엇을 가리키나**로 갈린다 — 선·윤곽을 가리키면 화살촉, 칸 안이면 점
+#   (KS A 0113·ISO 128 지시선 끝 규약. 2026-09-14 사용자 *[발화 생략]*).
+#   옛 규격(2026-08-06)은 「채운 화살촉 = 방향」과 섞일까 봐 점 하나로만 뒀다.
+# 문턱 근거(고른 값): 길이 9 는 방향 화살촉 하한(`ARROW_HEAD_MIN_PX` 8)을 넘는 가장 작은 머리 —
+#   가는 실선(≤1.2)에 방향 화살촉(13.5)을 달면 굵은 화살표로 읽힌다. 폭 비 0.75 는 방향 화살촉
+#   띠(0.7~1.3) 안이라 L 계열 화살촉 검사를 따로 면제할 필요가 없다.
+LEADER_HEAD_LEN = 9.0
+LEADER_HEAD_RATIO = 0.75      # 방향 화살촉 폭 비 띠(0.7~1.3) 안 — 위 주석이 근거
 
 
 def leader_spans(svg):
     return _tagged_group_spans(svg, ("leader",))
+
+
+def _leader_heads(chunk):
+    """지시선 그룹 안의 닫힌 삼각형 → [(밑변 중앙, 꼭짓점)]. 밑변 = 가장 짧은 변."""
+    heads = []
+    for m in re.finditer(r"<path([^>]*?)/?>", chunk):
+        dstr = _attr(m.group(1), "d", "")
+        if not _is_triangle_path(dstr, True):
+            continue
+        nums = [float(v) for v in re.findall(r"-?(?:\d+(?:\.\d*)?|\.\d+)", dstr)]
+        pts = [(nums[0], nums[1]), (nums[2], nums[3]), (nums[4], nums[5])]
+        sides = sorted(((_distance(pts[i], pts[(i + 1) % 3]), i) for i in range(3)))
+        i = sides[0][1]
+        a, b, apex = pts[i], pts[(i + 1) % 3], pts[(i + 2) % 3]
+        heads.append((((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0), apex))
+    return heads
+
+
+def leader_arrow_svg(pts, color="#6b7280", width=1.1):
+    """화살촉 끝 지시선 한 벌. `pts` 의 마지막 점이 **꼭짓점**(대상에 닿는 자리)이다."""
+    (x0, y0), (tx, ty) = pts[-2], pts[-1]
+    seg = _distance((x0, y0), (tx, ty)) or 1.0
+    ux, uy = (tx - x0) / seg, (ty - y0) / seg
+    bx, by = tx - ux * LEADER_HEAD_LEN, ty - uy * LEADER_HEAD_LEN
+    d = "M" + " L".join("%.2f %.2f" % p for p in list(pts[:-1]) + [(bx, by)])
+    head = _filled_head(bx, by, ux, uy, LEADER_HEAD_LEN, LEADER_HEAD_RATIO)
+    return ("<g class='leader'><path d='%s' fill='none' stroke='%s' stroke-width='%g'/>%s</g>"
+            % (d, color, width, _head_tag(head, color)))
 
 
 def in_leader(spans, pos):
@@ -2244,14 +3308,14 @@ def _segments_cross(p, q):
 # ★ 축에는 양의 방향 화살표를 붙인다 — **규칙은 있었는데 자가 없었다**
 #   (열린 날 2026-08-06, 사용자 지적).
 #
-# 사용자: [사용자 발화 인용 생략]
+# 사용자: *[발화 생략]*
 #
-# AGENTS 삽화 표준은 [사용자 발화 인용 생략] 와
-# [사용자 발화 인용 생략] 을 이미 못 박아 두었다. 그런데 **검사가 0개**였다.
+# AGENTS 삽화 표준은 *[발화 생략]* 와
+# *[발화 생략]* 을 이미 못 박아 두었다. 그런데 **검사가 0개**였다.
 # 규칙만 있고 자가 없으면 삽화마다 갈리고, 실제로 갈렸다 — 열역학 ch03 실측에서
 # 축 이름을 선언한 삽화 4개 중 **2개**(`fig-pt-diagram` 3절 · `fig-quality-mixture` 4절)에
 # 축 화살표가 없었다. **같은 절 안에서도 갈렸다** — 3절의 T-v·P-v 는 있고 P-T 는 없었다.
-# [사용자 발화 인용 생략](C33 을 연 그 문장)의 재판이다.
+# *[발화 생략]*(C33 을 연 그 문장)의 재판이다.
 #
 # 판정: `class='axis-name'` 으로 **저자가 축 이름이라고 선언한** 글자마다, 그 앵커에서
 #   2.0em 안에 채운 삼각형의 **첫 점**(이 리포는 화살촉의 꼭짓점을 `M` 으로 먼저 쓴다)이
@@ -2261,11 +3325,11 @@ def _segments_cross(p, q):
 #   없다" 이지 "1.0em 에서 얼마나 벗어났나" 가 아니다.** 실측이 그 둘을 갈라야 한다고 말했다 —
 #   진짜 결함은 14em(`fig-quality-mixture`)이거나 삼각형이 아예 없었고(`fig-pt-diagram`),
 #   그 사이의 2.1~3.1em 은 화살표는 있는데 이름이 좀 먼 **다른 부류**다(열역학 ch04 실측 3건).
-#   같은 자로 재면 [사용자 발화 인용 생략] 는 틀린 진단을 내게 되므로, 거리 규격은 별도로 다룬다.
+#   같은 자로 재면 *[발화 생략]* 는 틀린 진단을 내게 되므로, 거리 규격은 별도로 다룬다.
 AXIS_ARROW_MAX_EM = 3.5
 
 
-# 축 이름과 화살촉 사이의 거리 규격 — AGENTS 「라벨의 기준 위치」: [사용자 발화 인용 생략] 위 `AXIS_ARROW_MAX_EM` 은 [사용자 발화 인용 생략]
+# 축 이름과 화살촉 사이의 거리 규격 — AGENTS 「라벨의 기준 위치」: *[발화 생략]* 위 `AXIS_ARROW_MAX_EM` 은 *[발화 생략]*
 # 를 잡는 자라 넉넉하고, **거리는 이 자가 따로 잰다** — 둘을 한 자로 묶으면 어느 쪽 결함인지
 # 진단이 섞인다(2026-08-06 실측: ch04 3건이 화살표는 있는데 이름만 2.1~3.1em 떨어져 있었다).
 AXIS_NAME_GAP_EM = 1.0
@@ -2275,7 +3339,7 @@ AXIS_NAME_GAP_TOL_EM = 0.5      # 이만큼 벗어나면 신고 (0.5~1.5em 통�
 def _triangle_apex(nums):
     """채운 삼각형의 **꼭짓점** — 가장 짧은 변의 맞은편 점. 순수 함수.
 
-    ★ 열린 날 2026-08-06. 처음에는 [사용자 발화 인용 생략] 고 가정했는데
+    ★ 열린 날 2026-08-06. 처음에는 *[발화 생략]* 고 가정했는데
       **틀렸다.** 생성기가 뽑은 삽화(`M76 44 L71.5 54 L80.5 54 Z`)는 그렇지만, 손으로 그린
       것은 밑변을 먼저 쓴다(`M328 105 L340 110 L328 115 Z` — 꼭짓점은 **가운데** 점이다).
       그 가정으로 잰 거리가 실제와 달랐고, 그대로 라벨을 옮겼으면 엉뚱한 자리에 놓았을 것이다.
@@ -2322,7 +3386,7 @@ def axis_name_gap_issues(fig_id, svg):
     """축 이름이 화살촉에서 규격(1.0em)만큼 떨어져 있는가. 순수 함수 — 테스트가 부른다.
 
     ★ 화살표가 **없는** 것은 `axis_arrow_issues` 의 몫이다 — 여기서는 거리만 본다.
-      한 자로 묶으면 [사용자 발화 인용 생략] 는 틀린 진단이 거리 결함에 붙는다.
+      한 자로 묶으면 *[발화 생략]* 는 틀린 진단이 거리 결함에 붙는다.
     """
     out = []
     for x, y, fs, near, apex in _axis_name_gaps(svg):
@@ -2379,10 +3443,10 @@ def axis_arrow_issues(fig_id, svg):
 
 
 # ── 화살촉 이음매 ──────────────────────────────────────────────────────────
-# 열린 날 2026-08-07. 사용자: [사용자 발화 인용 생략] → 어느 삽화냐고 묻자 [사용자 발화 인용 생략]
+# 열린 날 2026-08-07. 사용자: *[발화 생략]* → 어느 삽화냐고 묻자 *[발화 생략]*
 #
 # ★ 그 대답이 진단이다 — **한 삽화의 좌표 실수가 아니라 규격 자체가 만든 것**이다.
-#   AGENTS 삽화 표준이 [사용자 발화 인용 생략] 을 못 박아 두어서, 모든 화살표에서
+#   AGENTS 삽화 표준이 *[발화 생략]* 을 못 박아 두어서, 모든 화살표에서
 #   축선의 끝 좌표와 화살촉 밑변의 y 가 **정확히 같다**(실측 `fig-d-piston-balance`:
 #   주황 축선 `y2=100` ↔ 밑변 `y=100`, 파랑 `146`↔`146`).
 #   맞닿은 두 도형은 렌더러가 **따로** 안티에일리어싱하므로 경계 픽셀이 어느 쪽에서도
@@ -2392,7 +3456,7 @@ def axis_arrow_issues(fig_id, svg):
 # ★★ 처방은 좌표를 옮기는 것이 아니라 **겹치는 것**이다. 화살촉에 자기 fill 과 같은 색의
 #   가는 테두리를 두르면 도형이 사방으로 조금 커져 축선과 겹친다 — 겹친 자리는 두 도형이
 #   같은 색이라 눈에 안 보이고, 이음매만 사라진다. 축선 끝 좌표를 건드리지 않으므로
-#   [사용자 발화 인용 생략] 규격도 그대로 산다(둘은 충돌하지 않는다).
+#   *[발화 생략]* 규격도 그대로 산다(둘은 충돌하지 않는다).
 # ☞ `stroke-linejoin='round'` 가 필수다. 기본값 miter 로 두면 화살촉의 뾰족한 꼭짓점에서
 #   테두리가 길게 삐져나와(마이터 스파이크) 촉이 바늘처럼 보인다.
 ARROW_SEAM_STROKE = 0.75      # 화살촉을 자기 색으로 두르는 굵기(SVG px) — 사방 0.375px 확장
@@ -2460,7 +3524,7 @@ def arrowhead_seam_issues(fig_id, svg):
 def centerline_style_issues(fig_id, svg):
     r"""**중심선은 1점 쇄선이다** — 실선이면 형상선으로 읽힌다. 순수 함수 — 테스트가 직접 부른다.
 
-    ★★ **열린 날 2026-08-23, 사용자 3회차 지적**: [사용자 발화 인용 생략]
+    ★★ **열린 날 2026-08-23, 사용자 3회차 지적**: *[발화 생략]*
       `fig-two-cord-layout` 의 \(s_C\) 는 도르래의 **축**까지 재므로 그 선이 원을 가로지르는 것은
       제도에서 정상이다 — **문제는 그것이 실선이었다는 것**이다. 실선으로 그리면 원을 관통하는
       **막대**로 읽히고, 사용자가 본 것이 정확히 그것이다.
@@ -2470,7 +3534,7 @@ def centerline_style_issues(fig_id, svg):
 
     ★ 이 자리가 사각지대였던 경위: 중심선을 `dim` 그룹 안에 두면 `audit_figure_balance` 가
       «치수보조선이 도형에 닿았다» 로 신고해서 `class='axis'` 라는 새 태깅으로 뺐는데,
-      **그 태깅을 보는 자가 하나도 없었다**(워크오더에 [사용자 발화 인용 생략] 라고 적힌 채 남았다).
+      **그 태깅을 보는 자가 하나도 없었다**(워크오더에 *[발화 생략]* 라고 적힌 채 남았다).
       태깅으로 자를 피하면 그 자리는 «통과» 가 아니라 **아무도 안 보는 자리**가 된다.
     """
     issues = []
@@ -2485,7 +3549,7 @@ def centerline_style_issues(fig_id, svg):
 
 # ★★ **마이터 가시** — 예각 꼭짓점에서 이음이 뾰족하게 튀어나오는 자리 (열린 날 2026-08-23).
 #
-#   사용자 지적: [사용자 발화 인용 생략] — 3차원 유체 요소
+#   사용자 지적: *[발화 생략]* — 3차원 유체 요소
 #   (`fig-hydrostatic-column`)의 비스듬한 면 두 곳이었다.
 #
 #   기하: SVG 기본 `stroke-linejoin` 은 `miter` 다. 끼인각 θ 인 꼭짓점에서 이음의 끝은
@@ -2605,8 +3669,9 @@ def miter_spike_issues(fig_id, view_width, svg):
 def leader_line_issues(fig_id, svg):
     """지시선 규격 위반. 순수 함수 — 빌드·회귀가 함께 쓴다.
 
-    잰다: ⑴ 굵기 상한 ⑵ 화살촉을 붙이지 않았는가 ⑶ 대상 쪽 끝에 점이 있는가
-          ⑷ 갈래끼리 교차하지 않는가.
+    잰다: ⑴ 굵기 상한 ⑵ marker 화살촉을 붙이지 않았는가 ⑶ 대상 쪽 끝에 점 또는 그린
+          화살촉(닫힌 삼각형)이 있는가 ⑷ 갈래끼리 교차하지 않는가.
+    점과 화살촉 중 무엇이어야 하나(대상이 선인가 칸인가)는 `leader_target_issues` 가 잰다.
     **형상선과의 교차는 여기서 재지 않는다** — 글자를 지나가는 것은 F4 가 이미 잡고,
     도형선과의 교차는 '무엇이 형상선인가' 를 공통 코드가 알아야 해서 지금 자가 없다.
     그 판정은 렌더 육안 검수의 몫으로 남긴다(규칙 11: 미검증이면 미검증이라고 적는다).
@@ -2626,8 +3691,11 @@ def leader_line_issues(fig_id, svg):
     strokes = []
     for start, end, _body in spans:
         chunk = svg[start:end]
+        heads = _leader_heads(chunk)
         for m in re.finditer(r"<(path|line)([^>]*?)/?>", chunk):
             tag, a = m.group(1), m.group(2)
+            if tag == "path" and _is_triangle_path(_attr(a, "d", ""), True):
+                continue                  # 그린 화살촉 — 선이 아니라 끝 모양이다
             width = _effective(svg, start + m.start(), a, "stroke-width")
             try:
                 width = float(width)
@@ -2647,19 +3715,164 @@ def leader_line_issues(fig_id, svg):
                 continue
             strokes.append(segs)
             tipx, tipy = segs[-1][2], segs[-1][3]
-            if not any(r <= LEADER_DOT_MAX_R
-                       and _distance((cx, cy), (tipx, tipy)) <= LEADER_DOT_TOL
-                       for cx, cy, r in circles):
-                out.append(fig_id + ": [지시선] 대상 쪽 끝 (%.0f, %.0f) 에 점이 없다 — "
-                           "반지름 %g 이하 <circle> 로 찍을 것" % (tipx, tipy, LEADER_DOT_MAX_R))
-        if re.search(r"<path[^>]*\bd='M[^']*Z'", chunk):
-            out.append(fig_id + ": [지시선] 그룹 안에 닫힌 삼각형(화살촉)이 있다")
+            dotted = any(r <= LEADER_DOT_MAX_R
+                         and _distance((cx, cy), (tipx, tipy)) <= LEADER_DOT_TOL
+                         for cx, cy, r in circles)
+            headed = any(_distance(base, (tipx, tipy)) <= LEADER_DOT_TOL for base, _apex in heads)
+            if not (dotted or headed):
+                out.append(fig_id + ": [지시선] 대상 쪽 끝 (%.0f, %.0f) 에 점도 화살촉도 없다 — "
+                           "선을 가리키면 화살촉(`leader_arrow_svg`), 칸 안이면 반지름 %g 이하 점"
+                           % (tipx, tipy, LEADER_DOT_MAX_R))
     for i, a in enumerate(strokes):
         for b in strokes[i + 1:]:
             if any(_segments_cross(s, t) for s in a for t in b):
                 out.append(fig_id + ": [지시선] 갈래끼리 교차한다 — 한 라벨에서 여러 갈래로"
                                     " 뻗을 때 갈래는 서로 만나지 않아야 한다")
                 break
+    return out
+
+
+# 고른 값 — 채운 칸의 테두리에서 이만큼 안이면 「경계 위」로 본다. 점 반지름(≈2)에 테두리 선
+#   절반(≈1)을 더한 크기다. 이보다 크면 가는 칸(높이 16 게이트)의 안쪽 전부가 경계가 된다.
+LEADER_EDGE_TOL = 3.0
+# 고른 값 — 선 획에서 이만큼 더 벗어나도 「그 선에 닿았다」로 본다. 끝점 점(r≈2)이 획에 겹쳐
+#   보이면 닿은 것이라 점 반지름에 반올림 0.5 를 더했다. 첫 실행(1.0)에서 동역학 fig-ut-change 의
+#   점이 굵기 2.6 화살표 가장자리에 걸쳐 렌더에서 닿아 보이는데 2.32 로 「허공」이 났다.
+LEADER_STROKE_SLACK = 2.5
+
+
+def _leader_target_shapes(svg, spans):
+    """지시선 밖의 채운 도형과 선 획. ([(kind, geom)], [(seg, half_width, owned)]) — 순수 함수.
+
+    `owned` 는 그 획이 채운 도형 자기 테두리인가. 「경계 위」는 **남의 선**이 그 테두리와 겹칠 때만
+    갈린다(칸 테두리 = 2차 가지 선). 자기 테두리만 있는 자리(T형 단면의 두께를 가리키는 지시선,
+    두 판 사이 틈새)는 이름이 안 갈린다 — 첫 실행에서 고체역학 네 건이 그렇게 오신고였다.
+    """
+    filled, strokes = [], []
+    for m in re.finditer(r"<(rect|circle|line|path)\b([^>]*?)/?>", svg):
+        if in_leader(spans, m.start()):
+            continue
+        tag, a = m.group(1), m.group(2)
+        fill = _effective(svg, m.start(), a, "fill", "black")
+        stroke = _effective(svg, m.start(), a, "stroke", "none")
+        try:
+            width = float(_effective(svg, m.start(), a, "stroke-width", "1") or 1)
+        except ValueError:
+            width = 1.0
+        try:
+            if tag == "rect":
+                x, y = float(_attr(a, "x", "0")), float(_attr(a, "y", "0"))
+                w, h = float(_attr(a, "width", "0")), float(_attr(a, "height", "0"))
+                edges = [(x, y, x + w, y), (x + w, y, x + w, y + h), (x + w, y + h, x, y + h), (x, y + h, x, y)]
+                if fill != "none":
+                    filled.append(("poly", edges))
+                if stroke != "none":
+                    strokes.extend((e, width / 2.0, fill != "none") for e in edges)
+            elif tag == "circle":
+                cx, cy, r = float(_attr(a, "cx", "0")), float(_attr(a, "cy", "0")), float(_attr(a, "r", "0"))
+                if fill != "none":
+                    filled.append(("circle", (cx, cy, r)))
+            elif tag == "line":
+                if stroke != "none":
+                    strokes.append(((float(_attr(a, "x1", "0")), float(_attr(a, "y1", "0")),
+                                     float(_attr(a, "x2", "0")), float(_attr(a, "y2", "0"))),
+                                    width / 2.0, False))
+            else:
+                dstr = _attr(a, "d", "")
+                segs = _path_polyline(dstr)
+                if not segs:
+                    continue
+                closed = fill != "none" and bool(re.search(r"[Zz]\s*$", dstr.strip()))
+                if stroke != "none":
+                    strokes.extend((s, width / 2.0, closed) for s in segs)
+                if closed:
+                    closing = (segs[-1][2], segs[-1][3], segs[0][0], segs[0][1])
+                    filled.append(("poly", list(segs) + [closing]))
+        except ValueError:
+            continue
+    return filled, strokes
+
+
+def _point_seg_distance(px, py, seg):
+    x1, y1, x2, y2 = seg
+    dx, dy = x2 - x1, y2 - y1
+    t = 0.0 if dx == dy == 0 else max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)))
+    return _distance((px, py), (x1 + t * dx, y1 + t * dy))
+
+
+def _leader_point_in_edges(px, py, edges):
+    inside = False
+    for x1, y1, x2, y2 in edges:
+        if (y1 > py) != (y2 > py) and px < x1 + (py - y1) * (x2 - x1) / (y2 - y1):
+            inside = not inside
+    return inside
+
+
+def leader_target_issues(fig_id, svg):
+    """지시선 끝이 **이름 붙인 대상에 닿았나** — 삽화 규격 「⑶ 지시선 끝은 대상의 안쪽」(2026-09-14).
+
+    재는 것: `class='leader'` 그룹 안 각 선의 마지막 점 T 하나.
+      ⑴ 허공 — T 가 어떤 채운 도형 안에도, 어떤 선 획 위에도 없다(가지 끝과 8px 떨어진 지시선).
+      ⑵ 경계 — T 가 채운 도형의 테두리에서 `LEADER_EDGE_TOL` 안이고, **그 자리에 도형 자기 테두리가
+         아닌 남의 선**(`<line>`·열린 path)이 함께 닿는다. 칸의 테두리가 다른 객체(2차 가지 선)와
+         겹치는 자리라 어느 이름인지 갈린다 — 칸이면 안쪽으로 들인다.
+    못 보는 것: 태깅 안 한 지시선(`<line>` 한 줄로 그린 옛 지시선은 통째로 안 보인다) ·
+      `transform` 이 걸린 도형 · 곡선 채움의 테두리 근사 오차 · 「이름 없는 객체가 남았나」.
+    """
+    out = []
+    spans = leader_spans(svg)
+    if not spans:
+        return out
+    filled, strokes = _leader_target_shapes(svg, spans)
+    for start, end, _body in spans:
+        chunk = svg[start:end]
+        heads = _leader_heads(chunk)
+        for m in re.finditer(r"<(path|line)([^>]*?)/?>", chunk):
+            tag, a = m.group(1), m.group(2)
+            dstr = (_attr(a, "d", "") if tag == "path" else
+                    "M%s %s L%s %s" % (_attr(a, "x1", "0"), _attr(a, "y1", "0"),
+                                       _attr(a, "x2", "0"), _attr(a, "y2", "0")))
+            if tag == "path" and _is_triangle_path(dstr, True):
+                continue
+            segs = _path_polyline(dstr)
+            if not segs:
+                continue
+            tx, ty = segs[-1][2], segs[-1][3]
+            head = next((apex for base, apex in heads
+                         if _distance(base, (tx, ty)) <= LEADER_DOT_TOL), None)
+            if head is not None:
+                tx, ty = head
+            deep, edge = False, False
+            for kind, geom in filled:
+                if kind == "circle":
+                    cx, cy, r = geom
+                    gap = _distance((cx, cy), (tx, ty)) - r
+                    if abs(gap) <= LEADER_EDGE_TOL:
+                        edge = True
+                    elif gap < 0:
+                        deep = True
+                else:
+                    near = min(_point_seg_distance(tx, ty, e) for e in geom)
+                    if near <= LEADER_EDGE_TOL:
+                        edge = True
+                    elif _leader_point_in_edges(tx, ty, geom):
+                        deep = True
+            touching = [owned for s, hw, owned in strokes
+                        if _point_seg_distance(tx, ty, s) <= hw + LEADER_STROKE_SLACK]
+            on_line = bool(touching)
+            foreign = any(not owned for owned in touching)
+            if edge and not deep and foreign:
+                out.append(fig_id + ": [지시선 끝] (%.0f, %.0f) 이 채운 도형의 테두리 위다 — "
+                           "칸을 가리키면 안쪽으로, 선을 가리키면 다른 도형과 안 만나는 자리로" % (tx, ty))
+            elif not (deep or on_line or edge):
+                out.append(fig_id + ": [지시선 끝] (%.0f, %.0f) 이 아무 대상에도 닿지 않았다 — "
+                           "가리키는 선·칸까지 끝을 옮길 것" % (tx, ty))
+            elif head is None and (on_line or edge) and not deep:
+                out.append(fig_id + ": [지시선 끝] (%.0f, %.0f) 은 선·윤곽을 가리키는데 점이다 — "
+                           "선을 가리키는 끝은 화살촉(`leader_arrow_svg`), 점은 칸 안일 때만" % (tx, ty))
+            elif head is not None and deep and not on_line:
+                out.append(fig_id + ": [지시선 끝] (%.0f, %.0f) 은 칸 안을 가리키는데 화살촉이다 — "
+                           "칸 안은 점으로 찍을 것" % (tx, ty))
     return out
 
 
@@ -2711,6 +3924,7 @@ def _path_endpoints(dstr):
     return result
 
 def _stroked_circles(svg):
+    svg = _drawable(svg)              # 틀(`<defs>`) 안의 도형은 화면에 없다
     out = []
     for m in re.finditer(r"<circle([^>]*?)/?>", svg):
         a = m.group(1)
@@ -2754,10 +3968,10 @@ def _circle_arc_tangent(start, end, radius, large_arc, sweep):
 # ── 삽화 조각 생성기 ② · ③ — 각도 호+접선 화살촉 / 치수선 한 벌 (신설 2026-08-16) ──
 #
 # 왜 있나: `svg_fraction`(위)과 **같은 이유**다. 규격을 문서에만 적어 두면 삽화마다 손으로
-# 좌표를 잡게 되고, **그 갈라짐 자체가 다음 지적이 된다** — 분수는 [사용자 발화 인용 생략](2026-07-28), 치수선은 [사용자 발화 인용 생략]
-# (2026-07-31), 회전 화살표는 [사용자 발화 인용 생략](2026-07-25)로 각각 왔다.
+# 좌표를 잡게 되고, **그 갈라짐 자체가 다음 지적이 된다** — 분수는 *[발화 생략]*(2026-07-28), 치수선은 *[발화 생략]*
+# (2026-07-31), 회전 화살표는 *[발화 생략]*(2026-07-25)로 각각 왔다.
 # ★ 이 둘이 서야 AGENTS §4 의 수치(4px·10px·접선 방향)가 **코드로 내려간다** —
-#   나루 `기록/AGENTS-삭감-목록.md` §4: [사용자 발화 인용 생략]
+#   공용 폴더 `기록/AGENTS-삭감-목록.md` §4: *[발화 생략]*
 # ★★ **생성기는 자기 출력을 자기 자로 잰다.** 아래 둘이 찍은 조각은 `arc_arrowhead_issues`·
 #   `dim_extension_rows` 가 **그대로 통과시켜야 한다**(회귀가 그것을 잠근다). 규격을 두 벌
 #   적으면 «찍는 값»과 «재는 값»이 갈리는데, 이 리포가 반복해 겪은 부류가 정확히 그것이다.
@@ -2771,10 +3985,16 @@ VIEWER_WIDTH_PX = 612.0
 # ★ 정본을 여기 둔다: `fix_dim_label_gap.py`(전수 교정)와 `svg_dimension`(신규 생성)이 **같은
 #   값을 써야** «새로 그린 것은 통과하는데 고친 것은 걸리는» 상태가 안 생긴다.
 DIM_LABEL_GAP_TARGET_EM = DIM_LABEL_GAP_MIN_EM + 0.02
+DIM_SIDE_LABEL_GAP_TARGET_EM = DIM_SIDE_LABEL_GAP_MIN_EM + 0.02
 
-# 치수 계열(치수선·보조선)을 **그릴** 굵기. 상한은 `checks_content.DIM_EXTENSION_MAX_WIDTH`(1.5)
-# 인데 거기 딱 맞추면 좌표 반올림 한 번에 걸리고, 형상선(2~2.5)과의 대비도 흐려진다.
-DIM_EXT_WIDTH = 1.2
+# 치수 계열(치수선·보조선)을 **그릴** 굵기.
+# ★ **형상선의 정확히 절반이다** (고친 날 2026-09-09, 사용자: *[발화 생략]*). 근거는 **고른 값**이다 — KS B 0001·ISO 128 의 선 굵기는 굵은
+#   실선과 가는 실선 **두 군**이고 그 비가 2:1 이다(치수선과 치수보조선은 **같은 군**이라
+#   서로 다르지 않다). 이 리포의 형상선이 2.0 이므로 가는 선은 1.0 이다.
+# 옛 값 1.2 는 상한 `checks_content.DIM_EXTENSION_MAX_WIDTH`(1.5)에서 반올림 여유만큼
+# 내려온 수였다 — **상한에서 내려온 값이라 형상선과의 비가 1.67:1 밖에 안 됐고**, 회로도처럼
+# 선이 촘촘한 그림에서 치수가 형상선과 안 갈렸다.
+DIM_EXT_WIDTH = 1.0
 
 # 치수 라벨의 baseline 을 잡을 때 **상자 아래**로 내려가는 양. **같은 값을 다시 적지 않는다** —
 # 정본은 위 `TEXT_BOX_DESCENT_RATIO`(= `_text_bbox` 가 쓰는 그 상자)다.
@@ -2918,16 +4138,30 @@ def svg_dimension(axis, p1, p2, face, line_pos, fs, vb_width,
         return ("<line x1='%.2f' y1='%.2f' x2='%.2f' y2='%.2f' stroke='%s' "
                 "stroke-width='%.2f' stroke-linecap='butt'/>" % (x1, y1, x2, y2, stroke, w))
 
+    # 바깥 화살촉이면 치수선이 밑변 너머로 꼬리만큼 더 나간다 — KS A 0113:2001 4.3 d) 와 그림 14
+    # (공간이 충분하지 않으면 화살표를 치수보조선 바깥쪽에 그린다 · 치수선은 바깥으로 연장된다,
+    # 2026-09-11 e나라표준인증 원문 열람). 규격은 연장 길이를 수로 정하지 않아 **화살촉 길이와
+    # 같게 고른 값**이고, 그림 14 의 연장부도 화살촉 하나 남짓이다.
+    tail = 0.0 if inward else hl
     if axis == "h":
         parts.append(line(lo, ext0, lo, ext1, DIM_EXT_WIDTH))
         parts.append(line(hi, ext0, hi, ext1, DIM_EXT_WIDTH))
         parts.append(line(b_lo, line_pos, b_hi, line_pos, DIM_EXT_WIDTH))
+        if tail:
+            parts.append(line(b_lo, line_pos, b_lo - tail, line_pos, DIM_EXT_WIDTH))
+            parts.append(line(b_hi, line_pos, b_hi + tail, line_pos, DIM_EXT_WIDTH))
         for x, ux in ((b_lo, -d), (b_hi, d)):
             parts.append(_head_tag(_filled_head(x, line_pos, ux, 0.0, hl,
                                                 DIM_ARROW_WIDTH_RATIO_TARGET), stroke))
         if label:
             # 글자 **상자**의 아래가 치수선에서 목표만큼 떨어지게 baseline 을 잡는다.
             base = line_pos - fs * DIM_LABEL_GAP_TARGET_EM - fs * TEXT_DESCENT_RATIO
+            # ★ 라벨이 안쪽 화살촉 밑변 위까지 퍼지면 상자 아래를 화살촉 윗끝 위로 올린다
+            #   (2026-09-18 `fig-15-pipe-tracking` 「잘라냄」 — 상자 아래가 밑변 세로선 옆에 걸려 F1).
+            #   자리(위 중앙)는 그대로다 — 「세로 치수는 왼쪽 · 가로 치수는 위 중앙」 규격을 지킨다.
+            if inward and (run_width(label, fs, False, None) / 2.0
+                           > (b_hi - b_lo) / 2.0 - fs * DIM_SIDE_LABEL_GAP_TARGET_EM):
+                base -= hl * DIM_ARROW_WIDTH_RATIO_TARGET / 2.0
             parts.append("<text x='%.2f' y='%.2f' font-size='%.1f' fill='%s' "
                          "text-anchor='middle'>%s</text>"
                          % ((lo + hi) / 2.0, base, fs, fill, label))
@@ -2935,13 +4169,16 @@ def svg_dimension(axis, p1, p2, face, line_pos, fs, vb_width,
         parts.append(line(ext0, lo, ext1, lo, DIM_EXT_WIDTH))
         parts.append(line(ext0, hi, ext1, hi, DIM_EXT_WIDTH))
         parts.append(line(line_pos, b_lo, line_pos, b_hi, DIM_EXT_WIDTH))
+        if tail:
+            parts.append(line(line_pos, b_lo, line_pos, b_lo - tail, DIM_EXT_WIDTH))
+            parts.append(line(line_pos, b_hi, line_pos, b_hi + tail, DIM_EXT_WIDTH))
         for y, uy in ((b_lo, -d), (b_hi, d)):
             parts.append(_head_tag(_filled_head(line_pos, y, 0.0, uy, hl,
                                                 DIM_ARROW_WIDTH_RATIO_TARGET), stroke))
         if label:
             parts.append("<text x='%.2f' y='%.2f' font-size='%.1f' fill='%s' "
                          "text-anchor='end'>%s</text>"
-                         % (line_pos - fs * DIM_LABEL_GAP_TARGET_EM,
+                         % (line_pos - fs * DIM_SIDE_LABEL_GAP_TARGET_EM,
                             (lo + hi) / 2.0 + fs * TEXT_MID_RATIO, fs, fill, label))
     return ("<g class='dim'>\n  " + "\n  ".join(parts) + "\n</g>",
             {"gap": gap, "over": over, "scale": k, "head_len": hl})
@@ -3006,7 +4243,7 @@ def _arrow_clearance_issues(svg, viewbox=None):
     기존 검사는 전부 '글자 대 선'이라 **화살표 대 도형, 화살표 대 화살표는 아무도
     안 봤다.** AGENTS 규격('서로 다른 화살표는 최소 폰트 크기만큼 띄운다')을 검사로 승격.
 
-    ★ **도형 종류별로 따로 짜지 않는다** (2026-08-29, 사용자: [사용자 발화 인용 생략]). 채운 도형 목록은 `_svg_filled_shapes` 하나가
+    ★ **도형 종류별로 따로 짜지 않는다** (2026-08-29, 사용자: *[발화 생략]*). 채운 도형 목록은 `_svg_filled_shapes` 하나가
     낸다(rect·circle·ellipse를 이미 bbox로 통일해 둔 자리) — **새 도형이 생겨도 그 함수
     한 곳만 넓히면 여기는 그대로 통한다.** `viewbox`가 없으면(레거시 호출) 이 부분은
     건너뛴다 — svg 문자열만으로는 viewBox를 다시 파싱해야 해서다.
@@ -3025,7 +4262,7 @@ def _arrow_clearance_issues(svg, viewbox=None):
     # ⑴ 화살촉끼리 — 중심 간 거리가 최소 폰트 크기(12px) 미만이면 시각적으로 닿는다
     #
     # ★ 예외: **꼭짓점을 공유하는 두 화살촉**은 붐비는 것이 아니라 하나의 도형이다
-    #   (열린 날 2026-08-07). 사용자: [사용자 발화 인용 생략] — 옳은 지적이었다.
+    #   (열린 날 2026-08-07). 사용자: *[발화 생략]* — 옳은 지적이었다.
     #
     #   벡터 삼각형(\\(\\mathbf{u} + d\\mathbf{u} = \\mathbf{u}'\\))에서 변화량 벡터는 **정의상**
     #   원래 벡터의 끝에서 새 벡터의 끝까지 간다. 그러면 두 화살촉의 꼭짓점이 같은 점이 되고,
@@ -3056,7 +4293,7 @@ def _arrow_clearance_issues(svg, viewbox=None):
             if d < 12:
                 issues.append("화살촉끼리 %.0fpx — 최소 폰트 크기(12px)만큼 띄울 것" % d)
     # ⑵ 화살촉이 채운 도형(사각형·원·타원 — 종류를 안 가린다)을 관통 — 흐름도 화살표가
-    #   모서리를 넘어 안으로 들어간 자리(2026-08-29, 사용자: [사용자 발화 인용 생략]).
+    #   모서리를 넘어 안으로 들어간 자리(2026-08-29, 사용자: *[발화 생략]*).
     #   꼭짓점(촉 끝)이 도형 bbox 안에 있는데 밑변 두 점 중 하나라도 밖에 있으면
     #   **경계를 가로질렀다**는 뜻이다 — 자유물체도처럼 화살표 전체(밑변까지)가 도형
     #   **안에서** 그려지는 정상 자리는 밑변까지 안에 있어 안 걸린다.
@@ -3077,14 +4314,28 @@ def _arrow_clearance_issues(svg, viewbox=None):
     for cx, cy, r in _stroked_circles(svg):
         if r < 20:
             continue                      # 중심점 표시용 소원은 제외
-        for seg in _svg_segments(svg):
-            d1 = _distance((seg[0], seg[1]), (cx, cy))
-            d2 = _distance((seg[2], seg[3]), (cx, cy))
-            if min(d1, d2) < 10:
-                continue    # 허브(중심)에서 나가는 축·바늘은 원을 지나는 것이 설계다
-            if (d1 < r - 3) != (d2 < r - 3) and max(d1, d2) > r + 3:
+        # ★★ **묻는 단위는 조각이 아니라 「그린 것」이다** (고친 날 2026-09-08).
+        #   전에는 **선분 하나**를 놓고 «한 끝은 안, 다른 끝은 밖(±3px)» 을 물었다. 그러면
+        #   경로 표본이 촘촘해질수록(현 1.5) 어떤 조각도 «±3 밖» 을 못 채워 **관통이 통째로
+        #   안 잡힌다** — 실제로 그렇게 이 검사가 `[]` 를 냈고, 6회 지적으로 잠근 회귀가
+        #   깨졌다. 그때는 이 검사만 옛 성긴 파서를 쓰는 것으로 막아 뒀는데, **자를 정확하게
+        #   만들수록 검사가 죽는 구조**라 빚으로 적어 두었다.
+        #   요소로 묶어 «이 선/경로가 원을 가로지르나» 를 물으면 **표본 수와 무관**해진다.
+        for group in _svg_segments_by_element(svg):
+            pts = [(group[0][0], group[0][1])] + [(s[2], s[3]) for s in group]
+            ds = [_distance(p, (cx, cy)) for p in pts]
+            # ★ 허브 예외는 **끝점**으로 본다 (2026-09-08). 「지나는 점 하나라도 중심에
+            #   가까우면」으로 재면 표본이 촘촘할수록 예외가 넓어져 — 촘촘히 뜬 경로가
+            #   가운데를 스치기만 해도 통째로 면제된다. 이 예외가 말하는 것은
+            #   «허브에서 **나가는** 축·바늘» 이므로 시작·끝이 그 자리인지를 묻는다.
+            if min(_distance(pts[0], (cx, cy)), _distance(pts[-1], (cx, cy))) < 10:
+                continue
+            if min(ds) < r - 3 and max(ds) > r + 3:
+                i_in = ds.index(min(ds))
+                i_out = ds.index(max(ds))
                 issues.append("선분이 원(r=%.0f) 윤곽을 관통 — (%.0f,%.0f)→(%.0f,%.0f)"
-                              % (r, seg[0], seg[1], seg[2], seg[3]))
+                              % (r, pts[i_in][0], pts[i_in][1],
+                                 pts[i_out][0], pts[i_out][1]))
         for _, pts in heads:
             ds = [_distance(p, (cx, cy)) for p in pts]
             if min(ds) < r - 3 and max(ds) > r + 3:
@@ -3154,8 +4405,8 @@ def _arrowhead_connection_issues(svg):
 
 # ★ 화살표 크기 규격 (신설 2026-08-02, 사용자 지적 2건이 같은 뿌리였다).
 #
-#   [사용자 발화 인용 생략] (축 화살촉이 삽화마다 다르다)
-#   [사용자 발화 인용 생략] (꼬리 하한)
+#   *[발화 생략]* (축 화살촉이 삽화마다 다르다)
+#   *[발화 생략]* (꼬리 하한)
 #
 # **없었다.** AGENTS 삽화 표준은 화살표의 *모양*(채운 삼각형)과 *연결점*(밑변 중앙)만 정하고
 # **크기는 한 줄도 없었다.** 그래서 좌표로는 다들 `10 × 10` 을 쓰는데 viewBox 폭이 달라
@@ -3264,7 +4515,7 @@ def figure_arrow_scale_issues(fig_id, view_width, svg):
         tail = None if arrow["tail"] is None else arrow["tail"] * scale
         if tail is not None and tail < length * ARROW_TAIL_MIN_RATIO:
             # 꼬리는 **자동으로 늘리지 않는다** — 늘리면 다른 도형을 뚫을 수 있어서
-            # 어디를 넓힐지는 사람이 정해야 한다(사용자: [사용자 발화 인용 생략]).
+            # 어디를 넓힐지는 사람이 정해야 한다(사용자: *[발화 생략]*).
             out.append(where + " — 꼬리 %.1f < 화살촉 %.1f 의 %g배 (%.1f). "
                        "꼬리를 늘리거나 삽화를 키울 것 (머리보다 짧은 꼬리는 화살표로 안 읽힌다)"
                        % (tail, length, ARROW_TAIL_MIN_RATIO, length * ARROW_TAIL_MIN_RATIO))
@@ -3346,6 +4597,97 @@ def _thick_curve_layer_count(svg):
     return layers
 
 
+FIGURE_BALANCE_TOL_PX = 6.0
+"""삽화 위·아래 여백 차이 허용치. 이보다 크면 한쪽으로 쏠려 보인다.
+
+`tools/audit_figure_balance.py` 가 재던 값이고, 여기로 올린 것은 **재는 자만 있고 막는 자가
+없었기 때문**이다 — 사용자가 2026-09-07 과 2026-09-09 에 같은 것을 두 번 물었다
+(*[발화 생략]* · *[발화 생략]*).
+승격 시점 실측: 전 과목 796 삽화 **이탈 0건**. 데이터는 이미 맞아 있었고 막는 자만 없었다.
+"""
+
+
+def figure_vertical_extent(svg, vb=None):
+    """배경(viewBox 테두리에 붙은 선)을 뺀 실제 콘텐츠의 세로 범위 (top, bottom).
+
+    ★ 원은 선분으로 분해되지 않아 `_svg_segments` 가 못 본다(2026-07-29) — 원이 도판의
+    거의 전부인 삽화가 「아래 여백 과다」로 **잘못** 신고됐다. 순회 범위를 확인하지 않은
+    판정은 없는 결함을 만들어내기도 한다(규칙 11의 역방향).
+    """
+    if vb is None:
+        head = svg[svg.find("<svg"):svg.find(">") + 1]
+        raw = _attr(head, "viewBox")
+        if not raw:
+            return None, None
+        try:
+            vb = [float(v) for v in raw.split()]
+        except ValueError:
+            return None, None
+    vx, vy, vw, vh = vb
+    top, bottom = None, None
+    for seg in _svg_segments(svg):
+        x1, y1, x2, y2 = seg[0], seg[1], seg[2], seg[3]
+        on_border = (abs(y1 - vy) < 1.5 and abs(y2 - vy) < 1.5) \
+            or (abs(y1 - (vy + vh)) < 1.5 and abs(y2 - (vy + vh)) < 1.5) \
+            or (abs(x1 - vx) < 1.5 and abs(x2 - vx) < 1.5) \
+            or (abs(x1 - (vx + vw)) < 1.5 and abs(x2 - (vx + vw)) < 1.5)
+        if on_border:
+            continue
+        lo, hi = min(y1, y2), max(y1, y2)
+        top = lo if top is None else min(top, lo)
+        bottom = hi if bottom is None else max(bottom, hi)
+    for text in _svg_texts(svg):
+        box = _text_bbox(text)
+        top = box[1] if top is None else min(top, box[1])
+        bottom = box[3] if bottom is None else max(bottom, box[3])
+    for m in re.finditer(r"<circle([^>]*)>", svg):
+        a = m.group(1)
+        try:
+            cy, r = float(_attr(a, "cy", "0")), float(_attr(a, "r", "0"))
+        except ValueError:
+            continue
+        if not r:
+            continue
+        top = cy - r if top is None else min(top, cy - r)
+        bottom = cy + r if bottom is None else max(bottom, cy + r)
+    # 타원도 원처럼 선분이 안 된다 — 빼면 타원이 맨 아래인 그림을 뷰박스가 잘라도 「균형」으로 잰다(2026-09-18 공수2 ch09 실측)
+    for m in re.finditer(r"<ellipse([^>]*)>", svg):
+        a = m.group(1)
+        try:
+            cy, ry = float(_attr(a, "cy", "0")), float(_attr(a, "ry", "0"))
+        except ValueError:
+            continue
+        if not ry:
+            continue
+        top = cy - ry if top is None else min(top, cy - ry)
+        bottom = cy + ry if bottom is None else max(bottom, cy + ry)
+    return top, bottom
+
+
+def figure_vertical_balance_issues(fig_id, svg, tol=FIGURE_BALANCE_TOL_PX):
+    """위 여백과 아래 여백이 `tol` 을 넘게 갈린 삽화를 낸다."""
+    head = svg[svg.find("<svg"):svg.find(">") + 1]
+    raw = _attr(head, "viewBox")
+    if not raw:
+        return []
+    try:
+        vb = [float(v) for v in raw.split()]
+    except ValueError:
+        return []
+    if len(vb) != 4:
+        return []
+    top, bottom = figure_vertical_extent(svg, vb)
+    if top is None or bottom is None:
+        return []
+    _vx, vy, _vw, vh = vb
+    above, below = top - vy, (vy + vh) - bottom
+    diff = below - above
+    if abs(diff) <= tol:
+        return []
+    return [fig_id + ": [layout F7] 위·아래 여백이 갈렸다 — 위 %.1f · 아래 %.1f (차이 %+.1f, 허용 ±%.0f)"
+            % (above, below, diff, tol)]
+
+
 def check_figure_lint(fig_id, svg, errors, warnings, strict=False, geometry_strict=False):
     """Figure style lint from figure-lint.workorder.md.
 
@@ -3355,6 +4697,15 @@ def check_figure_lint(fig_id, svg, errors, warnings, strict=False, geometry_stri
     inferable from SVG geometry alone.
     """
     strict_out = errors if strict else warnings
+    # F7 세로 균형 — **전 과목 error 다**(승격 2026-09-09). 재는 자만 있고 막는 자가 없어
+    # 같은 지적을 두 번 받았다(규칙 17 · 실행 규율 9).
+    # ★ **삽화 전체에만 건다.** 승격 첫 실행이 자를 고쳤다(규칙 21): 실패 90여 건이 전부
+    #   `[단계 N]` 슬라이드 프레임이었다. 프레임은 완성 상태와 **같은 viewBox** 를 써야
+    #   넘길 때 그림이 안 튀므로, 아직 안 나온 조각의 자리가 여백으로 남는 것이 정상이다.
+    #   중간 프레임에 균형을 요구하면 「캔버스를 프레임마다 줄여라」가 되어 규격과 부딪힌다.
+    #   빌드는 갈래 이름에 `[단계 N]`·`[답 표시]` 를 덧붙여 부르므로 그것으로 가른다.
+    if "[" not in fig_id:
+        errors.extend(figure_vertical_balance_issues(fig_id, svg))
     path_items = []
     thick_curve_layers = _thick_curve_layer_count(svg)
     leaders = leader_spans(svg)
@@ -3367,7 +4718,7 @@ def check_figure_lint(fig_id, svg, errors, warnings, strict=False, geometry_stri
         # ★ 지시선은 예외다 — `M…L…L`(글자 옆 수평 stub → 한 번 꺾어 대상) 이 곧 규격 형태라
         #   여는 삼각형과 서명이 같다. 화살촉이 아니라는 것은 `class='leader'` 가 선언한다.
         # ★★ **진행 표시(`class='travel'`)도 예외다** (신설 2026-08-18, 사용자 판정).
-        #   [사용자 발화 인용 생략]
+        #   *[발화 생략]*
         #   — 규격이 「방향은 채운 삼각형으로만」이라 이 자가 곧바로 신고하던 자리다.
         #   **완화가 아니라 뜻을 가른 것이다:** 채운 삼각형은 **선 끝**(여기서 끝난다 = 도착),
         #   열린 `>` 는 **선 중간**(이쪽으로 간다 = 진행). 모양 하나가 뜻 하나를 맡으므로
@@ -3431,7 +4782,7 @@ def check_figure_lint(fig_id, svg, errors, warnings, strict=False, geometry_stri
     #
     # ★ 규격 변경 2026-07-29 (워크오더 ch01-review-batch 항목 8) — 옛 규칙은 '점선 보조선'을
     # 요구했으나 **제도 관례에서 치수선·치수보조선은 둘 다 가는 실선**이고 파선은 숨은선의 몫이다.
-    # 사용자 지적: [사용자 발화 인용 생략] 그래서 dash를 요구하던 판정을 **금지로 뒤집고**,
+    # 사용자 지적: *[발화 생략]* 그래서 dash를 요구하던 판정을 **금지로 뒤집고**,
     # 형상선과의 구별은 굵기로 강제한다.
     # 실측(2026-07-29): 태깅된 치수 그룹은 ch02에 3개뿐이었고 셋 다 파선이라 옛 검사를 **조용히
     # 통과**하고 있었다. 뒤집은 뒤 경고가 46→52로 는 것은 버그가 아니라 **그동안 안 보이던
@@ -3485,21 +4836,21 @@ def check_figure_lint(fig_id, svg, errors, warnings, strict=False, geometry_stri
     #
     # ch01 실측(2026-07-30): 가는 파선 30곳이 **전부 태깅되지 않아** 규격 검사를 한 번도
     # 받지 않았다. 즉 '빌드가 조용하다'가 '규격을 지켰다'가 아니었고, 그 사이 사용자가
-    # 같은 지적을 3회 했다([사용자 발화 인용 생략] 외 2건).
+    # 같은 지적을 3회 했다(*[발화 생략]* 외 2건).
     # **원인은 빠뜨린 것이 아니라 태깅하지 않으면 검사를 안 받는 구조**다(AGENTS 규칙 7-⑷).
     #
     # 그래서 판정을 뒤집는다 — **파선을 쓰려면 역할을 태깅해야 한다.**
     #   치수 계열 → `dim`/`measure` (가는 실선이어야 하므로 파선이면 위에서 걸린다)
     #   숨은선   → `hidden-edge` (파선이 맞는 유일한 역할)
     # 태깅이 없으면 그 파선이 무슨 뜻인지 아무도 판정할 수 없다 — 사용자가 실제로 물었다:
-    # [사용자 발화 인용 생략]
+    # *[발화 생략]*
     dim_group_spans = [(s, e) for s, e, _ in _tagged_group_spans(svg, ("dim", "measure"))]
     for pm in re.finditer(r"<(?:line|path|polyline)\b([^>]*?)/?>", svg):
         attrs = pm.group(1)
         # ★ 상속을 본다 (2026-07-30 보강). 처음 구현은 요소 **자신의** 속성만 봤는데,
         # `<g stroke-dasharray='5 4'><line .../></g>` 처럼 그룹에 걸면 통째로 새어나갔다.
         # 실제로 fig-steady-flow-snapshots 의 시간 연결선이 그렇게 검사를 피했고,
-        # 사용자가 [사용자 발화 인용 생략] 로 눈으로 먼저 잡았다 — 검사가 못 본 것을 사람이 봤다.
+        # 사용자가 *[발화 생략]* 로 눈으로 먼저 잡았다 — 검사가 못 본 것을 사람이 봤다.
         dash = _effective(svg, pm.start(), attrs, "stroke-dasharray", "")
         if not dash or dash == "none":
             continue
@@ -3527,7 +4878,7 @@ def check_figure_lint(fig_id, svg, errors, warnings, strict=False, geometry_stri
     #
     # 그래서 `<polygon>` 으로 그린 화살촉은 **규격을 통과한 것이 아니라 검사를 받지 않은 것**이다.
     # dynamics ch12 의 화살촉 11개가 그 상태였고, 빌드는 조용했다. 드러난 경위도 전형적이다 —
-    # 태깅된 치수 그룹에서 `has_arrowhead` 가 False 가 되는 바람에 [사용자 발화 인용 생략] 경고가 떴는데,
+    # 태깅된 치수 그룹에서 `has_arrowhead` 가 False 가 되는 바람에 *[발화 생략]* 경고가 떴는데,
     # 그건 화살촉이 없어서가 아니라 **못 봐서**였다. path 로 바꾸자 경고가 사라지고 G1 이 처음으로
     # 실제 판정을 했다(통과). 즉 경고를 면제로 덮었으면 사각지대가 그대로 남았을 자리다.
     #

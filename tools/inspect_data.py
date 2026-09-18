@@ -18,6 +18,7 @@
     python tools/inspect_data.py ch01 --keys           # 최상위 키와 컬렉션별 필드 이름
     python tools/inspect_data.py ch01 --item ch01-q09  # 그 항목의 JSON 전체
     python tools/inspect_data.py ch01 --figures        # 삽화 id·제목·SVG 길이
+    python tools/inspect_data.py ch01 --figure fig-x   # 그 삽화의 SVG 원본
     python tools/inspect_data.py ch01 --derivations    # 유도 카드의 단계 스키마와 본문
     python tools/inspect_data.py --steam satT 120      # 포화표(온도)
     python tools/inspect_data.py --steam satP 400      # 포화표(압력)
@@ -145,6 +146,28 @@ def figures(ch):
                       f"{len(dg.get('svg') or ''):<8}{_short(dg.get('title'), 44)}")
 
 
+def figure(ch, wanted):
+    """삽화 하나의 SVG 원본을 그대로 낸다.
+
+    ★ 왜 `--item` 으로 안 되나 (연 날 2026-09-08). `--item` 은 컬렉션의 **항목** id 만
+      훑는데 삽화는 그 항목의 `diagrams[]` 안에 있다 — `--figures` 로 id 는 보이는데
+      **소스를 볼 창구가 없어서** 삽화를 고칠 때마다 스니펫을 짜게 되는 자리였다
+      (arrow-on-outline 배치에서 실제로 걸렸다).
+    """
+    d = load(ch)
+    for name in COLLECTIONS:
+        for it in _collection(d, name):
+            if not isinstance(it, dict):
+                continue
+            for dg in it.get("diagrams") or []:
+                if dg.get("id") == wanted:
+                    print(f"== {ch} / {name} / {it.get('id')} / {wanted}")
+                    print(f"-- 제목: {dg.get('title') or ''}")
+                    print(dg.get("svg") or "(svg 없음)")
+                    return
+    sys.exit(f"{ch}에 id가 {wanted!r}인 삽화가 없다 (`--figures` 로 목록을 본다)")
+
+
 def derivations(ch):
     d = load(ch)
     formulas = _collection(d, "derivation")
@@ -258,6 +281,45 @@ def scripts_report():
     print("(산문 속 숫자 첨자 m³·m/s² 는 세지 않았다 — 계속 허용되는 표기)")
 
 
+OX_SYMBOL_RE = re.compile(r"[Δα-ωΑ-Ω]|_\{|\\[a-zA-Z]|[₀-₉⁰-⁹]|\^\{|°")
+
+
+def ox_symbols():
+    """OX(참/거짓) 문항의 prompt에 기호가 남았는지 전 과목 순회한다."""
+    print("OX 문항 기호 조사 (prompt 필드만, read-only)")
+    total = 0
+    for ch in CHAPTERS:
+        d = load(ch)
+        hits = []
+        for it in _collection(d, "problems"):
+            if not isinstance(it, dict) or "oxCorrect" not in it:
+                continue
+            prompt = it.get("prompt", "")
+            found = OX_SYMBOL_RE.findall(prompt)
+            if found:
+                hits.append((it.get("id"), "".join(sorted(set(found))), prompt))
+        if hits:
+            print(f"\n== {ch}: {len(hits)}건")
+            for oid, chars, prompt in hits:
+                print(f"   {oid:<14}[{chars}]  {_short(prompt, 90)}")
+        total += len(hits)
+    print(f"\n합계: {total}건")
+
+
+def ox_list():
+    """전 챕터 OX 문항의 id·정답·prompt를 그대로 나열한다(품질 육안 검토용)."""
+    for ch in CHAPTERS:
+        d = load(ch)
+        items = [it for it in _collection(d, "problems")
+                  if isinstance(it, dict) and "oxCorrect" in it]
+        if not items:
+            continue
+        print(f"\n== {ch}: {len(items)}건")
+        for it in items:
+            mark = "O" if it.get("oxCorrect") else "X"
+            print(f"  [{mark}] {it.get('id')}: {it.get('prompt')}")
+
+
 def main(argv):
     args = argv[1:]
     if "--steam" in args:
@@ -265,6 +327,12 @@ def main(argv):
         return 0
     if "--scripts" in args:
         scripts_report()
+        return 0
+    if "--ox-symbols" in args:
+        ox_symbols()
+        return 0
+    if "--ox-list" in args:
+        ox_list()
         return 0
     ch = next((a for a in args if a in CHAPTERS), None)
     if ch is None:
@@ -276,6 +344,8 @@ def main(argv):
         problems(ch)
     elif "--practice" in args:
         practice(ch)
+    elif "--figure" in args:
+        figure(ch, args[args.index("--figure") + 1])
     elif "--figures" in args:
         figures(ch)
     elif "--derivations" in args:

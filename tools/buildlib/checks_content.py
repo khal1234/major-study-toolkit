@@ -18,6 +18,7 @@ from .checks_svg import (
     _effective,
     _is_triangle_path,
     arrowhead_seam_issues,
+    balance_issue,
     centerline_style_issues,
     _iter_answer_diagrams,
     _iter_diagrams,
@@ -40,6 +41,7 @@ from .checks_svg import (
     figure_box_center_hits,
     figure_box_center_x_hits,
     figure_subtext_scale_hits,
+    digit_subscript_ratio_hits,
     figure_text_grouping_hits,
     text_runs,
     in_leader,
@@ -50,15 +52,25 @@ from .checks_svg import (
     axis_name_gap_issues,
     leader_spans,
 )
-from .textutil import LATEX_SUPPORTED, PITFALL_SOURCE_PREFIXES, VEC_COMBINING
+from .motion import (
+    expand_frames,
+    grow_target_issues,
+    missing_targets,
+    motion_issues,
+)
+from .textutil import (LATEX_SUPPORTED, PITFALL_SOURCE_PREFIXES, VEC_COMBINING,
+                       matrix_environment_issues)
 
 # 뷰어 `renderMath` 가 **실제로 그리는** `\mathcal{…}` 글자. 템플릿의 치환이 정본이고
 # 여기는 그 사본이다 — 잠금 `test_checks.py::test_mathcal_letters_match_the_renderer`.
 # 늘리는 순서는 **템플릿 먼저, 여기 나중**이다(반대로 하면 화면만 깨진 채 빌드가 초록이 된다).
 VIEWER_MATHCAL_LETTERS = ("V",)
-# ★ 2026-09-03 — `\mathcal` 과 같은 사정(위 주석 참고). 뷰어의 `\mathfrak{…}` 치환은
-#   현재 `E`(엑서지, Moran 표기) 하나만 안다.
-VIEWER_MATHFRAK_LETTERS = ("E",)
+# ★★ 2026-09-08 — **비었다. 뷰어는 `\mathfrak` 을 더 이상 그리지 않는다.**
+#   2026-09-03 에 엑서지 E 를 프락투어(𝔈)로 넣었던 것이 오독이었다(「고딕」=산세리프).
+#   교재 p.312 식 (7.1) 렌더로 확인하고 `\mathsf` 로 옮겼다. 이 튜플을 **지우지 않고 비우는**
+#   이유는, 지우면 위 루프가 함께 사라져 `\mathfrak{…}` 이 **역슬래시째 화면에 찍히는데도**
+#   빌드가 초록이 되기 때문이다 — 비워 두면 어떤 글자든 걸려 사람에게 `\mathsf` 를 가리킨다.
+VIEWER_MATHFRAK_LETTERS = ()
 
 # 결정면·방향 지수를 감싸는 괄호. 여는 것과 닫는 것이 짝이어야 지수로 본다.
 _INDEX_OPEN = "([{〈⟨"
@@ -81,7 +93,24 @@ def _is_bracketed_index(text, start, end):
 # 잠금 `test_checks.py::test_pre_frac_macros_match_the_renderer` 가 템플릿을 읽어 대조한다.
 # ★ `ddot` 은 그 회귀가 **첫 실행에서 잡아 준 것**이다(2026-08-25) — 아무도 안 적어 뒀는데
 #   렌더러는 이미 분수보다 먼저 치환하고 있었다. 자를 만들자마자 값을 한 건 냈다는 뜻이다.
-PRE_FRAC_MACROS = ("mathrm", "text", "vec", "dot", "ddot", "mathbf", "mathcal", "mathfrak", "hl", "sqrt")
+# ★★ **순서도 맞아야 한다 — 「있다/없다」만으로는 안 된다** (2026-09-06, 응용열역학
+#   `\frac{\dot{\mathfrak{E}}_{q,hot}}{...}` 오탐으로 발견). 템플릿 실제 순서는
+#   mathrm·text·vec·mathbf·mathcal·mathfrak·hl 이 먼저이고 `dot`·`ddot`은 그 **뒤**(sqrt
+#   보다도 앞)다 — 그런데 이 튜플은 `dot`을 `mathfrak`보다 앞에 뒀다. `\dot{\mathfrak{E}}`처럼
+#   중첩된 경우, 이 자가 자기 순서대로 한 번씩만 치환을 시도하면 `dot`은 안쪽에 아직 중괄호가
+#   있어 못 벗기고 지나가 버리고, 그 뒤 `mathfrak`이 안쪽만 벗겨 `\dot{E}` 형태로 중괄호가
+#   남는다 — 실제 화면은 멀쩡한데(렌더러는 mathfrak 먼저 벗기므로 dot도 정상 매치) 이 자만
+#   「중첩 중괄호」로 오판했다. `test_pre_frac_macros_match_the_renderer`는 **집합**만 대조해
+#   이 순서 어긋남을 못 잡는다 — 순서 자체를 템플릿에서 뽑아 대조하는 것은 별도 과제로 남긴다.
+# ★ 2026-09-08 — `mathsf`(엑서지)를 넣는다. 렌더러에서 `\mathfrak` 자리를 그대로 물려받았고
+#   `\dot{\mathsf{E}}_{q}` 형태가 그대로 살아 있으므로 **`dot` 보다 앞**이어야 한다(위 ★★).
+# ★ 2026-09-10 — `begin`. 행렬식 환경(`\begin{vmatrix}`)의 치환이 `\frac` **앞**이라 이 목록에
+#   들어와야 한다(회귀 `test_pre_frac_macros_match_the_renderer` 가 템플릿을 읽고 먼저 울었다 —
+#   손으로 세 번 빠뜨린 뒤에 붙인 그 자가 이번엔 제 몫을 했다). `end` 는 템플릿에서
+#   `\end\{vmatrix\}` 가 같은 정규식의 **뒷부분**이라 그 자에 안 잡히지만, 같은 치환이
+#   함께 지우므로 짝으로 적는다 — 하나만 적으면 `\end{…}` 가 분수 판정에 남는다.
+PRE_FRAC_MACROS = ("mathrm", "text", "vec", "mathbf", "mathcal", "mathsf", "overline",
+                   "hl", "ddot", "dot", "sqrt", "begin", "end")
 from .checks_originality import check_chapter_file as check_originality
 from .checks_originality import PROMPT_COLLECTIONS
 from .checks_errorlog import (
@@ -97,7 +126,7 @@ _ERRORLOG_REPORTED = set()
 DENSITY_MAX_GAP = 6
 BOLD_MAX_PER_PARAGRAPH = 3
 BOLD_MAX_PER_LINE = 2
-# ★ 6 → 4 (2026-07-31, 사용자 승인). [사용자 발화 인용 생략]
+# ★ 6 → 4 (2026-07-31, 사용자 승인). *[발화 생략]*
 # 실측 평균이 2.0~2.7인데 상한만 6이라 **한 절에 6개(떠올리기 5)** 인 곳이 다섯 군데 있었다 —
 # 상한이 평균의 3배면 그건 한계가 아니라 방치다. 분포는 `tools/audit_checks_load.py` 가 낸다.
 CHECKS_MAX_PER_SECTION = 4
@@ -155,9 +184,9 @@ MOTIF_EXEMPT_KEYS = {"source", "sourceRef", "sourcePages", "supplementNotes", "h
 # ★ 경고는 '무기한 대기' 상태를 가질 수 없다 (열린 날 2026-07-28).
 #
 # 사용자 지적: ch01 삽화 경고 28건이 전부 `[warn/6-B 대기]`였고, 맨눈으로 짚어 준 불편이
-# 그 목록 안에 그대로 있었다. [사용자 발화 인용 생략]
+# 그 목록 안에 그대로 있었다. *[발화 생략]*
 #
-# **왜 안 고쳐졌나 (재발).** 2026-07-26에 같은 부류를 [사용자 발화 인용 생략] 로 진단해
+# **왜 안 고쳐졌나 (재발).** 2026-07-26에 같은 부류를 *[발화 생략]* 로 진단해
 # F4가 글자 이름을 찍게 고쳤다. 이름은 남았는데 **그래도 안 고쳐졌다** — 진짜 원인은
 # 이름이 아니라 **만료의 부재**였다. `close_report.py`가 `exit 0 · 경고 N건`을 출력하면서
 # 상태를 `close`로 찍어, 경고를 세는 코드가 곧 경고를 통과시키는 코드였다.
@@ -171,6 +200,13 @@ def _waiver_map(ch):
     for dg in _iter_diagrams(ch):
         if dg.get("lintWaivers"):
             out[dg.get("id", "?")] = dg["lintWaivers"]
+    # ★ 유도 카드의 **슬라이드 삽화 한 벌**(`figure`, 단수 키)은 `_iter_diagrams` 가 안 훑는다
+    #   (그쪽은 `diagrams` 목록만 본다). 그래서 그 삽화에 적은 면제는 지금까지 한 번도 안 먹었다
+    #   — 응용열 ch07 의 F4 경고 둘이 사유를 적어 두고도 close 를 계속 막던 자리다(2026-09-18).
+    for f in (ch.get("derivation") or {}).get("formulas") or []:
+        fig = f.get("figure")
+        if isinstance(fig, dict) and fig.get("lintWaivers"):
+            out[fig.get("id", "?")] = fig["lintWaivers"]
     # ★ 절(theory.sections) 자체에 걸리는 경고도 같은 면제를 받는다 (2026-08-29) — 과목 간
     #   딥링크 경고가 첫 소비자다. 그 경고는 다른 git 브랜치를 못 건너가 기계로 못 닫으니,
     #   저자가 `git show` 로 확인한 뒤 사유와 함께 여기서 닫는다(위 「경고는 무기한 대기를
@@ -178,6 +214,14 @@ def _waiver_map(ch):
     for s in (ch.get("theory") or {}).get("sections") or []:
         if s.get("lintWaivers"):
             out["section " + str(s.get("id", "?"))] = s["lintWaivers"]
+    # ★ **문항(problems·practice)도 같은 면제를 받는다** (2026-09-07 · 삽화 → 절 → 문항 3회차).
+    #   첫 소비자: 「최종답 유효숫자」. 그 규칙은 **잰 값**을 겨냥하는데 문항에는 정확히 정해진
+    #   값이 섞인다(성공적 근사 ADC 의 시험 전압 5·2.5·1.25·0.625·0.3125 V 는 2의 거듭제곱이라
+    #   반올림하면 합이 안 맞는다). 기계가 못 가르는 자리라 저자가 사유와 함께 닫는다.
+    #   ☐ 같은 부류가 세 번째다 — 새 컬렉션이 생기면 여기도 함께 늘려야 한다는 뜻이다.
+    for q in (ch.get("problems") or []) + (ch.get("practice") or []):
+        if isinstance(q, dict) and q.get("lintWaivers"):
+            out[str(q.get("id", "?"))] = q["lintWaivers"]
     return out
 
 
@@ -191,6 +235,10 @@ def split_waived_warnings(warnings, waivers):
     waived, left = [], []
     for w in warnings:
         fig = w.split(":", 1)[0].replace("[답 표시]", "").strip()
+        # ★ 슬라이드 단계 조각(`fig-… [단계 2]`)은 **부모 삽화의 면제를 받는다**
+        #   (2026-09-18, 응용열 ch07 인박스 C2). 조각 id 는 검사가 만들어 내는 이름이라
+        #   데이터에 적을 자리가 없고, 그래서 면제를 적어도 안 닫혀 경고가 영원히 남았다.
+        fig = re.sub(r"\s*\[단계 \d+\]$", "", fig)
         for wv in waivers.get(fig) or []:
             if not str(wv.get("reason", "")).strip():
                 continue
@@ -235,8 +283,8 @@ def iter_visible_texts(node, trail="root"):
 
 # ★ 수학 기호가 인라인 수식 **밖**에 평문으로 남은 것 (열린 날 2026-07-28).
 #
-# 사용자 지적(3차 검수): [사용자 발화 인용 생략] /
-# [사용자 발화 인용 생략]
+# 사용자 지적(3차 검수): *[발화 생략]* /
+# *[발화 생략]*
 #
 # **왜 기존 검사가 못 잡았나.** 캐럿 검사(`^`)와 유니코드 첨자 검사(`inline_math_issues`)는 있었지만
 # 둘 다 **첨자**만 본다. `∂N/∂x`·`∫p dx`·`y ≡ 0`은 첨자가 하나도 없어서 **어느 검사에도 안 걸린다.**
@@ -250,7 +298,7 @@ MATH_NATIVE_KEYS = ("/latex", "/equations", "/svg", "/solutionTemplate")
 
 # ★ C12. 첨자를 **아예 안 쓰고** 기호에 숫자를 붙여 쓴 자리 (열린 날 2026-08-01, 사용자 재지적).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # **왜 여러 세션을 살아남았나 — 기존 검사는 전부 `_` 나 `^` 가 *있는* 것만 본다.**
 # `plain_math_issues` 는 `_{`·`^{` 를, 첨자 렌더 검사는 `P_atm` 꼴을 본다. 그런데
@@ -272,7 +320,7 @@ _RAW_SUBSCRIPT_EXEMPT = ("/changeNote",)
 
 # ★★ C46. 첨자에 **한글**을 쓴 자리 (열린 날 2026-08-13, 사용자 판정 뒤 신설).
 #
-# 사용자: [사용자 발화 인용 생략]
+# 사용자: *[발화 생략]*
 # 그날 `94352e3` 이 12곳을 영어로 바꿨다(`W_{화성}`→`W_{mars}` · `W_{작업자+카트}`→`W_{worker+cart}` ·
 # `v_{표}`→`v_{table}`). **그런데 막는 검사가 없어서 다시 들어온다** — 「close 의 정의」가 말하는
 # *데이터만 고친 상태*이고, 그건 그 인스턴스를 지운 것이지 close 가 아니다.
@@ -365,7 +413,7 @@ def raw_subscript_issues(ch):
 
 # ★ 절 번호는 순서에서 나온다 — 링크 라벨의 숫자가 그 순서와 맞는가 (열린 날 2026-08-02).
 #
-# 사용자 지적: [사용자 발화 인용 생략] — 본문은 **교재 절 번호**로 앞 절을 가리키는데
+# 사용자 지적: *[발화 생략]* — 본문은 **교재 절 번호**로 앞 절을 가리키는데
 # 정작 절 제목에는 번호가 없어서, 독자는 그 §1.3 이 이 문서의 어디인지 알 방법이 없었다.
 #
 # 처방(사용자 결정): 절 제목은 뷰어가 **순서로** 번호를 매기고(데이터에 박지 않는다),
@@ -379,9 +427,9 @@ _THEORY_LINK_RE = re.compile(r"\[\[(ch\d{2}):([A-Za-z0-9_-]+)\|\s*(\d+)절")
 def exam_step_equation_issues(ch):
     """C51. 시험 모드의 **수치 답 칸**이 식 사슬을 함께 내는가. 순수 함수.
 
-    열린 날 2026-08-26 — 사용자: [사용자 발화 인용 생략].
+    열린 날 2026-08-26 — 사용자: *[발화 생략]*.
 
-    ★★ **재발이다.** 나루 원장 2026-08-19(열역학 유도 공식 4): [사용자 발화 인용 생략]. 그때는 **데이터만 고치고
+    ★★ **재발이다.** 공용 폴더 원장 2026-08-19(열역학 유도 공식 4): *[발화 생략]*. 그때는 **데이터만 고치고
       자를 안 만들었다.** 그래서 2026-08-26 에 새 필드(`exam.steps[].why`)가 생기자마자 같은
       결함이 그대로 다시 났다 — 원인은 「빠뜨렸다」가 아니라 **빠뜨려도 통과되는 구조**다.
 
@@ -406,23 +454,23 @@ def exam_step_equation_issues(ch):
                 + str(st.get("id")) + "]: 수치 답 칸이 식 사슬을 안 낸다 — `equations` 가 "
                 + str(len(eqs)) + "줄이다. **원래 식 한 줄과 값을 넣은 줄**을 함께 적을 것"
                 " (결과만 적으면 그 값이 어디서 왔는지 독자가 되짚을 자리가 없다."
-                " 나루 원장 2026-08-19 과 같은 부류다).")
+                " 공용 폴더 원장 2026-08-19 과 같은 부류다).")
     return out
 
 
 def exam_figure_language_issues(ch):
     """C52. **시험 모드 장의 문항 삽화**에 한글이 남아 있나. 순수 함수.
 
-    열린 날 2026-08-27 — 사용자: [사용자 발화 인용 생략].
+    열린 날 2026-08-27 — 사용자: *[발화 생략]*.
 
-    ★★ **재발이다.** 2026-08-26 에 [사용자 발화 인용 생략] 를 받고 지문과 칸 라벨만 영어로 고쳤다. 삽화는 같은 「문항 층」인데
+    ★★ **재발이다.** 2026-08-26 에 *[발화 생략]* 를 받고 지문과 칸 라벨만 영어로 고쳤다. 삽화는 같은 「문항 층」인데
       **자가 없어서** 한글로 남았다 — 원인은 「빠뜨렸다」가 아니라 **C15(지문 언어)가
       `prompt` 만 보고 `diagrams[].svg` 는 안 보는 구조**다. 그래서 이번엔 데이터만 고치지
       않고 이 검사를 함께 연다(「close 의 정의」).
 
     판정선은 **층**이다 — 문항이 소유한 삽화(`problems`·`practice`)만 본다. 그 면이 곧
     시험지이고, 그 시험이 영문 교재를 따라가기 때문이다. **이론 절의 삽화는 대상이 아니다** —
-    모의고사 장의 이론 탭은 한국어 안내가 정본이다(사용자 2026-08-26: [사용자 발화 인용 생략]).
+    모의고사 장의 이론 탭은 한국어 안내가 정본이다(사용자 2026-08-26: *[발화 생략]*).
 
     ★ SVG 문자열을 **통째로** 본다. 텍스트 노드만 골라 세면 `<title>`·`aria-label` 처럼
       화면 밖에서 읽히는 자리가 샌다 — 이 리포의 SVG 는 id·클래스가 전부 ASCII 규약이라
@@ -465,7 +513,7 @@ SUMMARY_MIN_FORMULAS = 3
 def summary_formula_issues(ch):
     """C53. **요약 자리에 식이 있나.** 순수 함수.
 
-    열린 날 2026-08-27 — 사용자: [사용자 발화 인용 생략]
+    열린 날 2026-08-27 — 사용자: *[발화 생략]*
 
     ★★ **실측이 지적을 그대로 뒷받침했다.** 동역학의 요약 자리 열둘(장별 요약 8 · 과목 요약 1 ·
       모의고사 3)에 든 글자가 12,269자인데 **등호가 있는 식은 둘뿐**이었다. 식은 전부 유도 탭의
@@ -482,11 +530,14 @@ def summary_formula_issues(ch):
 
     보는 자리는 둘이다 — ⑴ `chapterSummary: true` 절(장별 요약) ⑵ `examMode: true` 장의
     이론 절 전체(그 탭이 곧 범위 정리다). 둘 다 아닌 장은 0건이라 남의 빌드를 안 멈춘다.
+    ⑴ 은 유도 카드가 0 인 장이면 안 본다 — 식을 다루지 않는 과목(2026-09-14 행복한 삶과 가족 ch01 요약에서
+    열림)에 식 셋을 요구하면 없는 식을 지어내게 된다. ⑵ 는 유도 카드가 원래 0 이라 그대로 본다.
     """
     targets = []
     sections = ((ch.get("theory") or {}).get("sections")) or []
     marked = [s for s in sections if isinstance(s, dict) and s.get("chapterSummary")]
-    if marked:
+    has_formulas = bool(((ch.get("derivation") or {}).get("formulas")) or [])
+    if marked and has_formulas:
         targets.append(("장별 요약 절", marked))
     elif ch.get("examMode"):
         targets.append(("모의고사 장의 정리 절", [s for s in sections if isinstance(s, dict)]))
@@ -509,10 +560,52 @@ def summary_formula_issues(ch):
     return out
 
 
+def textbook_problem_issues(ch):
+    """C54 — 교재 추천 문제(`textbookProblems`)의 형태. 순수 함수 — 테스트가 직접 부른다.
+
+    열린 날 2026-09-13(사용자 판정 «교재 추천 문제 탭은 한다 — 문제 번호·답·풀이만, 원문 미수록»).
+    재는 것: `source`·`items` 가 있고, 항목마다 `id`(중복 없음)·`ref`·`answer` 가 문자열이며,
+    원문을 실을 자리(`prompt`·`text`·`statement`)가 **없다**(절대 규칙 3 — 교재 문장을 데이터에 안 둔다).
+    못 보는 것: `answer`·`outline` 안에 교재 문장을 옮겨 적었는지(독자성 감사가 문항 지문만 본다).
+    데이터가 그 키를 안 쓰면 아무것도 안 한다.
+    """
+    tb = ch.get("textbookProblems")
+    if tb is None:
+        return []
+    issues = []
+    if not isinstance(tb, dict):
+        return ["textbookProblems: 객체({source, items})여야 한다"]
+    if not isinstance(tb.get("source"), str) or not tb.get("source").strip():
+        issues.append("textbookProblems.source: 교재·절 범위를 문자열로 적어야 한다")
+    items = tb.get("items")
+    if not isinstance(items, list) or not items:
+        return issues + ["textbookProblems.items: 비어 있지 않은 배열이어야 한다(없으면 키를 빼라)"]
+    seen = set()
+    for i, it in enumerate(items):
+        where = "textbookProblems.items[%d]" % i
+        if not isinstance(it, dict):
+            issues.append(where + ": 객체여야 한다")
+            continue
+        for key in ("id", "ref", "answer"):
+            if not isinstance(it.get(key), str) or not it[key].strip():
+                issues.append(where + ": " + key + " 가 빈 문자열이거나 없다")
+        pid = it.get("id")
+        if isinstance(pid, str):
+            if pid in seen:
+                issues.append(where + ": id 중복 — " + pid)
+            seen.add(pid)
+        for banned in ("prompt", "text", "statement"):
+            if banned in it:
+                issues.append(where + ": `" + banned + "` 는 둘 수 없다 — 교재 원문은 싣지 않는다(번호·답·풀이만)")
+        if "outline" in it and not isinstance(it["outline"], list):
+            issues.append(where + ": outline 은 배열이어야 한다")
+    return issues
+
+
 def chapter_summary_placement_issues(ch):
     """C50. 장별 요약 절(`chapterSummary: true`)은 **하나**이고 **맨 마지막**인가. 순수 함수.
 
-    열린 날 2026-08-26 — 사용자: [사용자 발화 인용 생략] · [사용자 발화 인용 생략].
+    열린 날 2026-08-26 — 사용자: *[발화 생략]* · *[발화 생략]*.
 
     새어나갈 뻔한 것: 요약은 데이터상 **이론 절**로 두고 뷰어가 화면만 「05 요약」 탭으로
     보낸다(새 최상위 컬렉션을 만들면 밀도·말투·용어·변경점 검사가 통째로 그 절을 안 본다).
@@ -569,10 +662,10 @@ def theory_link_number_issues(ch, chapter_name=None):
 
 # ★ 이론을 재배열했으면 유도도 같이 옮긴다 (열린 날 2026-08-02).
 #
-# 사용자 지적: [사용자 발화 인용 생략]
+# 사용자 지적: *[발화 생략]*
 # 실측(공학수학 ch01): 이론은 변수분리 → 선형 → 완전미분 → 적분인자로 재배열했는데
 # 유도는 **교재 순서 그대로** 변수분리 → 완전미분 → 적분인자 → 선형이었다.
-# 그 결과 이론 본문의 [사용자 발화 인용 생략] 가
+# 그 결과 이론 본문의 *[발화 생략]* 가
 # 유도 탭에서는 **거짓**이 됐다 — 두 탭이 서로 다른 이야기를 한 것이다.
 #
 # **왜 아무도 못 봤나:** 두 순서를 이어 주는 것이 데이터에 **없었다.** 이론 절과 유도 카드는
@@ -638,11 +731,11 @@ def plain_math_issues(ch):
 
 # ★ 평문으로 쓴 **분수** (열린 날 2026-07-30 — 사용자 지적 4회째, 기계 방지가 없어서 또 났다).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # **왜 기존 검사가 못 잡았나.** `plain_math_issues` 는 `∂ ∫ ≡ √` 와 중괄호 첨자만 본다.
 # `P = F/A`·`F₁/A₁`·`(F − mg)/m` 에는 그 기호가 하나도 없어서 **어느 검사에도 안 걸렸다.**
-# 2026-07-30 인박스 V-11 에서 이미 [사용자 발화 인용 생략] 로 적어 두고 **넣지 않아서** 재발했다.
+# 2026-07-30 인박스 V-11 에서 이미 *[발화 생략]* 로 적어 두고 **넣지 않아서** 재발했다.
 #
 # **왜 `/` 전부를 잡지 않는가.** 단위(`m/s²`·`kJ/kg`·`N/m³`)도 `/` 를 쓴다. 그건 분수가 아니라
 # 단위 기호라 세로 조판하면 오히려 틀린다. 그래서 **단위에는 거의 나타나지 않는 세 모양**만 본다:
@@ -669,11 +762,11 @@ FRACTION_SHAPES = (
 
 # ★★ 인라인 수식 **안**의 슬래시 분수 (열린 날 2026-08-01 — 사용자 **재지적**).
 #
-# 사용자: [사용자 발화 인용 생략]
+# 사용자: *[발화 생략]*
 #
 # **구조적 원인이 뼈아프다 — 앞 라운드의 처방이 이 라운드의 결함을 만들었다.**
 # `plain_fraction_issues` 는 `mask_inline_math()` 로 수식을 **가린 뒤 바깥만** 본다. 그래서
-# 2026-07-31 에 [사용자 발화 인용 생략] 로 48곳을 고쳤을 때, 옮겨진 글자는
+# 2026-07-31 에 *[발화 생략]* 로 48곳을 고쳤을 때, 옮겨진 글자는
 # **검사가 아예 보지 않는 자리로 들어갔다.** `\(a^{2}/4\)` 는 화면에 여전히 슬래시가 보이는데
 # 검사는 통과한다 — 검사가 **틀린 이동을 보상**하고 있었던 것이다.
 # 규격(AGENTS 「분수는 글자로 쓰지 않는다」)은 처음부터 *화면에 슬래시가 보이면 위반*이었고,
@@ -684,11 +777,22 @@ FRACTION_SHAPES = (
 #   ⑵ **단위** — `kJ/kg`·`m/s` 는 나눗셈 조판이 아니라 단위 기호다(AGENTS 가 명시적으로 제외한다).
 #      단위 목록은 과목 무관한 SI 기호만 둔다 — 특정 과목의 낱말을 넣으면 공통이 그 과목을 아는 셈이다.
 _MATH_SPAN_RE = re.compile(r"\\\((.+?)\\\)", re.S)
-_SUP_SUB_GROUP = re.compile(r"[\^_]\{[^{}]*\}")
+# 지수·첨자 묶음 — 중괄호 한 겹 중첩(`^{-ζ\pi/\sqrt{1-ζ^2}}`)까지 가린다 (2026-09-12, 시스템제어
+# 실측: 넓힌 원자가 `\sqrt{…}` 를 받자 지수 안 슬래시가 오탐으로 떠올랐다).
+_SUP_SUB_GROUP = re.compile(r"[\^_]\{(?:[^{}]|\{[^{}]*\})*\}")
 _MATHRM_GROUP = re.compile(r"\\(?:mathrm|text|operatorname)\{[^{}]*\}")
 # 첫 글자를 ASCII로 열거하면 화면상 같은 `∂u/∂T`·`Δh/Δt`·`ρ/μ`만 빠진다.
 # Python의 유니코드 낱말 문자에 수학 기호 `∂`·`∆`를 보태 같은 화면 표기를 한 자로 본다.
-_SLASH_ATOM = r"(?:[^\W\d_]|[0-9∂∆])(?:[\w∂∆\\^{}]*)"
+# ★ 원자가 **중괄호 인자를 가진 매크로**(`\mathbf{v}`·`\sqrt{2}`)나 **노름**(`\|\mathbf{v}\|`)이어도 잰다
+#   (2026-09-12, 분수 부류 12회째). `\(\mathbf{v}/\|\mathbf{v}\|\)` 는 분자가 `\` 로 시작해 옛 원자
+#   (글자·숫자로만 시작)에 안 걸렸다 — 화면엔 슬래시가 그대로였다.
+#   ☐ 인자 없는 매크로(`\partial u/\partial x`·`t/\tau`·`2/\ln(0.5)`)는 **일부러 안 넓혔다** — 첫 판을
+#   전 과목에 대 보니 60곳이 넘게 걸렸고 처방기가 `\partial \frac{u}{\partial} x` 처럼 낱말 경계를
+#   잘못 잘라 화면을 깨뜨린다(자와 처방이 같은 원자를 쓰므로 자만 넓힐 수 없다). 그 부류는 빚으로 남긴다.
+_SLASH_MACRO_ATOM = r"\\[A-Za-z]+\{[^{}]*\}"
+_SLASH_NORM_ATOM = r"\\\|(?:" + _SLASH_MACRO_ATOM + r"|[A-Za-z0-9]+)\\\|"
+_SLASH_ATOM = (r"(?:" + _SLASH_NORM_ATOM + r"|" + _SLASH_MACRO_ATOM
+               + r"|(?:[^\W\d_]|[0-9∂∆])(?:[\w∂∆\\^{}]*))")
 _SLASH_FRAC = re.compile(r"(" + _SLASH_ATOM + r")\s*/\s*(" + _SLASH_ATOM + r")")
 _UNICODE_PARTIAL_FRAC = re.compile(r"∂([A-Za-zΑ-Ωα-ω]+)\s*/\s*∂([A-Za-zΑ-Ωα-ω]+)")
 
@@ -701,7 +805,7 @@ def normalize_unicode_partial_fractions(text):
     )
 # ★★ 단위 등록부는 **하나뿐이다** — `UNIT_BASES` + `_is_unit_token`(아래쪽에 정의).
 #
-# 열린 날 2026-08-02 (사용자 지적 **8회째**: [사용자 발화 인용 생략]).
+# 열린 날 2026-08-02 (사용자 지적 **8회째**: *[발화 생략]*).
 # 여기에는 원래 `UNIT_TOKENS` 라는 **두 번째 등록부**가 있었다. 2026-08-01 에
 # `math_slash_fraction_issues`(수식 **안**의 슬래시)를 새로 만들면서 목록을 새로 적었는데,
 # 그 목록은 **2026-07-31 에 이미 걸러낸 애매한 기호들을 그대로 담고 있었다** —
@@ -724,7 +828,7 @@ def iter_math_blobs(ch):
       뷰어는 그 키를 `renderMath(k)` 로 그리는데(템플릿 3306행), `iter_visible_texts` 는
       dict 의 **값만** 흘린다. 그래서 ch05 `steady-flow-energy-balance` 의 변수 설명 키가
       `h + V^{2}/2 + gz` 로 **텍스트 분수**인 채 11회째 지적을 받고도 통과했다
-      (사용자: [사용자 발화 인용 생략] — 분수 부류 11회째).
+      (사용자: *[발화 생략]* — 분수 부류 11회째).
       **빠뜨림이 아니라 순회의 사각지대다** — 값만 훑는 한 몇 번을 고쳐도 다시 들어온다.
 
     세 갈래를 한 자리에 모은다. ⑴ 산문 안의 `\( … \)` 스팬 ⑵ 값 전체가 LaTeX 인 필드
@@ -746,13 +850,43 @@ def iter_math_blobs(ch):
                 for hit in walk(v, trail + "[" + str(i) + "]", key):
                     yield hit
         elif isinstance(node, str):
-            if key in MATH_ONLY_KEYS:
+            if is_whole_math_field(key, trail):
+                if is_unit_only_blank_answer(trail, node):
+                    return
                 yield trail, node
             else:
                 for span in _MATH_SPAN_RE.findall(node):
                     yield trail, span
     for hit in walk(ch, "root"):
         yield hit
+
+
+_NUMBER_WITH_UNIT = re.compile(r"[-−+]?[\d.,]+\s*[A-Za-zμµΩ°²³·]+(?:/[A-Za-zμµΩ°²³·]+)?")
+
+
+def is_unit_only_blank_answer(trail, node):
+    r"""빈칸 답이 「수치 + 단위」뿐인가(`0.0108 kg/kg`) — 단위 슬래시라 분수가 아니다.
+
+    단위 판정을 `\mathrm{}` 로만 하는 과목에서는 이름 판정이 꺼져 있어 여기서 거른다.
+    자(`iter_math_blobs`)와 처방(`fix_math_slash_fraction`)이 같이 부른다 — 2026-09-12 처방기만
+    이 판정이 없어 `kg/kg` 를 `\frac{kg}{kg}` 로 바꿔 쓴 것을 되돌렸다.
+    """
+    return "/blanks[" in (trail or "") and bool(_NUMBER_WITH_UNIT.fullmatch((node or "").strip()))
+
+
+def is_whole_math_field(key, trail):
+    r"""값 전체가 `renderMath` 로 그려지는 필드인가 — 자와 처방이 같은 판정을 쓴다.
+
+    ★ 열린 날 2026-09-12 (분수 부류 12회째, 사용자 *[발화 생략]*).
+      문풀 빈칸의 `answer` 는 뷰어가 `renderMath(b.answer)` 로 통째로 그리는데,
+      `plain_fraction_issues` 는 그 키를 **명시적으로 건너뛰고** 이 수식 자는 `\( … \)`
+      스팬만 찾았다 — 두 자 사이에 떨어진 자리라 `〈2/7, 3/7, 6/7〉`·`6/7` 이 화면에 그대로 나갔다.
+    잰다: `SLASH_FRAC_MATH_KEYS` + 문풀 빈칸의 `answer`·`figureAnswer`. 못 본다: 뷰어가 새로
+    `renderMath` 로 그리기 시작한 필드 — 여기에 등록해야 한다.
+    """
+    if key in SLASH_FRAC_MATH_KEYS:
+        return True
+    return key in ("answer", "figureAnswer") and "/blanks[" in (trail or "")
 
 
 def _blank_same_length(m):
@@ -764,7 +898,7 @@ def slash_fraction_spans(span):
     r"""수식 하나 안의 슬래시 분수 [(시작, 끝, 분자, 분모)] — 좌표는 **원문과 같다**. 순수 함수.
 
     ★ **자와 처방이 같은 함수를 쓰게 하려고 갈라냈다** (2026-08-12, 공학수학 세션 보고).
-      [사용자 발화 인용 생략] — 손으로 고치면 과목마다 갈라지고, 그 갈라짐이 이 검사가 없애려는 결함이다.
+      *[발화 생략]* — 손으로 고치면 과목마다 갈라지고, 그 갈라짐이 이 검사가 없애려는 결함이다.
       그렇다고 처방이 판정을 **다시 구현하면** 이 파일이 여러 번 겪은 그 사고가 난다
       (`declared_roles`·`tone_segments` 선례: 검사는 신고하는데 도구는 안 고치는 상태).
       그래서 **찾는 일은 여기 하나**이고, `tools/fix_math_slash_fraction.py` 는
@@ -807,7 +941,7 @@ def math_slash_fraction_issues(ch):
 
 # ★ 독자 환경 단정 (열린 날 2026-08-01 — 사용자 **재지적**).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # **원인은 빠뜨림이 아니다 — 승격에 브레이크가 없었다.** 이 리포는 *지적·사실 → 원장 → 규칙 승격*
 # 을 미덕으로 삼는데, **무엇이 승격될 자격이 있는가**를 가르는 자리가 없었다. 그래서 사용자가
@@ -827,6 +961,52 @@ READER_ENV_HEDGES = ("다면", "라면", "수업에 따라", "사례", "다를 �
                      "여러분 수업", "확인된", "확인한", "안내를 정본", "경우에는", "수업마다")
 
 
+# 뷰어 `renderMath` 가 모르는 수식 구분자. `\(…\)` 만 수식이고 나머지는 **역슬래시째 화면에 찍힌다.**
+UNSUPPORTED_MATH_DELIMS = ("\\[", "\\]", "$$")
+
+
+def unsupported_math_delimiter_issues(ch):
+    """독자 화면에 원문으로 새는 수식 구분자. 순수 함수 — 테스트가 직접 부른다.
+
+    열린 날 2026-09-12(Codex 검토 F03) — 열전달 ch02 의 열확산방정식이 `\\[ … \\]` 로 적혀
+    화면에 `\\frac{\\partial}…` 가 그대로 보였다. **JSON 도 LaTeX 명령도 전부 유효**했으므로 어느
+    검사도 안 걸렸다 — 「입력이 유효하다」와 「독자가 보는 식이 정상이다」는 다른 물음이다.
+    230장 중 이 한 곳이었다(`Grep '\\\\\\['` 실측).
+    못 보는 것: `\\(`·`\\)` 의 짝이 안 맞는 경우(그건 뷰어가 산문으로 흘린다) · 렌더가 되긴 하는데
+    틀리게 되는 경우.
+    잠금 `test_unsupported_math_delimiters_are_rejected`.
+    """
+    out = []
+    for where, blob in iter_visible_texts(ch):
+        for delim in UNSUPPORTED_MATH_DELIMS:
+            if delim in blob:
+                out.append(where + ": 뷰어가 모르는 수식 구분자 " + repr(delim)
+                           + " — 화면에 역슬래시째 찍힌다. `\\(…\\)` 로 바꿀 것(한 줄에 홀로 두면 블록 수식)")
+                break
+    return out
+
+
+def table_math_pipe_issues(ch):
+    """표 행(`|` 로 시작하는 줄) 안의 수식 `\\(…\\)` 에 `|` 가 든 곳. 순수 함수 — 테스트가 직접 부른다.
+
+    재는 것: 표 행의 수식 구간 속 `|`(노름 `\\|a\\|`·절댓값). 뷰어가 표를 `|` 로 칸을 나눠 수식이 칸째 쪼개진다.
+    열린 날 2026-09-14 — 공학수학 2 ch07 요약 표의 `\\|\\mathbf{a}\\|` 가 화면에 역슬래시째 여섯 칸으로 흩어졌는데
+    빌드는 227장 통과였다(렌더 확인에서 잡힘).
+    못 보는 것: 표 밖 수식 · 수식이 아닌 칸의 `|`.
+    """
+    out = []
+    for where, blob in iter_visible_texts(ch):
+        for line in str(blob or "").split("\n"):
+            if not line.lstrip().startswith("|"):
+                continue
+            for body in re.findall(r"\\\((.*?)\\\)", line):
+                if "|" in body:
+                    out.append(where + ": 표 칸의 수식에 `|` 가 있다 — 뷰어가 칸을 거기서 끊어 수식이 원문째 흩어진다."
+                               " 식을 표 밖으로 빼거나 `|` 없는 꼴로 적을 것: " + repr(body[:50]))
+                    break
+    return out
+
+
 def reader_environment_issues(ch):
     """독자의 수업 환경을 단정한 곳. 순수 함수 — 테스트가 직접 부른다."""
     out = []
@@ -843,9 +1023,135 @@ def reader_environment_issues(ch):
     return out
 
 
+# ★ 출처 인용이 독자 화면 문장 안에 새 들어간 것 (열린 날 2026-09-05 — appthermo 재발).
+#
+# **이미 한 번 닫힌 부류의 다른 침입구다.** `sourceRef`·`source` 필드는 `MOTIF_EXEMPT_KEYS`로
+# 애초에 순회 밖이라 화면에 안 나간다(AGENTS.md 「출처는 화면에 띄우지 않는다」). 그런데 이번
+# 사고는 그 필드가 아니라 **독자가 읽는 `derivationSteps[].text` 산문 안에** 저자가 직접
+# `"…(교재 §7.4.1 해석)."` 처럼 근거를 인용문 형태로 박아 넣은 것이다 — 필드를 숨기는 장치는
+# 아예 대상이 아니었다. `section_ref_style_issues`(C22)도 안 잡는다: `§7.4.1`은 점이 있는
+# 교재 절 표기라 그 검사의 정의상 정확히 면제 대상이기 때문이다("우리 절"이 아니다).
+#
+# 판정: `iter_visible_texts`가 흘리는 모든 문자열에서 "교재/원서 이름 + 절·쪽 표기"가 **괄호
+# 안에** 나타나면 잡는다. 괄호로 한정하는 이유 — 산문이 "교재에서는 …라고 설명합니다"처럼
+# 교재를 화제로 삼아 서술하는 것 자체는 정당한 문체이고(독자성 규칙이 요구하는 것과는 다른
+# 층), 걸러야 할 것은 **근거를 대는 인용부** 특유의 괄호 형태다.
+_CITATION_LEAK_RE = re.compile(
+    r"\([^()]*(?:교재|원서|Moran|Cengel|Kreyszig|Van Wylen|Sonntag|Shapiro|Boettner|Bailey)"
+    r"[^()]*(?:§\s*\d|p\.\s*\d|PDF\s*p)[^()]*\)")
+
+
+def citation_leak_issues(ch):
+    """독자 화면 문장 안에 교재 인용(괄호 형태)이 새 들어간 곳. 순수 함수 — 테스트가 직접 부른다."""
+    out = []
+    for where, blob in iter_visible_texts(ch):
+        for m in _CITATION_LEAK_RE.finditer(str(blob or "")):
+            out.append(
+                where + ": 출처 인용이 독자 문장 안에 그대로 남았다 — " + repr(m.group(0))
+                + " (근거는 sourceRef 필드에 두고 본문에서는 뺄 것. 제작·감사용 근거이지"
+                " 독자용 정보가 아니다): " + repr(str(blob)[max(0, m.start() - 30):m.end() + 10]))
+    return out
+
+
+# 제작 파일 이름이 독자 화면 문장에 새 들어간 것 (열린 날 2026-09-13 — 전기전자 ch08 도입부
+# 「이 과목의 SUBJECT.md가 확정한 시험 형식」). 독자는 그 파일을 볼 수 없다.
+_PRODUCTION_FILE_RE = re.compile(
+    r"SUBJECT\.md|\.workorder\.md|review-inbox|card-overlap-verdicts|textbook-map\.md")
+
+
+def production_file_leak_issues(ch):
+    """독자 화면 문장 안에 제작 파일 이름이 나온 곳. 순수 함수 — 테스트가 직접 부른다."""
+    out = []
+    for where, blob in iter_visible_texts(ch):
+        for m in _PRODUCTION_FILE_RE.finditer(str(blob or "")):
+            out.append(
+                where + ": 제작 파일 이름이 독자 문장에 새 들어갔다 — " + repr(m.group(0))
+                + " (독자는 그 파일을 못 본다. 필요한 사실만 문장으로 쓰고 근거는 sourceRef 로): "
+                + repr(str(blob)[max(0, m.start() - 30):m.end() + 10]))
+    return out
+
+
+# C71. 짝 안 맞는 따옴표 — 여는 «/「 와 닫는 」/» 가 섞인 쌍 (열린 날 2026-09-17).
+# 응용열 ch11·12 에서 «…」 13건을 손으로 고친 뒤 전 과목 JSON 에 134건이 남아 있었다.
+# 판정: 여는 표시 뒤 120자 안에 **다른 종류의** 닫는 표시가 먼저 온다(같은 종류 닫는 표시·
+# 다른 종류 여는 표시·큰따옴표가 사이에 없을 때). 처방은 여는 쪽에 맞춰 닫기다.
+# 애매한 자리(고칠 값 None): ⑴ 사이에 같은 여는 표시가 또 있다(인용 안의 인용일 수 있다)
+# ⑵ 뒤에 짝 맞는 닫는 표시가 다음 여는 표시(종류 무관)보다 먼저 온다(가운데 것이 떠돌이일 수 있다).
+# 못 보는 것: 120자를 넘는 인용 · 닫는 표시가 아예 없는 인용.
+QUOTE_CLOSER = {"«": "»", "「": "」"}
+_QUOTE_MISMATCH_RE = re.compile("«[^»「」\"]{1,120}」|「[^」«»\"]{1,120}»")
+
+
+def quote_pair_mismatches(text):
+    """[(시작, 끝, 고친 조각 or None)] — None 은 사람이 볼 애매한 자리. 순수 함수."""
+    out = []
+    text = str(text or "")
+    for m in _QUOTE_MISMATCH_RE.finditer(text):
+        opener = m.group(0)[0]
+        closer = QUOTE_CLOSER[opener]
+        inner = m.group(0)[1:-1]
+        fixed = opener + inner + closer
+        if opener in inner:
+            fixed = None
+        else:
+            rest = text[m.end():]
+            # 다음 여는 표시는 종류를 가리지 않는다 — «가」 「나» 의 » 는 「나 의 짝이다.
+            nxt_close = rest.find(closer)
+            opens = [i for i in (rest.find("«"), rest.find("「")) if i != -1]
+            nxt_open = min(opens) if opens else -1
+            if nxt_close != -1 and (nxt_open == -1 or nxt_close < nxt_open):
+                fixed = None
+        out.append((m.start(), m.end(), fixed))
+    return out
+
+
+def quote_pair_issues(ch):
+    """독자 화면 문장의 짝 안 맞는 따옴표. 처방 `tools/fix_quote_pairs.py`."""
+    out = []
+    for where, blob in iter_visible_texts(ch):
+        for start, end, fixed in quote_pair_mismatches(blob):
+            out.append(
+                where + ": 따옴표 짝이 안 맞는다 — " + repr(blob[start:end])
+                + (" → " + repr(fixed) if fixed else " (애매 — 사람이 본다)")
+                + " (python tools/fix_quote_pairs.py --apply)")
+    return out
+
+
+# C72. 줄바꿈이 글자 그대로 `\n` 으로 들어갔다 (열린 날 2026-09-17, 전기전자 ch03 전 장).
+# 판정: 홀수 개 역슬래시 뒤 `n`. 뒤에 영문자가 붙어 LaTeX 명령 이름이 되면 통과(`\nu`·`\nabla`).
+# 코드 조각(``` 울타리·`인라인 코드`) 안은 안 본다 — 거기선 `\n` 이 정상 표기다.
+# 못 보는 것: `\n` 뒤에 영단어가 바로 붙은 줄바꿈이 우연히 LaTeX 명령 이름과 같을 때.
+LATEX_N_COMMANDS = frozenset((
+    "ne", "neq", "nu", "nabla", "neg", "not", "notin", "ni", "newline", "nolimits",
+    "nonumber", "nearrow", "nwarrow", "natural", "nleq", "ngeq", "nless", "ngtr", "nmid",
+    "nparallel", "nsim", "ncong", "nexists", "nleftarrow", "nrightarrow", "nLeftarrow",
+    "nRightarrow", "napprox", "nsubseteq", "nsupseteq", "nvdash", "nleftrightarrow"))
+_LITERAL_NEWLINE_RE = re.compile(r"(?<!\\)(?:\\\\)*\\(n[A-Za-z]*)")
+_CODE_SPAN_RE = re.compile(r"```.*?```|`[^`\n]*`", re.S)
+
+
+def literal_newline_spans(text):
+    """[(시작, 끝)] — 글자 그대로의 `\\n` 자리. 순수 함수."""
+    text = str(text or "")
+    masked = _CODE_SPAN_RE.sub(lambda m: " " * len(m.group(0)), text)
+    return [(m.start(1) - 1, m.start(1) + 1)
+            for m in _LITERAL_NEWLINE_RE.finditer(masked)
+            if m.group(1) not in LATEX_N_COMMANDS]
+
+
+def literal_newline_issues(ch):
+    """독자 화면 문장에 글자 그대로 찍힐 `\\n`."""
+    out = []
+    for where, blob in iter_visible_texts(ch):
+        for start, end in literal_newline_spans(blob):
+            out.append(where + ": 줄바꿈이 글자 그대로 `\\n` 이다 — 화면에 찍힌다: "
+                       + repr(blob[max(0, start - 20):end + 20]))
+    return out
+
+
 # ★ C22. 우리 절을 가리킬 때 `§N` 대신 **`N절`** (열린 날 2026-08-02, 사용자 지적).
 #
-# 사용자: [사용자 발화 인용 생략] — 맞다. 뷰어가 목차·표제에 `N절 ` 을 붙이는데(템플릿의
+# 사용자: *[발화 생략]* — 맞다. 뷰어가 목차·표제에 `N절 ` 을 붙이는데(템플릿의
 # `(n ? n + '절 ' : '') + fmtText(s.heading)`) 본문 상호참조만 `§N` 이라, **독자는 화면에서
 # 한 번도 본 적 없는 이름으로 안내받는다.** 실측 동역학 ch12 **26곳**.
 #
@@ -876,11 +1182,11 @@ def section_ref_style_issues(ch):
 
 # ★ C23. 독자에게 말하는 글의 **말투** (열린 날 2026-08-02, 사용자 지적).
 #
-# 사용자: [사용자 발화 인용 생략]
+# 사용자: *[발화 생략]*
 #
 # ★ **관행은 있었는데 문서가 없었다.** AGENTS·docs 전수 grep 에 말투 조항이 **0건**이었다.
 #   규칙이 없으면 데이터가 마음대로 정한다 — `§N` 과 정확히 같은 부류이고, 이 리포에서
-#   [사용자 발화 인용 생략] 의 세 번째다. 실측 동역학 ch12: 평어 **547문장** · 존댓말 15 —
+#   *[발화 생략]* 의 세 번째다. 실측 동역학 ch12: 평어 **547문장** · 존댓말 15 —
 #   **한 챕터 안에서도 이미 갈려 있었다.**
 #
 # 판정은 **문장 종결 위치**만 본다. 명사구 종결·영문 지문·채점 키워드는 말투를 물을 자리가 아니다.
@@ -888,7 +1194,7 @@ def section_ref_style_issues(ch):
 #   `…둘은 갈라진다.** 선반 공구대가…` 처럼 굵게 표시가 문장 끝에 걸리면, `(?<=[.!?])\s+` 는
 #   `.` 바로 뒤가 `*` 라 끊지 못하고 **다음 문장까지 한 덩어리**로 읽는다. 그러면 그 덩어리의
 #   종결은 뒤 문장의 것이라, 안에 든 평어가 통째로 보이지 않는다(실제로 그렇게 남아 있었다).
-# ★★ **줄표(`—`)도 문장 경계다** (2026-08-02, 사용자 지적: [사용자 발화 인용 생략]). 이 리포의 글은 `앞말 — 뒷말` 로 덧붙이는 문형을 자주 쓰는데, 줄표 **앞**이
+# ★★ **줄표(`—`)도 문장 경계다** (2026-08-02, 사용자 지적: *[발화 생략]*). 이 리포의 글은 `앞말 — 뒷말` 로 덧붙이는 문형을 자주 쓰는데, 줄표 **앞**이
 #   이미 종결어미다. 문장 끝만 보던 자는 뒷말의 `~입니다` 만 읽고 통과시켰고,
 #   그래서 **한 문장 안에 평어와 존댓말이 함께** 남았다(실측 34곳). 종결이 두 개면 둘 다 봐야 한다.
 # ★★ **화살표(`→`) 앞도 같다** (2026-08-02, 기계재료 실측 — 줄표와 같은 부류다).
@@ -905,7 +1211,7 @@ def section_ref_style_issues(ch):
 #     이 자가 조각의 *끝만* 본다는 것. 그래서 이번에도 인스턴스가 아니라 **경계**를 고친다.
 #   판정: **공백에 둘러싸인 것만** 경계로 센다. 붙여 쓴 가운뎃점은 나열이 아니라
 #   ⑴ 단위 곱(`kg·m/s²`) ⑵ 2항목 병렬(`미분·적분`) 이라 절 경계가 아니다 — AGENTS 「표기 세부」가
-#   [사용자 발화 인용 생략] 와 그 둘을 이미 갈라 놓았고, 여기서 같은 선을 쓴다.
+#   *[발화 생략]* 와 그 둘을 이미 갈라 놓았고, 여기서 같은 선을 쓴다.
 #   나눠 놓고 보면 나열의 각 항이 명사구인 경우(`추가 3 · 수정 5 · 삭제 1`)는 판정이 `None` 이라
 #   **조각을 더 잘게 나누는 것만으로 오탐이 늘지 않는다** — 좁히는 자가 아니라 넓히는 자다.
 _SENT_SPLIT = re.compile(r"(?<=[.!?])[*_`)\]】」’\"']*\s+|\s+[—–→·]\s+|\n+")
@@ -926,9 +1232,11 @@ _PLAIN_DECL = re.compile(r"다[.!?]?$")
 #   `~는가/은가/인가/던가` 는 물음표 없이도 종결이라 그대로 잡는다(변환기가 `~나요` 로 바꾼다).
 #   평서형 `~다` 는 이 규칙 밖이다 — 위 `_PLAIN_DECL` 이 조건 없이 잡는다.
 _PLAIN_SHORT = re.compile(r"(가|까|라|자|나|냐)[.!?]?$")
+# 지문의 명령형 `~하라`·`~쓰라`·`~구하라`·`~보라`·`~그리라`·`~고르라`·`~적어라` (열린 날 2026-09-14) — 규약은 `~하시오`
+_PLAIN_IMPERATIVE = re.compile(r"(?:하|쓰|보|그리|고르|어|아|여)라$")
 _PLAIN_ASK_TAIL = ("는가", "은가", "인가", "던가")
 # ★★ **지시형 `~ㄹ 것` 은 종결어미가 아니라 의존명사 `것` 으로 끝난다** (열린 날 2026-08-04).
-#   사용자: [사용자 발화 인용 생략]
+#   사용자: *[발화 생략]*
 #   맞다 — 그런데 이 자는 **0건**이라고 말하고 있었다(`audit_conventions [M]` 이 열역학
 #   ch00~ch02 전부 `평어 종결 어절 0가지`). 위 세 판정이 전부 빗나가기 때문이다:
 #   `_PLAIN_DECL`(`다$`)·`_PLAIN_SHORT`(한 음절 어미)·`_POLITE_TAIL` 중 무엇도 `것` 에 안 걸려
@@ -948,7 +1256,7 @@ _JONG_RIEUL = 8
 #     (`- **경계에 힘이 작용할 것** — 힘만 있고 …`)도 이 자에 걸린다. 마크업으로 표제를 가려
 #     면제할 수도 있었지만 두 가지가 걸렸다: ⑴ `sentence_endings` 가 조각 앞의 `- **` 를 이미
 #     벗겨서(`^[-*|>\s]+`) 마크업이 판정 시점에 남아 있지 않고 ⑵ 이 리포 원칙이
-#     [사용자 발화 인용 생략] 다.
+#     *[발화 생략]* 다.
 #     그래서 그 두 표제를 **명사구로 다시 썼다**(`경계에 작용하는 힘`·`움직이는 경계`).
 # 조각의 **원문**이 문장부호로 끝났는가 — 뒤따르는 강조·괄호 표시는 넘겨서 본다.
 _TERMINAL_PUNCT = re.compile(r"[.!?][*_`)\]】」’\"']*$")
@@ -968,7 +1276,7 @@ _TRAIL_PAREN = re.compile(r"(?<=[^\s(])\s*\([^()]*\)\s*$")
 #   **나열 조각**이 한 조각으로 떨어진다: `**물리적으로 묶여 있거나**(줄과 도르래) …보거나`.
 #   그 조각의 끝 글자는 `나` 라 한 음절 종결어미 자(`_PLAIN_SHORT`)가 **평어로 읽었다** —
 #   실제로는 종결어미가 아예 없는 조각이다. 종결이 없는 것에 말투를 물을 수는 없다.
-#   ★ 같은 부류를 기계재료 세션이 [사용자 발화 인용 생략] 으로 좁혔는데
+#   ★ 같은 부류를 기계재료 세션이 *[발화 생략]* 으로 좁혔는데
 #   (`is_plain_ending`), 이 조각은 **원문이 마침표로 끝나서** 그 자에 걸리지 않는다.
 #   둘은 상보적이라 함께 둔다 — 하나는 *부호가 있나*, 하나는 *종결어미가 있나* 를 본다.
 #   ★ 이 자는 **좁히기만 한다** — 연결어미로 끝나면 그 뒤에 반드시 다른 절이 이어지므로,
@@ -1043,7 +1351,7 @@ TONE_SKIP = ("/keywords", "/gradingKeywords", "/svg", "/latex", "/equations", "/
              #   (같은 배치의 `/svg` 와 같은 실수). 명사구로 끝나는 값은 판정이 `None` 이라
              #   어차피 안 걸리므로, 다른 과목이 명사구로 써 둔 자리는 영향을 받지 않는다.
              # ★ 보강 2026-08-02 (기계재료 실측) — **문장이 아니라 라벨·위치표인 자리.**
-             #   이 절의 문서(AGENTS 「말투」)는 이미 [사용자 발화 인용 생략] 고 적었는데
+             #   이 절의 문서(AGENTS 「말투」)는 이미 *[발화 생략]* 고 적었는데
              #   구현에 네 자리가 빠져 있었다. 특히 `anchorText` 는 **본문의 한 조각을 그대로 적어
              #   위치를 가리키는 값**이라, 존댓말을 요구하면 *본문과 글자가 달라져 앵커가 깨진다* —
              #   즉 규격을 지킬수록 빌드가 깨지는 자리였다(실측: ch03 `fig-ceramic-types`).
@@ -1051,13 +1359,13 @@ TONE_SKIP = ("/keywords", "/gradingKeywords", "/svg", "/latex", "/equations", "/
              "/anchorText", "/name", "/variables", "/expectedOutput",
              # ★ 화면에 안 나가는 **제작 메모**는 뺀다. `rationale`·`teachingTips`·
              #   `supplementNotes`·`lintWaivers` 는 뷰어가 렌더하지 않고(`changeNote` 만
-             #   검수 모드 툴팁으로 뜬다), AGENTS 가 [사용자 발화 인용 생략] 로 이미
+             #   검수 모드 툴팁으로 뜬다), AGENTS 가 *[발화 생략]* 로 이미
              #   분류한 글이다. 독자가 못 읽는 글의 말투를 묻는 것은 이 자의 범위 밖이다.
              #
              # ★★ **되돌린 것 — `/answer`·`/solutionOutline`·`/explanation`·`/hint`·`/pitfalls`**
              #   (넣은 날 2026-08-02 열역학 · 되돌린 날 2026-08-02 사용자 결정).
              #
-             #   그 다섯 줄은 [사용자 발화 인용 생략] 를 근거로 들어왔는데,
+             #   그 다섯 줄은 *[발화 생략]* 를 근거로 들어왔는데,
              #   **AGENTS.md 에 그런 문장이 없다.** 그 표(AGENTS 「말투 — 세 층을 가른다」)는
              #   정반대로 `이론 본문·풀이·유도 설명·함정·힌트·학습목표·이해도 체크` 를 **존댓말
              #   층**으로 열거하고, 「말투를 묻지 않는 자리」에도 그 다섯은 없다(명사구 종결·표제·
@@ -1087,7 +1395,7 @@ TONE_SKIP = ("/keywords", "/gradingKeywords", "/svg", "/latex", "/equations", "/
              # ★ `/noTheoryDiagramReason` (2026-08-06, C37) — 위와 같은 층의 제작 판정 기록이다.
              "/noTheoryDiagramReason",
              # ★★ `/diagramWhy` (2026-08-06, C35) — **같은 부류가 하루 만에 재발했다.**
-             #   바로 위 `/noDiagramReason` 이 [사용자 발화 인용 생략] 이라고 적어 두었는데, 새 필드를 만들면서
+             #   바로 위 `/noDiagramReason` 이 *[발화 생략]* 이라고 적어 두었는데, 새 필드를 만들면서
              #   그 결정을 하지 않았고 곧바로 12건이 신고됐다(말투 10 · 가운데점 2).
              #   ★ 그래도 **설계는 제대로 작동했다** — 모르는 필드를 독자 노출로 보는 것이
              #     기본값이라 빠뜨리면 **조용히 새지 않고 빌드가 즉시 막는다.** 이 기본값을
@@ -1103,7 +1411,7 @@ TONE_SKIP = ("/keywords", "/gradingKeywords", "/svg", "/latex", "/equations", "/
              #     요구하면 '열역학은 무엇을 하는 과목인가' 가 위반이 된다.
              #   `/solutionTemplate` — 문풀의 **빈칸 뼈대**다. `➜` 로 이어지는 수식 줄과
              #     `___BLANK_N___` 로만 이루어져 있어 `/equations` 와 같은 부류이지 산문이 아니다.
-             #     ★ 들어올 때 적힌 사유([사용자 발화 인용 생략])는 위와 같은
+             #     ★ 들어올 때 적힌 사유(*[발화 생략]*)는 위와 같은
              #     잘못된 인용이라 지웠다 — **면제는 남기되 근거를 바꾼다.** 실제로 산문 문장이
              #     들어가는 자리는 `solutionOutline[].text` 이고 그쪽은 검사 대상이다.
              "/chapterTitle", "/solutionTemplate")
@@ -1198,7 +1506,11 @@ def tone_segments(text):
     따로 잰다.
     """
     masked, out = mask_inline_math(text), []
+    table = _table_cell_spans(masked)
+    rows = _table_row_ranges(masked)
     for start, end in sentence_spans(text):
+        if any(a <= start < b for a, b in rows):
+            continue                       # 표 줄은 셀 단위로 따로 낸다(아래)
         body = masked[start:end]
         lead = len(body) - len(body.lstrip())
         body = body.strip()
@@ -1214,6 +1526,55 @@ def tone_segments(text):
         opened, closed = rest.find("("), rest.rfind(")")
         if 0 <= opened < closed:
             out.append((at + len(core) + opened + 1, at + len(core) + closed))
+    return sorted(out + table)
+
+
+_TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
+_TABLE_SEP = re.compile(r"^\s*\|[\s:|+-]*\|\s*$")
+
+
+def _table_row_ranges(text):
+    """표 줄이 차지하는 (시작, 끝) — 문장 단위 판정에서 빼려고 쓴다."""
+    out, pos = [], 0
+    for line in text.split("\n"):
+        if _TABLE_ROW.match(line):
+            out.append((pos, pos + len(line)))
+        pos += len(line) + 1
+    return out
+
+
+def _table_cell_spans(text):
+    """마크다운 표의 **본문 셀** (시작, 끝). 순수 함수.
+
+    ★★ **열린 날 2026-09-08 — 표 안의 글은 말투를 아무도 안 묻고 있었다.**
+    `sentence_spans` 는 표 한 줄을 문장 하나로 보는데, 그 줄은 `|` 로 끝나서
+    종결어미 자에 안 걸리고 **「명사구 종결」로 조용히 통과**했다. 실측: 표 셀이
+    평어로 끝나는 자리가 `data/**` 에 165곳 있는데 `fix_honorific` 은 0건을 냈다 —
+    0 이 「없다」가 아니라 「안 봤다」였다(이 리포가 반복해 닫는 그 부류).
+
+    빼는 것 둘:
+      ⑴ **구분 줄**(`|---|---|`) — 글이 아니다.
+      ⑵ **머리 줄** — 바로 다음 줄이 구분 줄인 행. 표의 머리는 **표제**라
+         AGENTS 「말투」가 이미 «묻지 않는 자리» 로 분류해 뒀다.
+
+    ☐ 판정은 셀 단위로 하되 **고칠 때는 표 단위로** 본다 — 한 표 안에서 어떤 셀은
+      존댓말, 어떤 셀은 평어면 화면에서 그 표가 갈려 보인다(2026-09-07 인계의 ★ 항).
+    """
+    out, lines, pos = [], text.split("\n"), 0
+    for i, line in enumerate(lines):
+        start = pos
+        pos += len(line) + 1
+        if not _TABLE_ROW.match(line) or _TABLE_SEP.match(line):
+            continue
+        if i + 1 < len(lines) and _TABLE_SEP.match(lines[i + 1]):
+            continue                       # 머리 줄 — 표제라 말투를 안 묻는다
+        bars = [m.start() for m in re.finditer(r"\|", line)]
+        for a, b in zip(bars, bars[1:]):
+            cell = line[a + 1:b]
+            lead = len(cell) - len(cell.lstrip())
+            body = cell.strip()
+            if body:
+                out.append((start + a + 1 + lead, start + a + 1 + lead + len(body)))
     return out
 
 
@@ -1224,13 +1585,22 @@ def sentence_endings(text):
         s = re.sub(r"^[-*|>\s]+", "", masked[start:end].strip()).strip()
         if not s or not _HAS_HANGUL.search(s):
             continue
+        # ★ 한 음절 종결어미 판정은 **원문의 문장부호**를 본다(`is_plain_ending` 의 raw). 그런데
+        #   `tone_segments` 가 조각을 알맹이 길이로 잘라 넘겨서 그 부호가 늘 빠져 있었다 — `…쓰라.` ·
+        #   `…구하라.` 가 평어인데 「명사구 종결」로 통과했다(열린 날 2026-09-14, 기계공작법 ch10 지문 9곳).
+        #   조각 바로 뒤의 강조표시·닫는 괄호와 부호를 원문에서 되붙여 판정에만 쓴다.
+        #   ★ 되붙이는 것은 **명령형 `~라`** 로 끝난 조각뿐이다. 모든 조각에 되붙인 첫 판은 명사 `…하나.`·
+        #   질문 `…있나`·`…무한한가` 까지 한꺼번에 평어로 올려 11과목 빌드를 멈췄다(같은 날 실측) —
+        #   그 넷은 이 결함과 다른 부류라 따로 판정할 몫이다.
+        tail = re.match(r"[*_`)\]】」’\"']*[.!?]", masked[end:]) if _PLAIN_IMPERATIVE.search(tone_core(s)) else None
+        raw = s + (tail.group(0) if tail else "")
         # 존댓말·평어 판정은 **같은 알맹이**로 본다(`tone_core`). 예전에는 존댓말 쪽만
         # 꼬리를 벗겨서, 괄호주석이 붙은 문장은 평어인데도 '명사구 종결'로 빠져나갔다.
         if is_polite_ending(s):
             out.append((s, "polite"))
         elif _CONNECTIVE_END.search(tone_core(s)):
             out.append((s, None))          # 종결어미가 없는 조각 — 뒤에 절이 이어진다
-        elif is_plain_ending(tone_core(s), s):
+        elif is_plain_ending(tone_core(s), raw):
             out.append((s, "plain"))
         else:
             out.append((s, None))          # 명사구 종결 등 — 말투를 물을 수 없다
@@ -1292,6 +1662,23 @@ def figure_tone_issues(ch):
     return out
 
 
+def svg_text_link_issues(ch):
+    """삽화 `<text>` 안의 내부 링크 문법 `[[…]]`. 순수 함수 — 테스트가 직접 부른다.
+
+    재는 것: SVG 글자에 `[[` 가 있나. 뷰어는 링크를 산문 필드에서만 풀고 SVG 는 그대로 그려서,
+      화면에 `[[ch02:sec-divider|전압 분배 절]]` 이 날것으로 찍혔다(2026-09-14 전기전자 ch02
+      `fig-ee02-series-flow` 렌더에서 발견 — 전 과목 실측 1건, 고친 뒤 0건).
+    못 보는 것: `aria-label` 안의 링크 문법(화면에는 안 나온다).
+    """
+    out = []
+    for dg in _iter_diagrams(ch):
+        for item in _svg_texts(dg.get("svg", "")):
+            if "[[" in item["s"]:
+                out.append(str(dg.get("id", "?")) + ": 삽화 글자에 링크 문법이 날것으로 있다 — "
+                           + repr(item["s"][:40]) + " (SVG 는 링크를 안 푼다. 이름만 적고 링크는 본문에 건다)")
+    return out
+
+
 def plain_fraction_issues(ch):
     """평문으로 조판한 분수. 순수 함수 — 테스트가 직접 부른다."""
     out = []
@@ -1309,7 +1696,7 @@ def plain_fraction_issues(ch):
         # ★ 2026-07-31 — 삽화 검사(C9)와 **같은 자**를 여기에도 붙인다.
         #   아래 네 모양(괄호+연산자·아래첨자·미분·ρ분모)은 `P/ρ`·`V²/2` 를 못 본다:
         #   첨자도 괄호도 없어서 어느 모양에도 안 걸렸다. 실측 — 삽화 9건을 고친 뒤
-        #   같은 부류가 산문에 22곳 그대로 남아 있었다(사용자: [사용자 발화 인용 생략]).
+        #   같은 부류가 산문에 22곳 그대로 남아 있었다(사용자: [발화 생략]).
         hit = text_fraction_hit(outside) or next(
             (m.group(0).strip() for rx in FRACTION_SHAPES
              for m in [rx.search(outside)] if m), None)
@@ -1325,7 +1712,7 @@ def plain_fraction_issues(ch):
 # 뷰어의 프라임 변환(ASCII `'` → `′`)은 **`\(…\)` 안에서만** 돈다. 그래서 산문에 `y''` 라고
 # 적으면 화면에 **곧은 따옴표 두 개**가 그대로 나오고, 바로 옆 수식은 `y′′` 로 조판돼
 # **한 화면에서 같은 도함수가 두 모양**이 된다. 분수 검사(위)와 정확히 같은 부류다 —
-# [사용자 발화 인용 생략]
+# *[발화 생략]*
 # 실측 2026-08-08(공학수학): 렌더 DOM 에 남은 ASCII 아포스트로피 중 이 부류가 11곳이었고,
 # 전부 `explanation`·`answer`·`note`·`variables`·`assumptions` 였다. 같은 챕터의
 # `explanation` 89곳은 이미 인라인 수식을 쓰고 있었으므로 **평문 쪽이 예외**였다.
@@ -1375,10 +1762,10 @@ def plain_prime_issues(ch):
 
 # ★ C26. **쉼표가 곱을 먹었다** (열린 날 2026-08-04, R-41 — 사용자 지적).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # 맞다. `m g 𝓋` 인데 인수 사이에 **날 쉼표**가 들어가 나열처럼 읽힌다. 원인은 이 리포에
-# **이미 문서화된 함정**이다 — AGENTS 「알려진 함정」: [사용자 발화 인용 생략] `m\,g\,𝓋` 에서 백슬래시가 사라지면 정확히 `m, g, 𝓋` 가 된다.
+# **이미 문서화된 함정**이다 — AGENTS 「알려진 함정」: *[발화 생략]* `m\,g\,𝓋` 에서 백슬래시가 사라지면 정확히 `m, g, 𝓋` 가 된다.
 # 뷰어도 이 사실을 안다(`renderMath` 에 `\,`→공백, `{,}`→진짜 쉼표 변환이 따로 있다).
 #
 # **왜 지금까지 안 걸렸나 — 쉼표는 유효한 문자다.** 어떤 LaTeX 문법 검사도 신고하지 않는다.
@@ -1433,7 +1820,7 @@ def bare_comma_product_issues(ch):
 
 # ★ C27. **계산 단계를 가로로 이어 붙였다** (열린 날 2026-08-02 → 2026-08-04 승격, R-21·R-50).
 #
-# 사용자 원문: [사용자 발화 인용 생략] — **재발**이다.
+# 사용자 원문: *[발화 생략]* — **재발**이다.
 #
 # ★★ 규칙도 감사도 **이미 있었는데 0건을 찍고 있었다.** 두 겹으로 빗나가 있었다:
 #   ⑴ **순회 범위** — `audit_conventions` 의 [H] 는 `practice[].blanks[].answer` **만** 봤다.
@@ -1443,18 +1830,18 @@ def bare_comma_product_issues(ch):
 #   그래서 감사에 두지 않고 **빌드 검사로 올린다** — 감사만 두면 또 묻힌다.
 #
 # ★ 판정 기준은 사용자가 확정해 주었다 (2026-08-02):
-#   [사용자 발화 인용 생략]
+#   *[발화 생략]*
 #   → 가로 이음(`\qquad`·`;\quad`) **양옆에 관계 기호(`=`·`⇒`·`≈`)가 둘 다 있으면** 계산 단계다.
 #     관계 기호가 없는 조건 나열 줄은 통과한다. 즉 `\qquad` 를 일괄 금지하지 않는다.
 #
-# 처방(R-50, 사용자 지시 [사용자 발화 인용 생략]): 풀이·유도는 한 문자열에 설명과 식을
+# 처방(R-50, 사용자 지시 *[발화 생략]*): 풀이·유도는 한 문자열에 설명과 식을
 #   섞지 말고 **`{"text": …, "equations": […]}`** 로 가른다. 그러면 줄을 나누려고 `\qquad` 를
 #   쓸 이유 자체가 사라진다(공학수학이 이미 그 구조다 — `git show math:…` 로 실측).
 #   `formulas[].latex` 는 **배열**이 곧 여러 줄이다(`latex_lines` 가 정본).
 #
 # ★★ **2026-08-13 — 「계산 단계」와 「좌우 비교」를 가른다** (사용자 판정).
 #
-#   [사용자 발화 인용 생략]
+#   *[발화 생략]*
 #
 #   경위: ch04 `cp-cv-relation` 의 네 관계식이 세로로 쌓여 답답하다는 지적이 있었다.
 #   2026-08-12 에 두 식씩 `\qquad` 로 묶어 봤더니 이 검사가 걸렸고, 헤드라인만 풀려고
@@ -1489,7 +1876,7 @@ _LEADING_RELATION = re.compile(r"^\s*(?:=|⇒|≈|\\Rightarrow|\\approx|\\to|\\L
 
 # ★ C30. **문장을 수식으로 끝내고 마침표를 붙인 자리** (열린 날 2026-08-04, R-49).
 #
-# 사용자: [사용자 발화 인용 생략]
+# 사용자: *[발화 생략]*
 #
 # 왜 어색한가 — 아래첨자가 작은 글자라 뒤의 마침표가 **첨자에 딸린 기호처럼** 보이고,
 # 수식 글꼴과 본문 글꼴이 달라 그 점이 수식의 일부인지 문장부호인지 흐려진다.
@@ -1498,7 +1885,7 @@ _LEADING_RELATION = re.compile(r"^\s*(?:=|⇒|≈|\\Rightarrow|\\approx|\\to|\\L
 #   문장이면 낱말로 끝맺고(`… \(\Delta E\) 입니다.`), 나열·라벨이면 마침표를 아예 뺀다.
 #
 # ★★ **R-19(말투)와 같은 뿌리다.** 수식으로 끝나는 문장은 말투 검사에게 **명사구 종결**로 보여
-#   [사용자 발화 인용 생략] 며 통과한다. 즉 **어색한 마침표는 「존댓말이 빠진
+#   *[발화 생략]* 며 통과한다. 즉 **어색한 마침표는 「존댓말이 빠진
 #   자리」의 신호**이기도 하다 — 이 검사가 그 사각지대를 메운다.
 _MATH_END_PUNCT = re.compile(r"\\\)\s*[.]")
 # 같은 식을 평문으로 쓴 자리도 같은 화면 결함이다. 등호 양쪽에 기호가 있고 마지막 기호가
@@ -1632,7 +2019,7 @@ def horizontal_step_issues(ch):
 
 # ★ C1. SI 접두어를 쓸 수 있는데 기본단위로 풀어 씀 (열린 날 2026-07-30 — 사용자 3회째 부류).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # **왜 두 번이나 놓쳤나 — 부류를 겉모습으로 정의했다.** 2026-07-30 에 같은 지적을 받고
 # `4.12 × 10³ N → 4.12 kN` 5건을 고쳤는데, 그때 검색한 것은 **`× 10³` 라는 표기**였다.
@@ -1673,7 +2060,7 @@ def si_prefix_issues(ch):
 
 # ★ C2. 물음의 단위와 답의 단위가 다르다 (열린 날 2026-07-30).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # **C1 과 짝이다.** 접두어 규칙을 답에만 적용하면 이 결함을 **대량으로 만들어낸다** —
 # 물음은 `[N]` 인데 답은 `kN` 이 되기 때문이다. 그래서 두 검사를 같이 넣는다.
@@ -1706,14 +2093,14 @@ def prompt_answer_unit_mismatch(problem):
 
 # ★ C15. 문항 지문의 언어가 과목이 선언한 것과 다르다 (열린 날 2026-08-01, 사용자 지적).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # **무엇이 새어나갔나 — 합의는 있었는데 규격 문서에 적힌 곳이 없었다.**
-# 열역학 문항이 영문이라는 사실은 `docs/feedback-ledger.md`([사용자 발화 인용 생략])와
-# `docs/portfolio-notes.md`([사용자 발화 인용 생략])에 **곁가지로만** 남아 있었다.
+# 열역학 문항이 영문이라는 사실은 `docs/feedback-ledger.md`(*[발화 생략]*)와
+# `docs/portfolio-notes.md`(*[발화 생략]*)에 **곁가지로만** 남아 있었다.
 # 그래서 새 과목이 한글로 만들어도 빌드도 감사도 아무 말을 하지 않았고,
 # 고체역학 ch01 8문항이 통째로 한글로 나갔다. 규칙 7⑷가 말하는
-# [사용자 발화 인용 생략] 가 원인이지 사람의 부주의가 아니다.
+# *[발화 생략]* 가 원인이지 사람의 부주의가 아니다.
 #
 # **판정은 지문에만 건다.** 풀이·해설·힌트·이해도 체크는 한국어가 정본이다 —
 # 지문을 원서 언어로 두는 이유는 *결국 풀어야 할 교재 연습문제가 그 언어*라서이지
@@ -1784,13 +2171,519 @@ def declared_prompt_language(ch_path):
         return None
 
 
+# ★★ C54. 문항 지문의 **부담 램프** — 번호를 따라 언어·길이가 자라는가 (열린 날 2026-09-10).
+#
+# 사용자 원문: *[발화 생략]* · *[발화 생략]*.
+#
+# **무엇이 새어나갔나 — 「지문 눈금」이 없었다.** 난이도 눈금(AGENTS 「문제 설계」 ⑵)과 유형 축
+# A/B/C 는 있는데 **지문의 길이·언어를 재는 자가 하나도 없었다.** 눈금이 없으면 쓰는 사람은
+# 손에 든 원서 지문을 닮는 쪽으로 수렴한다 — 열역학(첫 과목)의 지문이 본래 길었고(상태·과정·
+# 장치를 서술해야 값이 정해진다) 그 형태가 **과목을 안 가리고 복제**됐다. 사용자가 든 사례는
+# 공수2 `ch07-p01` 로, 네 줄짜리 영문 지문 뒤의 실제 계산은 **성분 덧셈 한 줄**이었다.
+#
+# ★ **막는 것은 「길다」가 아니라 「안 자란다」이다.** 칸 4(원서 지문 길이)는 목표이지 결함이
+#   아니다. 한 챕터 안에서 **번호를 따라 단조 증가**하는가 하나만 본다.
+#
+# ★ **세 축은 독립이다 — `stage`·`difficulty` 를 재해석하지 않는다** (판정 2026-09-10).
+#   `stage`(single_blank…assembly)는 **답을 어떤 꼴로 쓰나**이고 뷰어 `stageMeta` 키에 묶여 있어
+#   재해석하면 카드가 죽는다. `difficulty`(basic/intermediate/advanced)는 **계산의 난이도**다.
+#   램프는 **지문의 부담**이라 둘 중 어느 쪽도 아니다 — 특히 칸 3은 *[발화 생략]* 이므로 난이도가 그대로여야 하고, 램프를 `difficulty` 에 접으면 칸 3이 실제보다
+#   어려운 것처럼 표시된다(사용자가 원한 [발화 생략]이 깨진다).
+#
+# ★ **언어 축은 C15 의 항목별 `promptLanguage` 오버라이드를 그대로 탄다**(2026-09-03 신설).
+#   램프가 자기 언어 검사를 따로 두면 C15 와 두 벌이 되어 갈린다 — 여기서는 **선언이
+#   램프와 맞는가**만 보고, 지문이 실제로 그 언어인지는 C15 가 잡는다.
+#
+# ★ **과목이 `promptLanguage: "ko"` 면 언어 축이 접힌다.** 그 과목은 지문이 처음부터 한국어라
+#   칸 1↔3 의 대비가 없다 — 그때는 램프가 **길이만** 재고 칸 3·4 도 한국어다. 과목별 사실은
+#   `index.json` 이 갖는다(공통 코드는 과목 이름을 모른다).
+RAMP_LEVELS = {1: "한글·한 문장", 2: "한글·두세 문장", 3: "영문·한 문장", 4: "영문·원서 길이"}
+
+# 칸마다 **문장 수 상한**. ★ 눈금의 단위가 문장인 근거 — 한글과 영문은 같은 내용에서 글자 수가
+# 두 배 넘게 갈리므로(실측: `python tools/audit_prompt_ramp.py --lengths`) 글자 수로 눈금을
+# 박으면 **언어를 바꾸는 순간 눈금이 거짓말을 한다.** 사용자의 말도 [발화 생략]
+# 이라는 문장 단위였다. 글자 수는 **한 문장이 괴물처럼 길어지는 것**만 막는 둘째 자다.
+#
+# 「고른 값」이다(실행 규율 16) — 무엇과 무엇을 견줬는지:
+#   문장 상한 1·3·None 은 사용자 발화([발화 생략] · «두세 문장» · «원서 지문 길이»)를 그대로 옮겼다.
+#   글자 상한은 **실측 분포에서 골랐다** — 아래 `_RAMP_CHAR_BASIS` 가 그 실측이다.
+#
+# ★★ **처음에 90/270/180 을 근거 없이 적었다가 재서 고쳤다** (2026-09-10, 같은 배치 안에서).
+#   *[발화 생략]* 이라고 **재기 전에** 써 뒀는데 실측은
+#   **140 과 281** 이었다 — 둘 다 실제보다 낮아, 그대로 뒀으면 지금 멀쩡히 한 문장으로 쓰인
+#   지문들이 무더기로 걸렸을 것이다(그런 자는 다음 사람이 끈다 — 라벨 여백 자의 전례).
+#   규칙 11 이 말하는 «명령을 붙여도 틀리는 자리» 그 자체다: 근거 문장이 있었는데 그 근거가
+#   아직 존재하지 않았다.
+_RAMP_CHAR_BASIS = (
+    "2026-09-10 실측 `python tools/audit_prompt_ramp.py --lengths` (전 과목 21개) —"
+    " **한 문장짜리 지문만** 골라 잰 글자 수: 한글 42건 28/78/**140**/197,"
+    " 영문 350건 29/166/**281**/612 (최소/중앙/90%/최대)."
+    " 칸 1·3 의 상한은 그 90분위다 — «지금 한 문장으로 쓰인 것»은 거의 다 통과하고,"
+    " 그보다 길면 한 문장이 아니라 문장을 이어 붙인 것이다."
+    " 칸 2 의 400자는 **지금 아무것도 안 걸린다**(한글 지문 최대가 398자) — 칸 2 의 실질 자는"
+    " 문장 수 3 이고, 글자 수는 «한 문장이 괴물처럼 길어지는 것»만 막는 둘째 자이기 때문이다."
+    " 칸 4 는 상한이 없다 — 원서 지문 길이가 목표이지 결함이 아니다.")
+RAMP_SPEC = {
+    1: {"lang": "ko", "sentences": 1, "chars": 140},
+    2: {"lang": "ko", "sentences": 3, "chars": 400},
+    3: {"lang": "en", "sentences": 1, "chars": 280},
+    4: {"lang": "en", "sentences": None, "chars": None},
+}
+
+
+def prompt_shape(prompt):
+    """(언어, 문장 수, 글자 수) — 지문 하나의 «부담». 순수 함수(감사와 검사가 함께 쓴다).
+
+    ★ 문장을 세는 자를 새로 만들지 않는다 — `check_answer_sentences()` 를 그대로 부른다.
+      세는 법이 두 벌이면 «자가 재는 것»과 «검사가 막는 것»이 갈린다.
+    ★ 인라인 수식은 마스킹한다 — `\\(\\|s_1+s_2\\|\\)` 같은 조판이 글자 수를 부풀리면
+      **식이 많은 지문일수록 길다고 신고**되는데, 그건 부담의 축이 아니다(C15 와 같은 처리).
+    """
+    text = mask_inline_math(str(prompt or "")).strip()
+    lang = "ko" if _HANGUL_SYLLABLE.search(text) else "en"
+    return lang, check_answer_sentences(text), len(text)
+
+
+def prompt_ramp_issues(ch, declared):
+    """C54 판정. `[사유 문자열, …]` — 순수 함수(빌드 검사와 `audit_prompt_ramp` 가 함께 쓴다).
+
+    ★ **시험 모드 장은 대상이 아니다**(`examMode`). 모의고사는 시험지라 첫 문항부터 시험
+      지문이어야 한다 — 거기서 램프를 요구하면 «쉬운 1번»을 만들라는 뜻이 되어 시험이 망가진다.
+    ★ **빈 컬렉션은 대상이 아니다**(ch00 등). 「대상이 아닌 것」과 「0건」을 가른다.
+
+    ★★ **참/거짓 판정형(`oxCorrect` 선언)은 대상이 아니다** (2026-09-10, 응용열역학 ch07 에서
+      드러났다). 그 문항은 **다른 갈래**다 — 계산 문항의 줄에 섞여 `problems` 에 들어 있을 뿐,
+      실제로는 오픈북 시험의 O/X 절이고 «절이 여럿 섞인 문장에서 어디가 틀렸는지 잡는» 것이
+      난이도 축이다. 그래서 C15 가 **일부러 한국어 오버라이드를 허용**해 둔 자리이고
+      (2026-09-03 신설), 램프의 언어 축을 그대로 들이대면 그 예외와 정면으로 부딪힌다.
+      길이는 이미 제 자가 있다 — `audit_convention_drift --check=ox-length-tell`.
+      ★ 판정은 **데이터가 스스로 선언한 것**(`oxCorrect`)으로 한다. id 가 `-ox` 로 시작하는지를
+        보면 공통 코드가 이름 규약을 알게 되고, 그건 이 리포가 반복해 다친 자리다.
+    """
+    if ch.get("examMode"):
+        return []
+    out = []
+    lang_axis = declared == "en"          # 과목이 'ko' 면 언어 축이 접힌다(위 주석)
+    for coll in PROMPT_COLLECTIONS:
+        items = [i for i in (ch.get(coll) or []) if isinstance(i, dict)
+                 and "oxCorrect" not in i]
+        if not items:
+            continue
+        seen = []
+        for pos, item in enumerate(items):
+            pid = coll + "[" + str(item.get("id") or "?") + "]"
+            ramp = item.get("ramp")
+            if ramp is None:
+                out.append(pid + ": `ramp` 미선언 — 지문 부담 칸을 "
+                           + "·".join(str(k) + "(" + v + ")" for k, v in RAMP_LEVELS.items())
+                           + " 중에서 적을 것")
+                continue
+            if ramp not in RAMP_SPEC:
+                out.append(pid + ": `ramp` 값이 " + repr(ramp) + " — 1~4 만 쓴다")
+                continue
+            seen.append((pos, pid, ramp))
+            spec = RAMP_SPEC[ramp]
+            lang, sentences, chars = prompt_shape(item.get("prompt"))
+            if lang_axis:
+                want = spec["lang"]
+                declared_item = item.get("promptLanguage")
+                if want == "ko" and declared_item != "ko":
+                    out.append(pid + ": ramp " + str(ramp) + "(" + RAMP_LEVELS[ramp]
+                               + ")인데 항목이 `\"promptLanguage\": \"ko\"` 를 선언하지 않았다 —"
+                               " 램프 앞칸은 한글 지문이고, 그 선언이 있어야 C15 가 통과시킨다")
+                if want == "en" and declared_item == "ko":
+                    out.append(pid + ": ramp " + str(ramp) + "(" + RAMP_LEVELS[ramp]
+                               + ")인데 항목이 `promptLanguage: \"ko\"` 를 선언했다 —"
+                               " 뒷칸은 원서 언어다(선언을 지우면 과목 선언을 따른다)")
+            if spec["sentences"] is not None and sentences > spec["sentences"]:
+                out.append(pid + ": ramp " + str(ramp) + "(" + RAMP_LEVELS[ramp] + ") 인데 지문이 "
+                           + str(sentences) + "문장이다 — 상한 " + str(spec["sentences"])
+                           + "문장. **상황을 두르지 말고 묻는 것만 남긴다**")
+            if spec["chars"] is not None and chars > spec["chars"]:
+                out.append(pid + ": ramp " + str(ramp) + "(" + RAMP_LEVELS[ramp] + ") 인데 지문이 "
+                           + str(chars) + "자다 — 상한 " + str(spec["chars"]) + "자")
+        if not seen:
+            continue
+        if seen[0][2] != 1:
+            out.append(coll + ": 첫 문항 " + seen[0][1] + " 의 ramp 가 " + str(seen[0][2])
+                       + " 다 — **첫 칸은 부담이 0에 가까워야 한다**(ramp 1)")
+        for (_, prev_id, prev), (_, cur_id, cur) in zip(seen, seen[1:]):
+            if cur < prev:
+                out.append(coll + ": ramp 가 역행한다 — " + prev_id + "(" + str(prev) + ") 다음에 "
+                           + cur_id + "(" + str(cur) + "). **번호를 따라 자라야 한다**"
+                           " (순서를 바꾸거나 칸을 다시 매길 것)")
+    return out
+
+
+SECTION_EXAMPLE_WAIVER_KEY = "exampleWaiver"
+
+# C62 — 풀이 해설 첫 줄의 「구할 것과 조건을 먼저 갈라 둡니다」 되읊기. 지문을 다시 읽어 줄 뿐이라 뺀다
+#   (사용자 2026-09-19 [발화 생략] — 재발). 처방 `tools/drop_outline_preamble.py`.
+OUTLINE_PREAMBLE_PREFIX = "구할 것과 조건을 먼저 갈라 둡니다"
+
+
+def outline_preamble_issues(ch):
+    out = []
+    for coll in ("problems", "practice"):
+        for it in ch.get(coll) or []:
+            for s in (it.get("solutionOutline") or []) if isinstance(it, dict) else []:
+                if isinstance(s, str) and s.strip().startswith(OUTLINE_PREAMBLE_PREFIX):
+                    out.append("%s[%s].solutionOutline: 「%s …」 되읊기 줄 — 지문을 다시 읽어 줄 뿐이다. 지울 것 "
+                               "(`python tools/drop_outline_preamble.py --apply`)" % (coll, it.get("id"), OUTLINE_PREAMBLE_PREFIX))
+    return out
+
+
+# 학습목표 대응표에서 분모 항목을 뺄 수 있는 사유 — 닫힌 목록. 그 밖이면 목표를 보태야 한다
+# (워크오더 `data/공학수학 2/2026-09-19-학습목표-재설계.workorder.md` ⑵).
+OBJECTIVE_EXCLUSION_REASONS = ("모델링 소재", "진도 밖", "수업에서 안 함")
+
+
+def objective_map_path(ch_path):
+    return os.path.splitext(ch_path)[0] + ".objective-map.json"
+
+
+def objective_coverage(ch, omap):
+    """C60 판정 — (목표별 행, 미대응 분모 ref, 사유 목록). 순수 함수(빌드 검사와
+    `tools/audit_objective_coverage.py` 가 함께 쓴다).
+
+    잰다: 학습목표마다 ⓐ 자가점검(`comprehensionChecks`)·요약 절 ⓑ 교재 문제 ⓒ 문풀·연습문제가
+      `objectives:[lo…]` 로 이어졌나 · `basis` 가 있나 · 대응표 분모에서 그 목표를 가리키는 항목이 있나 ·
+      분모 항목이 목표에 대응되거나 닫힌 사유로 제외됐나.
+    문턱: 칸 하나라도 0 이면 그 목표는 위에서 아래로 안 내려온 것이다 — 사용자 2026-09-19
+      「다 풀 수 있게 하기 위한 가장 기초적인 자는 … 학습목표」(판정 원문 공수2 ch09 인박스 #5).
+    못 본다: `objectives` 선언이 맞는지(문항이 그 목표를 실제로 연습시키는지)와 분모가 교재의 핵심을
+      다 담았는지는 사람이 판정한다.
+    """
+    los = [lo for lo in (ch.get("learningObjectives") or []) if isinstance(lo, dict)]
+    rows = {lo.get("id"): {"basis": bool(str(lo.get("basis") or "").strip()), "denom": 0,
+                           "recap": 0, "textbook": 0, "practice": 0} for lo in los}
+    issues, unmapped = [], []
+
+    def objs(item):
+        return [o for o in (item.get("objectives") or []) if isinstance(o, str)]
+
+    for it in (omap or {}).get("items") or []:
+        exc = it.get("excluded")
+        if exc and exc not in OBJECTIVE_EXCLUSION_REASONS:
+            issues.append("대응표 %s: 제외 사유 %r 는 닫힌 목록(%s) 밖" % (
+                it.get("ref"), exc, " · ".join(OBJECTIVE_EXCLUSION_REASONS)))
+        if not objs(it) and not exc:
+            unmapped.append(it.get("ref"))
+        for o in objs(it):
+            if o in rows:
+                rows[o]["denom"] += 1
+            else:
+                issues.append("대응표 %s: 모르는 학습목표 %s" % (it.get("ref"), o))
+
+    def count(kind, items, where):
+        for it in items:
+            for o in objs(it):
+                if o in rows:
+                    rows[o][kind] += 1
+                else:
+                    issues.append("%s[%s]: 모르는 학습목표 %s" % (where, it.get("id") or "?", o))
+
+    recaps = []
+    for s in (ch.get("theory") or {}).get("sections") or []:
+        recaps.extend(c for c in (s.get("comprehensionChecks") or []) if isinstance(c, dict))
+        if s.get("chapterSummary") and objs(s):
+            recaps.append(s)
+    count("recap", recaps, "자가점검")
+    count("textbook", [i for i in ((ch.get("textbookProblems") or {}).get("items") or [])
+                       if isinstance(i, dict)], "교재 문제")
+    count("practice", [i for i in (ch.get("practice") or []) + (ch.get("problems") or [])
+                       if isinstance(i, dict)], "문항")
+
+    if omap is None:
+        issues.append("대응표 없음 — `chNN.objective-map.json` 에 교재가 고른 핵심 문항(분모)을 적을 것")
+    for ref in unmapped:
+        issues.append("대응표 %s: 미대응 — 학습목표를 보태거나 제외 사유를 적을 것" % ref)
+    for i, r in rows.items():
+        if not r["basis"]:
+            issues.append("%s: basis 없음 — 교재 절과 분모 번호를 적을 것" % i)
+        if omap is not None and r["denom"] == 0:
+            issues.append("%s: 대응표에서 가리키는 항목 0 — 근거 없는 목표" % i)
+        for kind, name in (("recap", "자가점검·요약"), ("textbook", "교재 문제"), ("practice", "문풀·연습문제")):
+            if r[kind] == 0:
+                issues.append("%s: %s 0 — 이 목표를 설명하거나 연습시키는 자리가 없다" % (i, name))
+    return rows, unmapped, issues
+
+
+def objective_coverage_issues(ch, ch_path):
+    """C60 빌드 배선 — 대응표 파일을 읽어 `objective_coverage` 의 사유만 돌려준다."""
+    if ch.get("examMode") or not (ch.get("learningObjectives") or []):
+        return []
+    mp = objective_map_path(ch_path)
+    omap = None
+    if os.path.exists(mp):
+        with open(mp, encoding="utf-8") as fh:
+            omap = json.load(fh)
+    return ["C60 학습목표 연결 — " + s for s in objective_coverage(ch, omap)[2]]
+
+# 고른 값 — 지문과 풀이틀이 공백을 뺀 한글로 이만큼 연달아 같으면 「되읊기」로 본다.
+#   2026-09-14 기계공작법 ch10 p09(「주물옆에붙이는」 7자 · 「수축을보충하」 6자)는 못 잡고 p05·p06 은
+#   물음표로 잡힌다. 6~7자는 「나선시험길이」 같은 주어진 조건 이름이 풀이 단계에 다시 나오는 정상
+#   형태와 겹쳐 10 으로 올렸다 — 되읊기는 대개 절 하나를 통째로 옮긴 것이라 10자를 넘는다.
+TEMPLATE_ECHO_MIN_CHARS = 10
+_HANGUL_RUN = re.compile(r"[가-힣]")
+
+
+def _templated_items(ch):
+    for coll in ("practice", "problems"):
+        for item in ch.get(coll) or []:
+            if isinstance(item, dict) and item.get("solutionTemplate"):
+                yield coll + "[" + str(item.get("id") or "?") + "]", item
+
+
+def template_echo_issues(ch):
+    """C56 판정 — 풀이틀(`solutionTemplate`)이 **물음을 다시 묻는가**(`?` 가 있나).
+
+    물음은 지문이 이미 했다 — 풀이틀에는 단계와 빈칸만 둔다(2026-09-14 기계공작법 ch10 p05).
+    못 보는 것: 물음표 없이 지문 문장을 옮겨 적은 것 — 그건 `template_echo_candidates` 가 후보로만 낸다.
+    """
+    return [pid + ": 풀이틀이 물음을 다시 묻는다(`?`) — 물음은 지문이 했다. 풀이틀에는 단계와 빈칸만 둔다"
+            for pid, item in _templated_items(ch) if "?" in str(item["solutionTemplate"])]
+
+
+def answer_label_prompt_issues(ch):
+    """C57 판정 — 풀이틀이 답을 `(a)`·`(b)` 로 나누면 **지문에도 같은 표지**가 있는가.
+
+    재는 것: 풀이틀 글자 속 `(a)`~`(e)` 표지가 둘 이상인 문항에서, 지문(`prompt`)에 없는 표지.
+    왜(2026-09-14 기계공작법 ch10 — 재발): p05 는 지문에 (a)(b) 를 붙였는데 같은 부류 p09 가 그대로 남아
+    「최종 답으로만 (a) (b) 나누는 건 문제에서도 나타내라니까」 재지적을 받았다. 한 건씩 고쳐 부류가 남았다.
+    첫 실측: 21과목 44문항 중 5건(기계공작법 ch10 1 · ch11 3 · 열역학 1).
+    못 보는 것: 표지가 한 개뿐인 문항 · `①②` 같은 다른 표지 · 지문의 표지가 가리키는 범위가 맞는지.
+    """
+    out = []
+    for pid, item in _templated_items(ch):
+        labels = sorted(set(re.findall(r"\(([a-e])\)", str(item["solutionTemplate"]))))
+        if len(labels) < 2:
+            continue
+        missing = [lab for lab in labels if "(" + lab + ")" not in str(item.get("prompt") or "")]
+        if missing:
+            out.append(pid + ": 풀이틀은 답을 " + "·".join("(" + l + ")" for l in labels)
+                       + " 로 나누는데 지문에 " + "·".join("(" + l + ")" for l in missing)
+                       + " 표지가 없다 — 지문에서 각 표지가 무엇을 묻는지 붙일 것")
+    return out
+
+
+def glossary_issues(ch):
+    """C59 판정 — 문항 `glossary: [{term, ko}]` 가 성립하는가: term 이 지문에 낱말로 있고 ko 가 비지 않았나.
+
+    뷰어(`glossedPrompt`)는 지문에서 term 이 처음 나오는 자리 뒤에 「(ko)」를 붙인다 — term 이 지문에 없으면
+    **조용히 아무것도 안 붙어** 풀이를 단 줄 알고 넘어간다(2026-09-14 기계공작법 ch10 에서 신설).
+    못 보는 것: 어떤 낱말에 풀이가 **필요한지**(독자가 모를 만한가는 사람 판정이다).
+    """
+    out = []
+    for coll in ("practice", "problems"):
+        for item in ch.get(coll) or []:
+            if not isinstance(item, dict) or "glossary" not in item:
+                continue
+            pid = coll + "[" + str(item.get("id") or "?") + "]"
+            prompt = str(item.get("prompt") or "")
+            for g in item.get("glossary") or []:
+                term, ko = str((g or {}).get("term") or ""), str((g or {}).get("ko") or "").strip()
+                if not term or not ko:
+                    out.append(pid + ": glossary 항목에 term·ko 가 비었다 — " + repr(g))
+                elif not re.search(r"(^|[^A-Za-z])" + re.escape(term) + r"(?![A-Za-z])", prompt, re.I):
+                    out.append(pid + ": glossary 낱말 " + repr(term) + " 이 지문에 없다 — 뷰어가 풀이를 못 붙인다")
+    return out
+
+
+_BLANK_ONLY_LINE = re.compile(r"^\s*(\([a-e]\)\s*=\s*)?___BLANK_\d+___\s*[.。]?\s*$")
+
+
+def blank_only_final_answer_issues(ch):
+    """C58 판정 — 풀이틀이 **빈칸 줄뿐**인데 `expectedOutput`(최종 답)이 있는가.
+
+    재는 것: 풀이틀의 빈 줄 아닌 줄이 전부 `___BLANK_n___` 이나 `(a) = ___BLANK_n___` 꼴인 문항의 최종 답.
+    왜(2026-09-14 기계공작법 ch10 — 재발): 풀이를 거쳐 답을 정리하는 문항이 아니면 빈칸이 곧 답이라 최종 답
+    줄은 그 답을 되읊는다(여섯째 지적 5 로 p05·p09 를 비웠는데 같은 꼴 p06 이 남아 재지적).
+    첫 실측: 21과목 7문항 중 5건(기계공작법 ch10 1 · ch11 3 · 기계요소설계 1).
+    못 보는 것: 풀이틀에 화살표·주어진 값 줄이 섞였지만 빈칸이 곧 답인 문항(ch10 p04·p08 은 사람이 판정해
+    비웠다) — 그 꼴은 계산 줄과 말로만 갈려 기계가 못 가른다.
+    """
+    out = []
+    for pid, item in _templated_items(ch):
+        lines = [ln for ln in str(item["solutionTemplate"]).split("\n") if ln.strip()]
+        if lines and all(_BLANK_ONLY_LINE.match(ln) for ln in lines) and str(item.get("expectedOutput") or "").strip():
+            out.append(pid + ": 풀이틀이 빈칸 줄뿐이라 빈칸이 곧 답이다 — 최종 답(expectedOutput)은 되읊기이니 비울 것")
+    return out
+
+
+def template_echo_candidates(ch):
+    """지문과 풀이틀이 공백·기호를 뺀 한글로 `TEMPLATE_ECHO_MIN_CHARS` 자 연달아 같은 항목 — 후보.
+
+    「구할 것 · 조건」 머리줄은 지문의 조건을 일부러 다시 적는 규약이라 뺀다. 판정은 사람이 한다
+    (못 보는 것: 문장을 옮기지 않고 단계 이름만 재사용한 정상 형태도 후보로 섞인다).
+    """
+    out, n = [], TEMPLATE_ECHO_MIN_CHARS
+    for pid, item in _templated_items(ch):
+        tpl = "\n".join(line for line in str(item["solutionTemplate"]).split("\n")
+                        if not line.lstrip().startswith("구할 것"))
+        prompt = "".join(_HANGUL_RUN.findall(str(item.get("prompt") or "")))
+        body = "".join(_HANGUL_RUN.findall(tpl))
+        grams = {prompt[i:i + n] for i in range(len(prompt) - n + 1)}
+        hit = next((body[i:i + n] for i in range(len(body) - n + 1) if body[i:i + n] in grams), None)
+        if hit:
+            out.append(pid + ": 풀이틀이 지문을 되읊는지 볼 것(「" + hit + "」…)")
+    return out
+
+
+def section_example_issues(ch):
+    """C55 판정 — 이론 절마다 그 절의 **절 예제**(`section` 이 그 절이고 `ramp` 1 인 문풀)가 있는가.
+
+    재는 것: `theory.sections[].id` 마다 `practice[]` 중 `section == id` 이고 `ramp == 1` 인 항목 수.
+    문턱: 0 이면 신고. 대입·판정거리가 없는 절(도입 절 등)은 그 절에 `exampleWaiver` 사유를 적는다 —
+      빈 사유는 면제가 아니다.
+    못 보는 것: 예제가 **그 절에서 배운 것을 묻는지**(`section` 값만 믿는다) · 딸깍 대입인지 ·
+      `ramp` 1 의 지문 모양(그건 C54 `prompt_ramp_issues` 가 잰다).
+    대상 아님: 시험 모드 장 · 명시된 과목 개요(chapterNumber == 0) · 이론 절이 없는 장 · 장 끝 요약 절(`chapterSummary` — 새로 배우는 절이
+      아니라 앞 절을 줄인 자리다. 2026-09-14 요약을 넣자 C55 가 요약마다 예제를 요구했다).
+    """
+    if ch.get("examMode") or ch.get("chapterNumber") == 0:
+        return []
+    sections = [s for s in ((ch.get("theory") or {}).get("sections") or [])
+                if isinstance(s, dict) and not s.get("chapterSummary")]
+    practice = [p for p in (ch.get("practice") or []) if isinstance(p, dict)]
+    if not sections:
+        return []
+    out = []
+    for sec in sections:
+        sid = str(sec.get("id") or "?")
+        if SECTION_EXAMPLE_WAIVER_KEY in sec:
+            if not str(sec.get(SECTION_EXAMPLE_WAIVER_KEY) or "").strip():
+                out.append("theory[" + sid + "]: `" + SECTION_EXAMPLE_WAIVER_KEY
+                           + "` 가 비어 있다 — 사유 없는 면제는 면제가 아니다")
+            continue
+        if not any(p.get("section") == sid and p.get("ramp") == 1 for p in practice):
+            out.append("theory[" + sid + "]: 연결된 ramp 1 절 예제가 없다 — 새 문항을 만들기 전에"
+                       " 기존 문풀의 내용·section·ramp와 순서를 먼저 확인할 것. `section` 이 이 절이고 `ramp` 1"
+                       "(한글·한 문장)인 문풀을 두거나, 값을 넣거나 판정할 거리가 없는 절이면 `"
+                       + SECTION_EXAMPLE_WAIVER_KEY + "` 에 사유를 적을 것")
+    return out
+
+
+def formula_learning_path_issues(ch):
+    """공식이 이론에서 소개된 뒤 예제·문항을 거쳐 요약에 남는지 재는 구조 검사.
+
+    `formulaLearningPath` 를 선언한 장만 게이트로 삼는다. LaTeX 문자열은 비교하지 않는다.
+    같은 식의 기호·정렬·특수형 표기가 달라져도 안정적인 formula id 로 잇기 위해서다.
+    이 자가 재는 것은 참조 실재, 최초 이론 절, 적용 조건, 근거, ramp 1 기본 예제,
+    사용 문항, 요약 연결이다. 본문의 설명이 의미상 충분한지는 사람이 읽어 판정한다.
+    """
+    if "formulaLearningPath" not in ch:
+        return []
+    paths = ch.get("formulaLearningPath")
+    if not isinstance(paths, list) or not paths:
+        return ["formulaLearningPath: 선언했지만 비어 있다"]
+
+    formulas = {str(f.get("id")): f for f in ((ch.get("derivation") or {}).get("formulas") or [])
+                if isinstance(f, dict) and f.get("id")}
+    sections = {str(s.get("id")): s for s in ((ch.get("theory") or {}).get("sections") or [])
+                if isinstance(s, dict) and s.get("id")}
+    section_order = {sid: i for i, sid in enumerate(sections)}
+    items = {}
+    item_kinds = {}
+    for coll in ("practice", "problems"):
+        for item in ch.get(coll) or []:
+            if isinstance(item, dict) and item.get("id"):
+                iid = str(item["id"])
+                items[iid] = item
+                item_kinds[iid] = coll
+
+    out, seen = [], set()
+    covered_items = set()
+    seen_methods = set()
+    for n, path in enumerate(paths, 1):
+        owner = "formulaLearningPath[" + str(n) + "]"
+        if not isinstance(path, dict):
+            out.append(owner + ": 객체여야 한다")
+            continue
+        is_method = bool(path.get("methodRef"))
+        fid = str(path.get("methodRef") or path.get("formulaRef") or "")
+        sec_refs = "methodRefs" if is_method else "formulaRefs"
+        item_refs = "relatedMethods" if is_method else "relatedFormulas"
+        path_seen = seen_methods if is_method else seen
+        if is_method and path.get("formulaRef"):
+            out.append(owner + ": formulaRef 와 methodRef 를 동시에 선언할 수 없다")
+        if not fid:
+            out.append(owner + ": formulaRef 또는 methodRef 가 없다")
+            continue
+        owner = "formulaLearningPath[" + fid + "]"
+        if fid in path_seen:
+            out.append(owner + ": 같은 formulaRef 가 두 번 선언됐다")
+        path_seen.add(fid)
+        if is_method and path.get("basisType") not in ("definition", "specialization", "combination"):
+            out.append(owner + ": 카드 없는 방법은 basisType을 definition/specialization/combination으로 선언할 것")
+        if not is_method and fid not in formulas:
+            out.append(owner + ": 없는 유도 카드 id 를 가리킨다")
+
+        sid = str(path.get("theorySection") or "")
+        sec = sections.get(sid)
+        if not sec or sec.get("chapterSummary"):
+            out.append(owner + ": 최초 이론 절이 없거나 장 요약을 가리킨다 — " + repr(sid))
+        elif fid not in (sec.get(sec_refs) or []):
+            out.append(owner + ": 최초 이론 절 " + sid + " 의 " + sec_refs + " 에 식이 없다")
+
+        conditions = path.get("conditions")
+        if not isinstance(conditions, list) or not conditions or any(
+                not isinstance(v, str) or not v.strip() for v in conditions):
+            out.append(owner + ": 적용 조건이 비어 있다")
+        if not isinstance(path.get("basis"), str) or not path.get("basis", "").strip():
+            out.append(owner + ": 유도 또는 정의 근거가 비어 있다")
+
+        summary_id = str(path.get("summarySection") or "")
+        summary = sections.get(summary_id)
+        if not summary or not summary.get("chapterSummary"):
+            out.append(owner + ": 장 요약 절을 가리키지 않는다 — " + repr(summary_id))
+        elif fid not in (summary.get(sec_refs) or []):
+            out.append(owner + ": 요약 " + summary_id + " 의 " + sec_refs + " 에 식이 없다")
+
+        basics = path.get("basicExamples")
+        if not isinstance(basics, list) or not basics:
+            out.append(owner + ": 기본 예제가 없다")
+            basics = []
+        uses = path.get("uses")
+        if not isinstance(uses, list):
+            out.append(owner + ": uses 는 문항 id 목록이어야 한다(기본 예제만 쓰면 빈 목록)")
+            uses = []
+
+        for iid in basics + uses:
+            tag = (item_refs, fid, str(iid))
+            if tag in covered_items:
+                continue
+            covered_items.add(tag)
+            item = items.get(str(iid))
+            if not item:
+                out.append(owner + ": 없는 문항 id 를 가리킨다 — " + str(iid))
+                continue
+            if fid not in (item.get(item_refs) or []):
+                out.append(owner + ": 문항 " + str(iid) + " 의 " + item_refs + " 에 식이 없다")
+            if iid in basics and (item_kinds.get(str(iid)) != "practice" or item.get("ramp") != 1):
+                out.append(owner + ": 기본 예제 " + str(iid) + " 는 practice 의 ramp 1 이어야 한다")
+            item_sid = str(item.get("section") or "")
+            if item_sid not in sections or sections[item_sid].get("chapterSummary"):
+                out.append(owner + ": 문항 " + str(iid) + " 의 section 이 없거나 이론 절이 아니다")
+            if sid in section_order and item_sid in section_order and section_order[item_sid] < section_order[sid]:
+                out.append(owner + ": 문항 " + str(iid) + " 이 최초 이론 절보다 앞 절에 묶였다")
+
+    for iid, item in items.items():
+        for ref_key in ("relatedFormulas", "relatedMethods"):
+            for fid in item.get(ref_key) or []:
+                if (ref_key, fid, iid) not in covered_items:
+                    out.append("formulaLearningPath[" + str(fid) + "]: " + ref_key + " 를 단 문항 "
+                               + iid + " 이 기본 예제나 사용 문항 목록에 없다")
+    return out
+
+
 # ★ C3. 답 소절 수와 삽화 답 슬롯 수가 다르다 (열린 날 2026-07-30).
 #
-# 사용자 원문: [사용자 발화 인용 생략] — ch01 실측 결과 답이 2개 이상인 문항 15개 중 **11개**가 그랬다.
+# 사용자 원문: *[발화 생략]* — ch01 실측 결과 답이 2개 이상인 문항 15개 중 **11개**가 그랬다.
 #
-# 삽화에 답 슬롯을 둔 것은 [사용자 발화 인용 생략] 는 약속이다. 일부만 있으면 나머지 답이
+# 삽화에 답 슬롯을 둔 것은 *[발화 생략]* 는 약속이다. 일부만 있으면 나머지 답이
 # 어디서 나오는지 알 수 없고, A안(조건 가림)과 겹치면 더 나빠진다.
-# **서술형 소절은 세지 않는다** — [사용자 발화 인용 생략] 를 슬롯에 넣으면
+# **서술형 소절은 세지 않는다** — *[발화 생략]* 를 슬롯에 넣으면
 # 삽화가 글판이 된다. 그래서 '숫자를 포함한 소절'만 센다.
 _ANSWER_PART = re.compile(r"\((?:[a-z]|[가-힣])\)")
 _SLOT_ID = re.compile(r"id='(slot-[^']+)'")
@@ -1825,7 +2718,7 @@ def answer_slot_count_mismatch(problem):
 
 # ★ C4. 가림(A안)이 캡션으로 샌다 (열린 날 2026-07-30).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # `fig-p08-bourdon-stack` 은 `+ 145 kPa` 라벨에는 `data-reveal='1'` 을 붙였는데
 # **바로 아래 캡션**에는 안 붙였다. 버튼을 안 눌러도 캡션이 83.5·145 를 다 알려준다.
@@ -1854,7 +2747,7 @@ def iter_chapter_diagrams(node, trail="root"):
 
 # ★ C13. **답 슬롯의 값이 같은 삽화에 이미 적혀 있다** (열린 날 2026-08-01, 사용자 지적).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # **왜 C4 가 못 봤나 — C4 는 `revealMode` 가 붙은 삽화만 본다.** q07 은 `figureMode: hint`라
 # 그 검사가 **아예 돌지 않는다.** 즉 '가림'을 쓰는 삽화만 감시하고, 답 슬롯을 쓰는 삽화는
@@ -1865,7 +2758,7 @@ def iter_chapter_diagrams(node, trail="root"):
 #   · 문제문에 없는데 삽화에 있으면 그건 **푼 결과**다(q07 오른쪽의 `45`).
 # ★ C14. 답은 소문제 (a)(b)로 갈라 놓고 **풀이는 평면 나열**인 자리 (열린 날 2026-08-01).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # 뷰어는 `(a)` 로 시작하는 풀이 단계를 만나면 소문제 그룹으로 묶는다. 그런데 **데이터에 그 키가
 # 없으면** 갈라 줄 근거가 없어 예전처럼 1~N 평면 나열로 남는다. 답에는 (a)(b)가 있는데
@@ -1965,7 +2858,7 @@ def answer_slot_leak_issues(ch):
 # ★ C16. **'주어진 조건값'을 나타내는 신호가 둘이었다** (열린 날 2026-08-01, 사용자 지적).
 # (번호 주의: C15 는 main 에서 '지문 언어'가 가져갔다 — merge 로 겹친 것을 여기서 비켰다.)
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # 규칙은 `data-reveal='1'`(가림 대상 = 주어진 조건) + `font-weight='700'` 둘을 **손으로 맞추는**
 # 것이었다. 손으로 맞추는 규칙은 반드시 갈라진다 — 실측 48건 중 **20건이 어긋나** 있었다.
@@ -2018,8 +2911,8 @@ def reveal_leak_issues(ch):
 
 # ★ C5. 치수보조선이 관·기둥의 **중심선**에서 시작한다 (열린 날 2026-07-30, 사용자 재지적).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
-# 그 전에 이미: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
+# 그 전에 이미: *[발화 생략]*
 #
 # **왜 규칙을 적고도 또 났나 — 검사가 없었다.** AGENTS 「치수선의 끝점은 재는 면의 *외형선*」은
 # 2026-07-30 에 신설됐지만 그것을 보는 기계가 하나도 없었다.
@@ -2042,7 +2935,7 @@ DIM_EXTENSION_MAX_WIDTH = 1.5  # 치수보조선 굵기 규격 상한
 _CENTER_TOL = 0.6
 # 이 절반두께를 넘으면 외형선을 따로 등록한다.
 #
-# ★ 3.0 → 1.0 (2026-08-02, 사용자 지적 [사용자 발화 인용 생략]). C5 의 관·기둥 기준(6)을 그대로 빌려 썼는데, **재는 면이 어디냐는
+# ★ 3.0 → 1.0 (2026-08-02, 사용자 지적 *[발화 생략]*). C5 의 관·기둥 기준(6)을 그대로 빌려 썼는데, **재는 면이 어디냐는
 #   질문에는 '굵은 관이냐'가 아니라 '중심선과 외형선이 다르냐'가 기준이다.**
 #   실측 `fig-barometer-manometer` 기압계 관: 굵기 5 → half 2.5 라 이 문턱 **바로 아래**여서
 #   외형선이 등록되지 않았고, 그래서 검사는 보조선이 관 외형(142.5)에서 **0.9px** 떨어진 것을
@@ -2183,7 +3076,7 @@ def _crossing_tick(seg, point, axis):
 # ★★ C7 확장 — **화살촉으로 끝나는** 치수선도 본다 (넓힌 날 2026-08-02).
 #
 #   첫 판은 종단이 **눈금 틱**인 치수선만 봤다. 그런데 AGENTS 삽화 표준이 요구하는 정상 형태는
-#   [사용자 발화 인용 생략] 이다 — 즉 **규격을 지킨 치수선일수록 검사 밖**이었다.
+#   *[발화 생략]* 이다 — 즉 **규격을 지킨 치수선일수록 검사 밖**이었다.
 #   틱 종단은 그 자체로 비규격이니, 첫 판은 사실상 '비규격인 것만 보는' 자였다.
 #   (L2 후보 경고가 양방향 화살촉을 보긴 하지만 조건이 `not tagged_dimension` — 그 삽화에
 #   태깅된 치수가 **하나라도 있으면** 나머지가 통째로 조용해진다.)
@@ -2247,14 +3140,14 @@ def untagged_dimension_issues(ch):
 # ★ C10. 치수보조선의 **간격**(물체에서 띄운 양)과 **넘김**(치수선을 지나 더 나간 양)
 # (열린 날 2026-07-31 — 사용자 지적).
 #
-# 사용자 원문: [사용자 발화 인용 생략],
-# [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*,
+# *[발화 생략]*
 #
 # **왜 또 났나 — 규격이 '방향'만 있고 '수치'가 없었다.** AGENTS 는 이미
-#   ⑴ [사용자 발화 인용 생략] ⑵ [사용자 발화 인용 생략]
+#   ⑴ *[발화 생략]* ⑵ *[발화 생략]*
 # 라고 적고 있었지만 **얼마나**가 없다. 그래서 삽화마다 사람이 눈으로 정했고 갈라졌다 —
 # 실측(같은 viewBox 폭 500): 볼트 `간격 3 · 넘김 8`, 스프링 `간격 6 · 넘김 0`.
-# [사용자 발화 인용 생략] 같은 서술은 검사가 될 수 없다. 이 부류는 라벨 여백(0.5em/1.0em)에서 이미
+# *[발화 생략]* 같은 서술은 검사가 될 수 없다. 이 부류는 라벨 여백(0.5em/1.0em)에서 이미
 # 겪은 것과 같다 — **수치를 못박고 기계가 재기 시작하자 비로소 멈췄다.**
 #
 # 기준값의 근거: **사용자가 적합하다고 판정한 볼트 삽화**(`fig-elastic-rod-work`)를 그대로 쓴다.
@@ -2341,7 +3234,7 @@ def _point_to_segment(point, seg):
 def _collinear_face(pos, ends, sign, limit):
     """**같은 직선 위**에 놓인 형상선의 끝까지 거리 (없으면 None). 순수 함수.
 
-    ★ 열린 날 2026-08-05 (`fig-01-p04`, 사용자 [사용자 발화 인용 생략]).
+    ★ 열린 날 2026-08-05 (`fig-01-p04`, 사용자 *[발화 생략]*).
 
     `_perpendicular_hits` 는 보조선을 **가로지르는** 선만 면으로 센다. 그래서 보조선과
     **같은 직선 위**에 있는 형상선은 광선이 '만나지' 않고 따라 달려 **보이지 않는다.**
@@ -2405,9 +3298,9 @@ _DIM_INSIDE_SEARCH_PX = 12.0
 def _extension_starts_inside(point, axis, sign, segments, forward):
     """보조선 끝이 도형을 **파고들었는지** — 그렇다면 파고든 깊이(양수), 아니면 None.
 
-    ★ 열린 날 2026-08-02 (사용자: [사용자 발화 인용 생략]).
+    ★ 열린 날 2026-08-02 (사용자: *[발화 생략]*).
 
-    **결함 자체가 검사를 통과시키던 자리다.** 간격은 [사용자 발화 인용 생략]
+    **결함 자체가 검사를 통과시키던 자리다.** 간격은 *[발화 생략]*
     까지로 재는데, 굵은 관은 중심선도 면으로 등록돼 있어서 보조선이 **관 속에서** 시작하면
     바깥으로 나가다 중심선을 먼저 만나 **정확히 규격값**이 나온다.
     실측 `fig-barometer-manometer` U자관(관 굵기 18, 중심 340 · 외형 331/349):
@@ -2512,11 +3405,11 @@ def dim_label_rows(svg):
 
 # ★ C34. **점선이 실선을 덮고 있는가** (열린 날 2026-08-02 R-23, **2026-08-05 재지적**).
 #
-# 사용자: [사용자 발화 인용 생략](08-02) →
-#         [사용자 발화 인용 생략](08-05)
+# 사용자: *[발화 생략]*(08-02) →
+#         *[발화 생략]*(08-05)
 #
 # ★★ **왜 또 났나 — 처방을 적어 두고 실행하지 않았다.** 08-02 에 인박스 R-23 이 좌표까지
-#   실측해 [사용자 발화 인용 생략] 라고 처방을 써 두었는데, **그 배치가 그대로 안 돌았다.**
+#   실측해 *[발화 생략]* 라고 처방을 써 두었는데, **그 배치가 그대로 안 돌았다.**
 #   즉 이 부류의 실패는 '몰랐다'가 아니라 **'적어 두면 된다고 믿은 것'** 이다 —
 #   인박스는 사람이 읽어야 실행되는 장치라, 안 읽히면 아무 일도 일어나지 않는다.
 #   그래서 판정을 **빌드로 옮긴다**: 매 빌드가 스스로 신고하면 안 읽힐 수가 없다.
@@ -2543,7 +3436,7 @@ def _dash_flagged_segments(svg):
             continue
         if _effective(svg, pos, attrs, "fill", "none") not in (None, "none"):
             continue                  # 채운 도형(화살촉 등)은 선이 아니다
-        # ★ **중심선은 이 검사의 대상이 아니다** (2026-08-23). C34 의 근거는 [사용자 발화 인용 생략] 인데, **중심선은 형상을 가로지르는 것이
+        # ★ **중심선은 이 검사의 대상이 아니다** (2026-08-23). C34 의 근거는 *[발화 생략]* 인데, **중심선은 형상을 가로지르는 것이
         #   정상**이라 그 전제가 성립하지 않는다(축·구멍의 중심을 가리키는 표시다).
         #   빼지 않으면 규격대로 그린 그림이 «같은 것을 두 번 그렸다» 로 막힌다 — 실제로
         #   `class='axis'` 를 1점 쇄선으로 바꾼 순간 6건이 그렇게 걸렸다.
@@ -2599,10 +3492,10 @@ def dashed_over_solid_issues(svg):
 
 # ★ C33. **치수선이 자기 화살촉을 뚫고 나갔는가** (열린 날 2026-08-05, 사용자 ch01 문풀 4번).
 #
-# 사용자: [사용자 발화 인용 생략]
+# 사용자: *[발화 생략]*
 #
 # ★ **AGENTS 삽화 표준이 이미 못 박은 규칙인데 검사가 하나도 없었다** —
-#   [사용자 발화 인용 생략]
+#   *[발화 생략]*
 #   실측(`fig-01-p04`): 화살촉 밑변이 y=136 인데 치수선이 **y=118.16** 에서 시작해
 #   꼭짓점(126)을 **7.84px 지나** 솟아 있었다. 빌드·감사 전부 통과였다.
 #
@@ -2625,7 +3518,7 @@ DIM_SHAFT_OVERSHOOT_TOL = 1.5    # 밑변을 이만큼 넘으면 신고 (SVG px 
 def _untagged_shaft_body(svg):
     """**태깅 밖** 영역의 사본 — 치수·지시선 그룹과 곡선 path 를 공백으로 지운다.
 
-    ★ 열린 날 2026-08-06, 사용자 재지적: [사용자 발화 인용 생략]
+    ★ 열린 날 2026-08-06, 사용자 재지적: *[발화 생략]*
 
     ★ **의심이 맞았다.** 이 자는 `class='dim'` 그룹 **안만** 재고 있었다. ch03 4절의
       지렛대 막대는 치수선이 아니라 비율 막대라 태깅이 없었고, 그래서 1~2장에서 닫은
@@ -2668,11 +3561,34 @@ def dim_shaft_overshoot_issues(svg):
             # ★ **밑변에서 제대로 끝나는 몸통이 이미 있으면, 같은 축의 다른 선은 남의 도형이다**
             #   (2026-08-06, 태깅 밖으로 넓히며 실측). `fig-02-q12` 에서 교반기 봉이 화살표와
             #   같은 세로축에 있어 걸렸는데, 그 화살표의 진짜 몸통은 밑변에서 정확히 끝나 있었다.
-            #   결함의 정의는 [사용자 발화 인용 생략] 이므로, 제대로 된 몸통이 있으면
+            #   결함의 정의는 *[발화 생략]* 이므로, 제대로 된 몸통이 있으면
             #   그 화살표는 결함이 아니다 — 그 위를 지나는 형상선까지 신고하면 오탐이 쏟아진다.
             #   ★ 몸통으로 인정하는 조건은 셋이다 — **축과 나란하고**, 한쪽 끝이 밑변에 닿고,
             #     나머지 끝이 꼬리 쪽(t < 0)이다. 나란함을 빼면 치수*보조*선의 끝점까지
             #     몸통으로 세어 원 회귀가 깨진다(보조선은 축과 직각이다 — 실측으로 드러났다).
+            # ★★ **좁은 치수는 화살촉을 밖으로 돌린다** — 그때 본선은 «두 밑변을 잇는» 선이라
+            #    이 화살촉에서 보면 반대쪽 끝의 t 가 **양수**다(2026-09-08, 실사고).
+            #    옛 판정선(`far < 0`)은 안쪽 형태만 알아서, `svg_dimension` 이 스스로 찍은
+            #    바깥 형태를 **생성기가 자기 자에 걸리는** 자리로 만들었다(잠금 테스트가
+            #    안쪽 인자만 써서 그 가지를 한 번도 안 밟았다).
+            #    → 판정선을 하나로 합친다: **본선의 두 끝이 이 치수의 화살촉 밑변들에 닿으면
+            #      제대로 된 본선이다.** 안쪽 형태도 그 조건을 그대로 만족하고(밑변 둘을 잇는다),
+            #      막으려던 결함(«몸통을 꼭짓점까지 그었다»)은 끝이 **꼭짓점**이라 여전히 걸린다.
+            bases = [a["base"] for a in arrows]
+            # 같은 축에 짝 화살촉이 있으면(치수) 본선은 두 밑변을 잇는 선뿐이다 — 밑변 뒤로 뻗은
+            # 꼬리(2026-09-11 바깥 화살촉 꼬리)를 본선으로 치면 꼭짓점을 꿰뚫은 몸통이 면제된다.
+            #   태깅된 치수 그룹 안에서만 — 태깅 밖은 같은 축의 벡터 화살표(합성·눈금자)가 흔해
+            #   8장이 오탐으로 떨어졌다(2026-09-11 첫 빌드).
+            paired = start > 0 and any(abs((ox - bx) * uy - (oy - by) * ux) <= DIM_SHAFT_OVERSHOOT_TOL
+                         and (ox - bx) ** 2 + (oy - by) ** 2 > DIM_SHAFT_OVERSHOOT_TOL ** 2
+                         for ox, oy in bases)
+
+            def _lands_on_another_base(px, py):
+                return any((px - ox) ** 2 + (py - oy) ** 2
+                           <= DIM_SHAFT_OVERSHOOT_TOL ** 2
+                           and (ox - bx) ** 2 + (oy - by) ** 2 > DIM_SHAFT_OVERSHOOT_TOL ** 2
+                           for ox, oy in bases)
+
             def _is_proper_shaft(seg):
                 x1, y1, x2, y2 = seg
                 dx, dy = x2 - x1, y2 - y1
@@ -2681,8 +3597,13 @@ def dim_shaft_overshoot_issues(svg):
                     return False
                 t1 = (x1 - bx) * ux + (y1 - by) * uy
                 t2 = (x2 - bx) * ux + (y2 - by) * uy
-                near, far = (t1, t2) if abs(t1) < abs(t2) else (t2, t1)
-                return abs(near) <= DIM_SHAFT_OVERSHOOT_TOL and far < 0
+                if abs(t1) < abs(t2):
+                    near, far, fx, fy = t1, t2, x2, y2
+                else:
+                    near, far, fx, fy = t2, t1, x1, y1
+                if abs(near) > DIM_SHAFT_OVERSHOOT_TOL:
+                    return False
+                return (far < 0 and not paired) or _lands_on_another_base(fx, fy)
 
             if any(_is_proper_shaft(s) for s in segs):
                 continue
@@ -2710,8 +3631,8 @@ def dim_shaft_overshoot_issues(svg):
 def dim_label_placement_issues(svg):
     r"""치수 라벨이 **자기 치수선에** 붙어 있는가. 순수 함수 — 테스트가 직접 부른다.
 
-    열린 날 2026-08-04. 사용자: [사용자 발화 인용 생략] ·
-    [사용자 발화 인용 생략]
+    열린 날 2026-08-04. 사용자: *[발화 생략]* ·
+    *[발화 생략]*
 
     ★★ **뿌리는 「라벨이 치수 그룹 밖에 있었다」이다.** 실측 — `fig-02-q02` 의 `z = 12 m` 와
       `fig-02-q03` 의 `Δz = 50 m` 는 둘 다 `<g id='dim-*'>` **바깥**에 있었다. 그래서 치수 규격을
@@ -2727,7 +3648,7 @@ def dim_label_placement_issues(svg):
     `Δz = 50 m` 는 중점(438,152)에서 **위로 89** 로 아예 치수 구간(94~210) 밖이었다.
 
     ★★ **수평 치수의 「위」는 일부러 재지 않는다 — 반박 기록** (2026-08-04, 부류5 착수 때 실측).
-      AGENTS 삽화 표준은 [사용자 발화 인용 생략] 이라고 적고 있고, 실제로 전 챕터
+      AGENTS 삽화 표준은 *[발화 생략]* 이라고 적고 있고, 실제로 전 챕터
       수평 치수 라벨 **8개 중 6개가 치수선 아래**에 있다. 그래서 처음엔 이것도 검사로
       승격하려 했는데, 좌표를 잡아 보고 **규격 쪽이 틀렸다**는 결론이 났다:
 
@@ -2735,7 +3656,7 @@ def dim_label_placement_issues(svg):
         실측 `fig-elastic-rod-work` — 구간 62px 에 라벨 `늘어난 길이 ΔL` 이 98px 이라
         위로 올리면 x=302·364 의 **자기 치수보조선 두 개를 글자가 가로지른다.**
 
-      즉 리포의 실제 관례는 [사용자 발화 인용 생략] 이고 그게 맞다.
+      즉 리포의 실제 관례는 *[발화 생략]* 이고 그게 맞다.
       한 줄짜리 규격이 못 다룬 경우라, 규격을 기계로 박으면 **더 나쁜 결함(라벨이 선을 가로지름)**
       을 만든다. 규칙도 검토 대상이다(AGENTS 규칙 12의 '강하게 반박하라') — 그래서 판정을
       넓히지 않고 여기에 근거를 남긴다. 지금 남은 실제 불일치는 `fig-continuum-vs-rarefied`
@@ -2891,7 +3812,7 @@ def dim_extension_rows(svg):
         if not (mains and heads):
             continue
         # ★ 한 그룹에 치수가 여럿이면 **치수마다** 잰다 (열린 날 2026-08-02, 사용자 지적:
-        #   [사용자 발화 인용 생략]).
+        #   *[발화 생략]*).
         #
         #   아래 옛 코드는 그룹당 본선을 **하나만** 골랐다. 그러면 그 본선의 기준값(base)을
         #   지나지 않는 보조선이 `이 본선과 짝이 아닌 선` 으로 **조용히 버려진다.**
@@ -2976,13 +3897,13 @@ DIM_EXTENSION_MAX_LEN = 80.0
 
 # ★ C11. 첨자를 되돌리는 `<tspan dy>` 가 **비어 있다** (열린 날 2026-07-31 — 사용자 지적).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # **무엇이 새어나갔나.** 아래첨자는 `<tspan dy='2.5'>in</tspan>` 로 내리고
 # `<tspan dy='-2.5'></tspan>` 로 되돌리는 관용구를 쓰는데, **되돌리는 tspan 이 비어 있으면
 # 브라우저가 그 dy 를 적용하지 않는다** — dy 는 *글리프마다* 적용되는데 글리프가 없기 때문이다.
 # 그래서 첨자 뒤의 글자가 내려간 채로 남고, 첨자가 둘이면 두 배로 내려간다.
-# 화면에서는 [사용자 발화 인용 생략] 로 보인다 — 사용자가 본 그대로다.
+# 화면에서는 *[발화 생략]* 로 보인다 — 사용자가 본 그대로다.
 #
 # **왜 아무 검사도 못 봤나.** 이 결함은 **좌표가 아니라 렌더 규칙**이다. 데이터의 y 는 하나뿐이라
 # bbox·여백·겹침 검사는 전부 통과한다. 검수 래스터(fitz)는 첨자를 원래 뭉개 그려서
@@ -3080,7 +4001,7 @@ def dim_extension_fixes(svg):
 #
 # ★ 왜 아무도 못 잡았나 — 이 결함은 어떤 기존 검사에도 걸리지 않는다.
 # 좌표는 정상이고 겹침도 없고 여백도 맞는다. **틀린 것은 뜻이지 기하가 아니다.**
-# 게다가 같은 챕터의 본문([사용자 발화 인용 생략])과 `fig-ch03-p01`(건도 0.6 = 좌측
+# 게다가 같은 챕터의 본문(*[발화 생략]*)과 `fig-ch03-p01`(건도 0.6 = 좌측
 # 구간)은 **처음부터 옳았다** — 즉 삽화 하나만 어긋나 있었는데도 빌드가 통과했다.
 # 기하만 보는 검사로는 '본문과 삽화가 서로 다른 말을 하는' 부류를 영영 못 본다.
 #
@@ -3109,10 +4030,10 @@ def _all_strings(node):
 def forward_link_issues(ch):
     """**뒷 장을 가리키는 내부 링크.** 아직 안 배운 데로 보내면 '예습 지시'가 된다.
 
-    열린 날 2026-07-30 — 사용자 지적: [사용자 발화 인용 생략], 그리고 [사용자 발화 인용 생략].
+    열린 날 2026-07-30 — 사용자 지적: *[발화 생략]*, 그리고 *[발화 생략]*.
 
     ★ **재발이다.** 같은 판정을 이미 0장에 대해 받았고(SUBJECT.md 「0장의 링크 규칙」,
-      2026-07-30) 그 근거는 [사용자 발화 인용 생략]
+      2026-07-30) 그 근거는 *[발화 생략]*
       이었다. 그때 **0장만 고치고 규칙을 1장 이후로 넓히지 않아** 같은 것이 ch01 에 남았다.
       부류가 아니라 인스턴스만 고친 전형적인 실패다(AGENTS 규칙 7).
 
@@ -3135,17 +4056,55 @@ def forward_link_issues(ch):
                 out.append("ch%02d → ch%02d 로 가는 내부 링크: 아직 안 배운 장이라 "
                            "'예습 지시'로 읽힌다. 장 이름은 **글자로만** 적을 것 "
                            "(링크는 앞 장에서 배운 것을 되짚을 때만)." % (here, target))
+    out.extend(_same_chapter_forward_links(ch, here))
+    return out
+
+
+_SAME_XLINK = re.compile(r"\[\[ch(\d{2}):([A-Za-z0-9_-]+)")
+
+
+def _same_chapter_forward_links(ch, here):
+    """**같은 장 안에서도** 이론·도입부가 뒤에 오는 탭(유도·예제·문항)이나 뒤 절로 링크하면 전방 링크다.
+
+    열린 날 2026-09-19 — 사용자 *[발화 생략]*(공수2 ch09 곡률 · 응용열 ch08 펌프 일). 위 장 단위 판정은 장 번호만
+    봐서 같은 장 안의 앞→뒤 링크가 통째로 사각지대였다. 탭 순서는 이론 → 예제 → 유도 → 연습 → 문제라
+    이론에서 유도 카드·문항으로 가는 링크는 전부 뒤로 보내는 것이다.
+    """
+    theory = (ch.get("theory") or {}).get("sections") or []
+    order = {s.get("id"): i for i, s in enumerate(theory) if isinstance(s, dict)}
+    later_tab = {f.get("id") for f in ((ch.get("derivation") or {}).get("formulas") or []) if isinstance(f, dict)}
+    for coll in ("practice", "problems"):
+        later_tab |= {it.get("id") for it in (ch.get(coll) or []) if isinstance(it, dict)}
+    out = []
+
+    def scan(text, where, idx):
+        for m in _SAME_XLINK.finditer(text or ""):
+            if int(m.group(1)) != here:
+                continue
+            tid = m.group(2)
+            if tid in later_tab:
+                out.append("%s → %s: 이론·도입부에서 뒤 탭(유도·예제·문항)으로 가는 링크 — 링크는 앞에서 배운 "
+                           "곳을 되짚을 때만 건다. 식은 이 자리에 적고 링크는 지운다" % (where, tid))
+            elif idx is not None and tid in order and order[tid] > idx:
+                out.append("%s → %s: 뒤 절로 가는 링크 — 아직 안 읽은 절이다" % (where, tid))
+
+    for i, s in enumerate(theory):
+        if isinstance(s, dict):
+            for text in _all_strings(s):
+                scan(text, s.get("id") or "?", i)
+    for text in _all_strings(ch.get("chapterIntro") or {}):
+        scan(text, "chapterIntro", None)   # 도입부의 절 안내 링크는 목차 노릇이라 탭 링크만 본다
     return out
 
 
 # ★ C31. 이해도 체크의 **답 자리**에 학생이 낼 수 없는 것을 넣지 않는다
 #   (열린 날 2026-08-06, 사용자 **재지적**).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # ★ **재발이다.** 같은 판정을 이미 받았다 — `<과목>/chNN-review-inbox.md` 에 기록된
-#   [사용자 발화 인용 생략](답이 장 번호)에 대해
-#   [사용자 발화 인용 생략] 로 결함 판정을 냈다.
+#   *[발화 생략]*(답이 장 번호)에 대해
+#   *[발화 생략]* 로 결함 판정을 냈다.
 #   그때 **기계 방지를 '후보'로만 적고 구현하지 않았다.** 인스턴스는 사라졌지만 같은 것을
 #   다시 써도 막는 것이 없었고, 실제로 다음 배치에서 새로 쓴 카드에 또 들어갔다.
 #   '빠뜨렸다'가 아니라 **빠뜨려도 통과되는 구조**가 원인이다(AGENTS 규칙 7-⑷).
@@ -3173,7 +4132,7 @@ def _check_answer_field(trail):
 def review_diagram_needs_reason(ref):
     """C35 — 복습 카드가 **삽화를 끌어오면** 사유를 적었는가 (신설 2026-08-06).
 
-    열린 날 2026-08-06 · 사용자 지적: [사용자 발화 인용 생략].
+    열린 날 2026-08-06 · 사용자 지적: *[발화 생략]*.
 
     새어나간 것 — ch04 §1 의 복습 카드가 ch02 의 `fig-energy-balance-ledger`(질량 통로가
     그려진 **검사체적** 장부 그림)를 끌어왔다. 4장은 **밀폐계로 범위를 좁히는 장**이라
@@ -3221,7 +4180,7 @@ def check_answer_scope_issues(ch):
 
 # ★ C9. **삽화(SVG) 안에서** 분수를 텍스트로 조판했다 (열린 날 2026-07-30 — 같은 부류 3회차 재발).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 # 앞선 두 번은 인박스의 `W-9. 분수를 또 텍스트로 — 몇 번째인지 모를 반복`,
 # `V-11. 분수를 텍스트로 쓴 것 — 반복 부류`.
 #
@@ -3242,7 +4201,7 @@ def check_answer_scope_issues(ch):
 #   · 앞에 수치가 붙은 것(`45 m/s`)은 등록부에 없는 단위여도 통과 — 이중 안전망.
 #
 # ★ 인박스가 적어 둔 기준은 "**양쪽 다** 기호"였지만, 그대로 쓰면 `V²/2`(분모가 숫자)가
-#   빠진다. 사용자가 지적한 것은 [사용자 발화 인용 생략] 이고 `V²/2` 의 분모도 글자다 —
+#   빠진다. 사용자가 지적한 것은 *[발화 생략]* 이고 `V²/2` 의 분모도 글자다 —
 #   기준을 좁게 적은 쪽이 부류를 덜 덮은 것이라 넓혔다. 실측: 좁은 기준 3건 → 넓힌 기준 6건,
 #   늘어난 3건은 전부 진짜 분수였다(오탐 0).
 #
@@ -3257,7 +4216,7 @@ _LETTERS = re.compile(r"[^\W\d_]+")
 _NOT_LETTER = str.maketrans("", "", "⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉°.,''")
 # 슬래시 양옆의 '한 낱말'을 자르는 구분자 — 연산자·괄호·구두점.
 # ★ **자릿수 쉼표는 구분자가 아니다** (2026-08-04, R-44 · 분수 부류 11회째).
-#   사용자: [사용자 발화 인용 생략]
+#   사용자: *[발화 생략]*
 #   쉼표를 무조건 구분자로 보면 `586,400` 이 `400` 으로 잘리고, 그러면 **앞에 남은 `586,` 을
 #   수치 안전망(`_NUM_BEFORE`)이 '수치가 앞에 붙었으니 단위다'로 읽어** 통째로 빠져나간다.
 #   R-9(숫자÷숫자)를 닫은 뒤에도 같은 챕터에서 또 난 이유가 이것이다 — 인스턴스가 아니라
@@ -3300,7 +4259,7 @@ UNIT_BASES = frozenset(("m", "s", "N", "J", "W", "Pa", "L", "mol", "h", "min",
 #   `--apply` 를 돌렸으면 미분이 `\mathrm{ds}`(로만체 단위)로 바뀌어 데이터가 망가진다 —
 #   도구가 이 등록부를 그대로 쓰므로 여기 한 곳을 고치면 그 함정도 같이 닫힌다.
 # ★★ **슬래시에서만 애매한 단위** (신설 2026-08-06 — 가운데점 검사 C36 이 열었다).
-#   위 등록부에서 `g`·`K`·`A`·`V`·`F` 가 빠진 이유는 [사용자 발화 인용 생략] 가 아니라
+#   위 등록부에서 `g`·`K`·`A`·`V`·`F` 가 빠진 이유는 *[발화 생략]* 가 아니라
 #   **슬래시 문맥에서 물리량과 구별되지 않아서**다(`F/A` 는 힘/면적이지 패럿/암페어가 아니다).
 #   즉 그 판정은 등록부의 성질이 아니라 **연산자의 성질**이었는데, 목록에서 통째로 빼는
 #   방식이라 다른 연산자에서도 단위가 아닌 것이 되어 버렸다.
@@ -3368,14 +4327,23 @@ def is_mathrm_unit(word):
     return "\\mathrm{" in (word or "")
 
 
+# 단위 뒤에 붙는 유니코드 위첨자 지수 — m²·m³ 처럼 단위 이름 자체는 그대로다.
+_UNIT_EXPONENT_RE = re.compile(r"[²³⁰¹⁴-⁹]+$")
+
+
 def _is_unit_token(token):
     if _unit_notation == "mathrm":
         # 이름으로는 판정하지 않는다. 단위는 `\mathrm{}` 로 표시되고,
         # 그 판정은 호출부(`fraction_side_kind`·`math_slash_fraction_issues`)가 먼저 한다.
         return False
-    if token in UNIT_BASES:
+    # ★ `m³/kg`(비체적)처럼 지수가 붙은 단위가 「단위가 아닌 토큰」으로 새던 것을 닫는다
+    #   (2026-09-06, 응용열역학 — `solutionTemplate`을 슬래시 분수 검사에 새로 편입하며 드러남).
+    #   `UNIT_BASES`는 지수 없는 이름만 등록하므로, 판정 전에 꼬리의 위첨자 숫자를 뗀다 —
+    #   `m³` → `m`. 지수가 없던 기존 토큰은 이 정규식이 아무것도 못 지워 동작이 그대로다.
+    bare = _UNIT_EXPONENT_RE.sub("", token)
+    if bare in UNIT_BASES:
         return True
-    return len(token) > 1 and token[0] in UNIT_PREFIXES and token[1:] in UNIT_BASES
+    return len(bare) > 1 and bare[0] in UNIT_PREFIXES and bare[1:] in UNIT_BASES
 
 
 def fraction_side_kind(word):
@@ -3395,7 +4363,7 @@ def fraction_side_kind(word):
         return "number"                       # 비어 있으면 판단 근거가 없다 → 통과 쪽
     # ★★ **괄호 묶음도 한쪽이다** (2026-08-13, 분수 부류 **12회째** — 아래 `text_fraction_hit` 주석이 정본).
     #   `(𝒱₂² - 𝒱₁²)/2` 의 왼쪽은 낱말이 아니라 **묶음**이다. 묶음을 못 읽으면 이 자는
-    #   [사용자 발화 인용 생략] 며 손을 떼고, 그 자리를 대신 보던 것이 모양 열거뿐이었다.
+    #   *[발화 생략]* 며 손을 떼고, 그 자리를 대신 보던 것이 모양 열거뿐이었다.
     if word.startswith("(") and word.endswith(")"):
         return _bracket_group_kind(word[1:-1])
     if is_mathrm_unit(word):
@@ -3495,7 +4463,7 @@ def text_fraction_hit(text):
       처방만 다르다: 삽화는 `tools/svg_fraction.py`, 산문은 `\\(\\frac{}{}\\)`.
 
     ★★ **유니코드 분수 문자도 여기서 잡는다** (2026-08-04, R-33 · 분수 부류 10회째).
-      사용자: [사용자 발화 인용 생략]
+      사용자: *[발화 생략]*
       아홉 번의 분수 정리를 살아남은 이유가 **자의 형태 인식**이었다 — 산문·수식·삽화의 세 검사가
       전부 `/` 를 찾는데 `½`(U+00BD)는 **슬래시가 없는 한 글자**라 셋 다 통과했다.
       게다가 글리프가 그럴듯해서 사람 검수도 지나쳤다. '빠뜨렸다'가 아니라 **빠뜨려도
@@ -3504,11 +4472,11 @@ def text_fraction_hit(text):
       **쓰라고** 한다. 금지 대상은 **분수 문자만**이고, 분수 사선(U+2044)은 슬래시로 취급한다.
 
     ★★★ **괄호 분자** (열린 날 2026-08-13 · 분수 부류 **12회째**).
-      사용자: [사용자 발화 인용 생략] — 화면(ch02 유도 `variables`): `운동에너지 변화 (kJ) = m(𝒱₂² - 𝒱₁²)/2`.
+      사용자: *[발화 생략]* — 화면(ch02 유도 `variables`): `운동에너지 변화 (kJ) = m(𝒱₂² - 𝒱₁²)/2`.
 
       **순회는 멀쩡했다 — 이 자가 그 자리에서 손을 뗐다.** `_SIDE_WORD` 는 괄호를 구분자로
       보므로 분자가 `)` 로 끝나면 왼쪽 낱말이 **빈 문자열**이 되고, 2026-08-01 에 넣은
-      [사용자 발화 인용 생략] 가 거기서 판정을 포기했다. 그 자리를 대신 보던 것은
+      *[발화 생략]* 가 거기서 판정을 포기했다. 그 자리를 대신 보던 것은
       `FRACTION_SHAPES` ⑴ 하나뿐인데, 그 모양은 빼기를 **유니코드 `−` 로만** 알아서
       데이터가 ASCII `-` 를 쓴 순간 어느 자도 그 문자열을 보지 않았다(실측: 그 값을 넣고
       빌드하면 통과한다). 즉 **판정의 사각지대를 「모양 열거」가 메우고 있었고, 열거는
@@ -3548,11 +4516,11 @@ def text_fraction_hit(text):
             continue
         # ★ 판정은 **쌍**으로 한다 (2026-07-31, 두 번째 조정).
         #   한쪽씩 보면 `mg/A`(mg 는 두 글자 소문자 = 낱말꼴)가 빠지고, 낱말 쪽을 허용하면
-        #   `in/out` 이 들어온다. 실제 기준은 [사용자 발화 인용 생략] 다 —
+        #   `in/out` 이 들어온다. 실제 기준은 *[발화 생략]* 다 —
         #   낱말 쌍(`in/out`·`LHV/HHV`)은 나눗셈이 아니라 '또는'이라 분수로 조판하면 틀린다.
         #
         # ★ 2026-08-01 — **숫자 ÷ 숫자를 여기에 더한다** (사용자 4회째 지적:
-        #   [사용자 발화 인용 생략]).
+        #   *[발화 생략]*).
         #   위 조건만으로는 **양쪽이 다 숫자면 통째로 빠졌다** — `8.5² / 2`·`80000/3600`·`890/1059.5`
         #   가 전부 검사 밖이었다. 낱말 쌍을 거르려고 넣은 조건에 숫자 분수가 같이 걸려 나간 것이다.
         #   `9.81 m/s²` 같은 단위는 위쪽 `_NUM_BEFORE` 가 이미 걸러내므로 여기까지 오지 않는다.
@@ -3631,9 +4599,9 @@ def lever_rule_label_side_issues(ch):
 
 # ★ C18·C19. 선도(축이 있는 그래프)의 **물리적 형태**를 보는 검사 (열린 날 2026-08-02).
 #
-# 사용자 원문: [사용자 발화 인용 생략] ·
-#   [사용자 발화 인용 생략] ·
-#   [사용자 발화 인용 생략] · [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]* ·
+#   *[발화 생략]* ·
+#   *[발화 생략]* · *[발화 생략]*
 #
 # **무엇이 새어나갔나 (ch03 좌표 실측).**
 #   · T-v 정압선이 과열증기에서 **내려간다** — 열을 줄수록 온도가 떨어진다는 그림이었다.
@@ -3644,11 +4612,11 @@ def lever_rule_label_side_issues(ch):
 # ★ 왜 기존 검사가 하나도 못 봤나 — 삽화 검사는 전부 **기하·조판**(겹침 F1·F4·F6 · 여백 ·
 #   글자 크기 · 화살촉 · 치수선 C10)이라 '이 곡선이 물리적으로 가능한가'는 본 적이 없다.
 #   좌표는 정상이고 겹침도 없고 여백도 맞는다 — **틀린 것은 뜻이지 기하가 아니다**(C6 과 같은 뿌리).
-#   AGENTS 「아직 기계로 막지 못하는 부류」에 [사용자 발화 인용 생략] 으로 적혀 있던,
+#   AGENTS 「아직 기계로 막지 못하는 부류」에 *[발화 생략]* 으로 적혀 있던,
 #   **알려진 사각지대**였다.
 #
 # ★ 그러나 과목 지식을 검사에 박지 않는다(AGENTS 「공통 도구에 과목별 사실을 박지 않는다」).
-#   [사용자 발화 인용 생략] 은 열역학 사실이라 공통 코드가 알면 안 된다. 그래서
+#   *[발화 생략]* 은 열역학 사실이라 공통 코드가 알면 안 된다. 그래서
 #   **불변식은 데이터가 선언하고, 검사는 선언과 좌표가 맞는지만 본다:**
 #
 #     <path data-shape='rising'  …>   x 가 늘 때 화면 y 가 늘지 않는다(값이 증가)
@@ -3672,7 +4640,7 @@ ARROW_STRICT_CHAPTERS = set()
 NO_DIAGRAM_STRICT_CHAPTERS = set()
 
 
-# ★ 「언제 삽화를 넣나」의 기준 — 사용자 승인 2026-08-04 ([사용자 발화 인용 생략]).
+# ★ 「언제 삽화를 넣나」의 기준 — 사용자 승인 2026-08-04 (*[발화 생략]*).
 #   ⑴ 기하·배치가 조건인 문항(경사·높이차·경계 위치·연결 순서) → **필수**
 #   ⑵ 비교가 논점인 문항(두 상태·두 계) → **필수**
 #   ⑶ 정의·분류만 묻는 문항(열이냐 일이냐, 부호 규약) → **선택**(계 경계를 그려야 하면 필수)
@@ -3851,16 +4819,28 @@ def _polyline_points(segs):
 
 
 def _flat_runs(pts):
-    """수평 구간 [(시작점, 끝점)] — 화면 y 가 거의 같은 채로 이어지는 구간."""
-    runs, start = [], 0
-    for i in range(1, len(pts)):
-        flat = abs(pts[i][1] - pts[i - 1][1]) <= PLOT_FLAT_DY
-        if not flat:
-            if i - 1 > start:
-                runs.append((pts[start], pts[i - 1]))
-            start = i
-    if len(pts) - 1 > start:
-        runs.append((pts[start], pts[-1]))
+    """수평 구간 [(시작점, 끝점)] — 화면 y 가 거의 같은 채로 이어지는 구간.
+
+    ★★ **표본 밀도에 안 흔들리게 고쳤다 (2026-09-08).**
+    옛 판은 «이웃 두 점의 `Δy` 가 작다» 를 이어 붙였다. 그러면 **판정이 표본 수에 딸린다** —
+    같은 곡선을 촘촘히 뜨면 걸음마다 `Δy` 가 작아져 **봉우리 근처가 통째로 «수평 구간»** 이
+    된다. 경로 기하를 `svgelements` 로 옮겨 표본이 촘촘해지자 그 자리에서 터졌다:
+    돔 곡선 셋이 «수평 구간이 있는데 `data-flat-on` 선언이 없다» 로 신고됐다(전부 오탐).
+
+    → 이제 **구간 전체의 `Δy`** 를 본다. 같은 도형이면 표본을 두 배로 떠도 답이 같다.
+    문턱(`PLOT_FLAT_DY`)의 뜻도 이쪽이 원래 의도에 맞는다 — *[발화 생략]* 는
+    구간의 성질이지 걸음의 성질이 아니다.
+    """
+    runs, i, n = [], 0, len(pts)
+    while i < n - 1:
+        j = i + 1
+        while j < n and abs(pts[j][1] - pts[i][1]) <= PLOT_FLAT_DY:
+            j += 1
+        if j - 1 > i:
+            runs.append((pts[i], pts[j - 1]))
+            i = j - 1
+        else:
+            i += 1
     return [(a, b) for a, b in runs if abs(b[0] - a[0]) >= PLOT_FLAT_MIN_LEN]
 
 
@@ -3930,11 +4910,30 @@ def plot_curve_shape_issues(ch):
                 continue
             pts = _polyline_points(segs)
             if shape != "free":
-                worst, at = 0.0, None
+                # ★★ **표본 밀도에 안 흔들리게 고쳤다 (2026-09-08).**
+                #   옛 판은 «이웃 두 점 사이의 되돌아감» 을 봤다. 그러면 **판정이 표본 수에
+                #   딸린다** — 같은 곡선을 촘촘히 뜨면 걸음마다 되돌아감이 작아져
+                #   `PLOT_MONOTONE_TOL` 아래로 내려가고 **위반이 통째로 안 잡힌다.**
+                #   경로 기하를 `svgelements` 로 옮겨 표본이 촘촘해지자 그 자리에서 터졌다:
+                #   「내려가는 정압선」·「올라가는 정온선」 회귀 둘이 아무것도 못 잡았다.
+                #   → 이제 **달려온 극값에서 얼마나 되돌아갔나**(최대 낙폭)를 본다.
+                #   같은 도형이면 표본을 두 배로 떠도 답이 같다.
+                #   ★ **이어지는 되돌아감을 합산한다.** 표본이 촘촘해지면 한 번의 큰
+                #   되돌아감이 작은 걸음 여럿으로 쪼개져 걸음마다 문턱 아래로 내려간다 —
+                #   합치면 같은 값이라 표본 밀도에 안 흔들린다.
+                #   ☒ **달려온 극값에서의 낙폭**으로도 재 봤는데, 그건 점의 **전역 순서**를
+                #   전제해서 x 가 되돌아가는 경로에서 멀쩡한 곡선을 신고했다(회귀가 잡았다).
+                worst, at, run, run_from = 0.0, None, 0.0, None
                 for a, b in zip(pts, pts[1:]):
-                    back = (b[1] - a[1]) if shape == "rising" else (a[1] - b[1])
-                    if back > worst:
-                        worst, at = back, (a, b)
+                    step = (b[1] - a[1]) if shape == "rising" else (a[1] - b[1])
+                    if step > 0:
+                        if run == 0.0:
+                            run_from = a
+                        run += step
+                        if run > worst:
+                            worst, at = run, (run_from, b)
+                    else:
+                        run = 0.0
                 if worst > PLOT_MONOTONE_TOL:
                     out.append(where + " — data-shape='%s' 인데 좌표가 반대다: "
                                "(%.0f,%.0f)→(%.0f,%.0f) 에서 화면 y 가 %.1f px %s "
@@ -3970,10 +4969,10 @@ def plot_curve_shape_issues(ch):
 
 # ★ C33·C34 — `data-shape='free'` 는 **검사 면제가 아니라 판정 대기**다 (열린 날 2026-08-06).
 #
-# 사용자: [사용자 발화 인용 생략]
+# 사용자: *[발화 생략]*
 #
 # **이번 재발의 정확한 구멍.** C19 를 만들 때 돔·상경계처럼 단조성이 없는 곡선을 `free` 로
-# 열어 두고 주석에 [사용자 발화 인용 생략] 이라 적었다. 그런데 **그 판단을
+# 열어 두고 주석에 *[발화 생략]* 이라 적었다. 그런데 **그 판단을
 # 했는지 아무도 묻지 않는다.** 그래서 포화 돔은 2026-08-02 에도, 그 뒤로도 아무 기록 없이
 # 통과했다 — 실제로는 좌 145 : 우 180px 로 거의 대칭이었는데(물은 120°C 에서 1 : 435) 검사는
 # 조용했고, 결국 **사용자가 발견해야만 드러나는 구조**가 그대로 남아 있었다.
@@ -4042,7 +5041,7 @@ def plot_shape_declaration_issues(ch, ch_path):
             key = re.sub(r"^review-ch\d+-", "", fig_id) + "::" + pid
             where = fig_id + ": " + repr(pid or (_attr(attrs, "d") or "")[:24])
             # ★ **포화 돔은 형상 비율을 선언해야 한다** (열린 날 2026-08-06, 사용자 지적
-            #   두 번째: [사용자 발화 인용 생략]). 3절 선도 셋은 물성에서 생성해 `data-apex-ratio` 를 선언하고
+            #   두 번째: *[발화 생략]*). 3절 선도 셋은 물성에서 생성해 `data-apex-ratio` 를 선언하고
             #   아래 C34 가 실측과 대조하는데, 4절 `qm-dome` 은 **선언이 아예 없어서**
             #   손으로 그린 좌우 대칭 베지어가 그대로 통과했다 — 검사가 있는데 그 검사를
             #   **발동시키는 선언이 없으면 없는 것과 같다**(`class='dim'`·`leader` 와 같은 형태).
@@ -4091,12 +5090,14 @@ def xlink_fragment(target_id, target_child):
     """데이터의 [[chNN:target/child]]가 만들어내는 해시 조각 — 뷰어 fmtOne과 같은 규칙."""
     if target_id.startswith("fig-"):
         return target_id
+    if target_id.startswith("f-") and not target_child:
+        return "formula-" + target_id
     return target_id + "-" + target_child if target_child else "theory-" + target_id
 
 
 # ★ 요약본은 근거가 아니다 (열린 날 2026-07-28, 사용자 지적).
 #
-# 사용자 원문: [사용자 발화 인용 생략]
+# 사용자 원문: *[발화 생략]*
 #
 # **무엇이 새어나갔나.** 과목 자료 폴더에는 사용자가 만든 **장별 요약 이미지**가 있다
 # (기계재료 `N장 요약.png` · 동역학 `N장 요약.jpg`). 읽기 쉽고 구조가 정리돼 있어서
@@ -4112,6 +5113,44 @@ SUMMARY_HINT = "요약"
 # 1차 근거로 인정하는 것: 수업 자료(강의노트·ppt·슬라이드)와 교재(책 이름은 pitfall 등록부 재사용).
 PRIMARY_SOURCE_HINTS = ("강의노트", "슬라이드", "ppt", "교재", "본문", "p.", "쪽",
                         "오답로그", "사용자 제보", "자작")
+
+
+# 접두사를 **바로 뒤에서 취소하는** 말. 등록부의 책 이름을 통과표로만 쓰고 실제로는
+# "그 책엔 없다"고 적는 형태를 잡는다. 접두사 뒤 24글자 안에 있을 때만 본다 — 뒤쪽 본문에서
+# "해당 없음"을 정상적으로 쓰는 문장(다른 조건이 해당 없다는 서술)까지 잡지 않으려는 창이다.
+PITFALL_NEGATIONS = ("해당 없음", "해당없음", "경고 없음", "없음 —", "없음,", "미확인", "확인 못")
+# 실측 2026-09-12 — 잡아야 할 16건은 부정이 접두사 **바로 뒤 1~2글자**에서 시작한다
+# (`"… 본문 경고 (해당 없음, …"` 는 2, `"… 본문 경고 없음 — …"` 는 1). 8은 그 최댓값에
+# 여유를 둔 값이다. 위쪽이 아니라 **아래쪽이 제약**이다 — 창을 넓히면 본문 뒤쪽에서
+# "해당 없음"을 정상으로 쓰는 서술까지 잡아 규칙이 죽는다(잠금 ⑹이 24에서 실제로 깨졌다).
+PITFALL_NEGATION_WINDOW = 8
+
+
+def pitfall_source_issue(source):
+    """`pitfalls[].source` 가 규칙 2를 어기면 사유 문자열, 통과면 None (순수 함수 — 테스트 대상).
+
+    무엇을 재나: ⑴ 등록된 접두사로 시작하는가(`textutil.PITFALL_BOOK_BY_SUBJECT` 가 정본) ⑵ 그
+    접두사를 **바로 뒤에서 부정하지 않는가.**
+
+    ★ ⑵ 가 2026-09-12 에 붙었다(Codex 검토 F05). `startswith` 만 보던 시절
+      `"Cengel 본문 경고 (해당 없음, Rao §2.9.2 … 저자 서술)"` 이 **통과했다** — 문자열은
+      «Cengel 이 경고한다» 로 시작하는데 내용은 «Cengel 엔 없다» 였고, 진동공학에 16건 있었다.
+      형식이 내용을 대신 승인한 자리다. 진동공학의 등록 접두사는 이미 `Rao 본문 경고` 라
+      **검사기의 구멍이 아니라 데이터가 남의 과목 접두사를 쓴 것**이기도 했다.
+
+    못 보는 것: 접두사가 맞고 부정도 없지만 **그 절·쪽에 실제로 그 내용이 없는** 경우.
+    그건 문자열로 못 잰다 — 사람이 원전을 열어야 한다.
+    잠금 `test_pitfall_source_negation_is_rejected`.
+    """
+    text = str(source or "")
+    prefix = next((p for p in PITFALL_SOURCE_PREFIXES if text.startswith(p)), None)
+    if prefix is None:
+        return "pitfall source 형식 위반"
+    tail = text[len(prefix):len(prefix) + PITFALL_NEGATION_WINDOW]
+    if any(neg in tail for neg in PITFALL_NEGATIONS):
+        return ("pitfall source 가 접두사를 바로 뒤에서 부정한다 — 통과표로 쓴 책 이름은 출처가 아니다."
+                " 실제 근거가 된 책의 등록 접두사로 바꿔 적을 것(규칙 2)")
+    return None
 
 
 def summary_only_source(ref):
@@ -4171,15 +5210,15 @@ def viewer_deep_link_pattern(template_src):
 # 사용자: 문항 조건에 **`𝒱_out`** 이 **밑줄째** 나온다.
 #
 # **규칙도 검사도 있었는데 이 자리를 아무도 안 봤다.** AGENTS 「알려진 함정」이
-# [사용자 발화 인용 생략]
+# *[발화 생략]*
 # 라고 못 박고, `lint_chapter` 의 `scan_subscripts` 가 그 등록부를 강제한다. 그런데 그 검사는
-# **필드만** 묻는다 — [사용자 발화 인용 생략] 가 참이면 거기서 **손을 뗀다.**
+# **필드만** 묻는다 — *[발화 생략]* 가 참이면 거기서 **손을 뗀다.**
 # 화면이 첨자를 실제로 내리는 조건은 필드만이 아니라 **밑글자**이기도 하다: 산문 렌더러는
 # 밑글자를 `[Δ∆]?[A-Za-zα-ωΑ-Ω]` 로 받는데, 2026-08-12 에 속도 기호를 필기체로 옮기면서
 # 데이터에 들어온 `𝒱`(U+1D4B1)는 **BMP 밖**이라 그 문자류에 없다. 그래서 등록된 필드에
 # 얌전히 들어 있는데도 밑줄이 날것으로 남는다.
 #
-# ★ 이것은 같은 날 닫은 **괄호 분수와 같은 부류**다 — 자가 [사용자 발화 인용 생략] 라고
+# ★ 이것은 같은 날 닫은 **괄호 분수와 같은 부류**다 — 자가 *[발화 생략]* 라고
 #   손을 떼는 조건이 **화면의 실제 조건과 어긋나** 있었다. 분수는 「한쪽이 비면 통과」,
 #   이쪽은 「등록된 필드면 통과」였다.
 #
@@ -4298,7 +5337,7 @@ def check_answer_sentences(answer):
 # ⑵ basic/intermediate와 짝이 맞는다.
 #
 # ※ 정정 (math 2026-07-26, merge 수용 시점) — 원래 근거에는 셋째 항목이 있었다:
-#   [사용자 발화 인용 생략]
+#   *[발화 생략]*
 #   **둘 다 사실이 아니라 지웠다.** math가 커밋 4647276에서 그 하드코딩을 이미 제거해
 #   `PROBLEM_DIFFICULTIES`를 import하도록 고쳤고, thermo도 그 수정을 그대로 유지했다
 #   (같은 커밋의 `test_problem_difficulty_vocabulary`가 "목표 비중이 어휘 문자열을
@@ -4375,6 +5414,11 @@ def xlink_landing_text(target, target_id, target_child):
     이 자리는 절 번호·제목을 라벨로 쓰는 관례(2026-08-02 사용자 결정)로 바뀌면서
     비로소 드러났다 — 라벨이 본문 낱말에서 오던 때는 티가 안 났다.
     """
+    if target_id.startswith("f-") and not target_child:
+        formula = next((f for f in (target.get("derivation") or {}).get("formulas") or []
+                        if f.get("id") == target_id), None)
+        if formula:
+            return "유도 " + str(formula.get("name", "")) + " " + str(formula.get("latex", ""))
     sections = (target.get("theory") or {}).get("sections") or []
     section = next((x for x in sections if x.get("id") == target_id), None)
     if section is not None:
@@ -4396,6 +5440,9 @@ def xlink_landing_text(target, target_id, target_child):
 
 def xlink_target_valid(target, target_id, target_child):
     """Validate a deep-link target, including a definition owned by the target section."""
+    if target_id.startswith("f-"):
+        return not target_child and any(f.get("id") == target_id
+                                      for f in (target.get("derivation") or {}).get("formulas") or [])
     sections = (target.get("theory") or {}).get("sections") or []
     section_ids = {section.get("id") for section in sections}
     if target_child:
@@ -4421,6 +5468,34 @@ def resolve_anchor_text(paragraphs, anchor):
     if not hits:
         return None, "anchorText가 어느 단락과도 맞지 않음 — " + repr(key[:30])
     return None, "anchorText가 " + str(len(hits)) + "개 단락과 맞음(모호) — " + repr(key[:30])
+
+
+def spotlight_paragraph_issues(section, paragraphs):
+    """짚어 보기 단계의 `fromText`·`toText` → 단계에 `_paragraphs`(1-based 목록)를 적고, 못 푼 자리를 돌려준다.
+
+    뷰어가 그 단락을 삽화 상자 안으로 옮겨 단계와 함께 넘긴다(2026-09-14 사용자 지적 — 설명 단락도 유도처럼 삽화와 한 덩어리로 넘겨야 한다). 번호가 아니라 앞부분 문자열로 묶는 이유는 `resolve_anchor_text` 와 같다.
+    막는 것: 못 찾음·모호 · 범위 거꾸로 · 삽화보다 앞 단락 · 두 단계가 같은 단락. `afterParagraph` 가
+    먼저 풀려 있어야 한다(삽화 anchorText 해석 뒤에 부른다).
+    """
+    out = []
+    for dg in section.get("diagrams") or []:
+        claimed = set()
+        for k, st in enumerate(dg.get("spotlight") or []):
+            if not st.get("fromText"):
+                continue
+            lo, why = resolve_anchor_text(paragraphs, st["fromText"])
+            hi, why2 = resolve_anchor_text(paragraphs, st.get("toText") or st["fromText"])
+            where = "section %s %s spotlight[%d]: " % (section.get("id", "?"), dg.get("id", "?"), k)
+            if lo is None or hi is None:
+                out.append(where + (why or why2))
+            elif hi < lo or lo <= (dg.get("afterParagraph") or 0):
+                out.append(where + "단락 범위가 거꾸로이거나 삽화보다 앞 — %d~%d" % (lo, hi))
+            elif claimed & set(range(lo, hi + 1)):
+                out.append(where + "다른 단계와 단락이 겹친다 — %d~%d" % (lo, hi))
+            else:
+                claimed |= set(range(lo, hi + 1))
+                st["_paragraphs"] = list(range(lo, hi + 1))
+    return out
 
 
 def mask_inline_math(text):
@@ -4492,6 +5567,52 @@ def prose_style_problems(text):
                 out.append((name + " 줄이 목록으로 렌더되지 않음(화면에 '" + shown
                             + "'가 날것으로 남는다) — 항목을 2개 이상으로 만들거나 "
                             "문장으로 풀 것", marked[0].strip()[:40]))
+    return out
+
+
+# 수식 밖 홑별표 한 쌍 — 뷰어는 `**…**` 만 굵게 바꾸고 홑별표는 글자로 남긴다.
+# 재는 것: 인라인 수식(`\(…\)`)과 굵게(`**…**`)를 같은 길이 공백으로 지운 뒤, 한 줄 안에서
+#   짝을 이루는 `*…*`. 문턱은 길이 없음 — `prose_style_problems` ⑴ 은 40자 상한이라
+#   긴 인용(`*「이 소자의 전압을 잴 때, …」*`, 전전 ch01 · 2026-09-16 사용자 지적)을 놓쳤고,
+#   그 키는 옛 opt-in(`prose_style`)이라 선언 안 한 과목에서는 경고로만 남았다.
+# 못 보는 것: 짝이 없는 홑별표 하나 · 구분자 없는 LaTeX 필드(`solutionTemplate`·`equations`)
+#   — 거기 `^{*}` 는 기호라 이 자가 일부러 안 돈다.
+ODD_STAR_PAIR_RE = re.compile(r"(?<!\*)\*(?!\*)([^*\n]+?)\*(?!\*)")
+_BOLD_SPAN_RE = re.compile(r"\*\*[^*\n]+?\*\*")
+
+
+def odd_star_pair_spans(text):
+    """수식·굵게 밖에서 짝을 이룬 홑별표 조각 목록. 순수 함수 — 회귀가 직접 부른다."""
+    masked = mask_inline_math(str(text or ""))
+    masked = _BOLD_SPAN_RE.sub(lambda m: " " * len(m.group(0)), masked)
+    return [text[m.start():m.end()] for m in ODD_STAR_PAIR_RE.finditer(masked)]
+
+
+def iter_odd_star_fields(ch):
+    """화면에 산문으로 렌더되는 자리 — 이론 본문 · 장 도입부 · 지문 · 빈칸 힌트·해설 · 산문 필드 전부."""
+    for section in (ch.get("theory") or {}).get("sections") or []:
+        yield "section " + str(section.get("id")), section.get("content", "") or ""
+    for key, value in (ch.get("chapterIntro") or {}).items():
+        if isinstance(value, str):
+            yield "chapterIntro/" + key, value
+    for coll in ("practice", "problems"):
+        for item in ch.get(coll) or []:
+            yield coll + " " + str(item.get("id")) + "/prompt", item.get("prompt", "") or ""
+            yield coll + " " + str(item.get("id")) + "/expectedOutput", item.get("expectedOutput", "") or ""
+            for blank in item.get("blanks") or []:
+                for field in ("hint", "explanation"):
+                    yield (coll + " " + str(item.get("id")) + " " + str(blank.get("id")) + "/" + field,
+                           blank.get(field, "") or "")
+    yield from iter_prose_fields(ch)
+
+
+def odd_star_pair_issues(ch):
+    """수식 밖 홑별표 쌍 — 전 과목 기본 error(`is_strict_chapter(…, "odd_star_pair")`)."""
+    out = []
+    for owner, text in iter_odd_star_fields(ch):
+        for span in odd_star_pair_spans(text):
+            out.append(owner + ": 수식 밖 홑별표 쌍 — 뷰어는 `**` 만 굵게 바꿔 `*` 가 화면에 글자로 남는다."
+                       " 인용이면 「」만, 강조면 `**…**` 로, 곱셈이면 `·` 로 — " + repr(span[:50]))
     return out
 
 
@@ -4573,7 +5694,7 @@ def swallowed_newline_blocks(text):
     HTML에서 공백으로 접히므로 **줄이 바뀌지 않는다.**
     즉 저자가 줄을 바꾸려고 넣은 `\n` 이 아무 일도 하지 않는다.
 
-    실사고(이 검사가 열린 이유): 인박스 44번 [사용자 발화 인용 생략] 를 고치며 ch01 유도 4곳에 `안내 문구:\n\(식\)` 을 넣었는데, 화면에서는
+    실사고(이 검사가 열린 이유): 인박스 44번 *[발화 생략]* 를 고치며 ch01 유도 4곳에 `안내 문구:\n\(식\)` 을 넣었는데, 화면에서는
     한 줄로 이어져 **고쳐지지 않은 채 검수를 통과했다.** 데이터만 보면 고쳐진 것처럼
     보이는 것이 이 부류가 무서운 점이다 — 그래서 눈이 아니라 검사가 봐야 한다.
 
@@ -4743,6 +5864,9 @@ def check_latex_field(where, s, errors):
     for cmd in re.findall(r"\\([A-Za-z]+)", s):
         if cmd not in LATEX_SUPPORTED:
             errors.append(where + ": renderMath 미지원 명령 \\" + cmd)
+    # ★ 환경 이름은 명령 집합이 못 본다 — `\begin` 만 보면 `\begin{pmatrix}` 도 통과한다
+    #   (2026-09-10 신설. 근거는 `textutil.matrix_environment_issues` 독스트링).
+    errors.extend(matrix_environment_issues(where, s))
     # ★ `\mathcal` 은 **명령이 지원되는 것과 글자가 그려지는 것이 다르다** (2026-08-25, math2 실측).
     #   `LATEX_SUPPORTED` 에 `mathcal` 이 있어 여기까지는 통과하는데, 뷰어의 `renderMath` 는
     #   **`\mathcal{V}` 한 개만** 치환한다. 그래서 `\mathcal{L}` 은 역슬래시째 화면에 찍힌다 —
@@ -4829,11 +5953,11 @@ INLINE_MATH_RE = re.compile(r"\\\((.+?)\\\)", re.S)
 
 # ★ 유니코드 위·아래첨자 (열린 날 2026-07-26 · 검사 승격 2026-07-27, 인박스 항목 6)
 #
-# 사용자 실측: [사용자 발화 인용 생략]
+# 사용자 실측: *[발화 생략]*
 # 문자 위첨자(ᵃ ʰ ˣ)는 숫자(² ³)와 달리 대부분의 본문 폰트에서 글리프가 없거나 점처럼 뭉갠다.
 #
 # **구조적 원인 — 빠뜨림이 아니라 낡은 규칙이 유도한 결함이다.** AGENTS 함정 목록이
-# [사용자 발화 인용 생략] 라고 지시했는데, 그 규칙은
+# *[발화 생략]* 라고 지시했는데, 그 규칙은
 # 인라인 수식 `\(…\)`이 plain 필드 **안으로** 들어오기 전에 쓰인 것이다. 그 뒤로 `\(e⁻ʰ\)`처럼
 # **LaTeX 자리에 유니코드를 박는 것이 규칙을 지키는 것처럼** 보이게 됐다.
 #
@@ -4845,13 +5969,23 @@ UNI_SUPSUB_LETTERS = "ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛ
 UNI_SUPSUB_ANY = UNI_SUPSUB_LETTERS + "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎"
 # 값 전체가 LaTeX인 필드 — `\(…\)` 표시가 없어도 수식 자리다.
 MATH_ONLY_KEYS = {"latex", "equations"}
+# ★ `iter_math_blobs` 전용 확장 (2026-09-06, 응용열역학 — "분수에 대해 슬래시로 쓰는 게
+#   있다고? 계속 분수로 쓰라고 강조하지 않았나"). 실측: `math_slash_fraction_issues`가
+#   `solutionTemplate` 안의 `10.5/12.0` 같은 슬래시 분수를 한 건도 못 잡았다 — 이 필드가
+#   `\(…\)` 로 감싼 부분만 훑는 "산문" 취급을 받아서다(뷰어는 `renderMath(p.solutionTemplate)`
+#   를 통째로 불러 전부 LaTeX로 그린다 — 슬래시 분수 판정에서는 이 필드도 순수 math다).
+#   ★ **`MATH_ONLY_KEYS` 자체에는 안 넣는다.** 그 집합은 유니코드 첨자 검사도 같이 읽는데
+#   (아래 `unicode_supsub_issues`), `solutionTemplate`의 「➜ 환경 T₀ = 288 K」같은 산문 섞인
+#   줄에는 **숫자 첨자를 산문처럼 허용해야** 한다(첫 시도에서 그걸 놓쳐 T₀·V_1의 위첨자 m³까지
+#   전부 오류로 떴다) — 두 검사가 "math-only"의 기준이 다르다는 뜻이라 집합을 나눴다.
+SLASH_FRAC_MATH_KEYS = MATH_ONLY_KEYS | {"solutionTemplate"}
 # 독자 화면에 안 나가는 편집 메모·식별자. 여기의 유니코드는 렌더 품질과 무관하다.
 UNI_SUPSUB_EXEMPT_KEYS = {"id", "sourceRef", "source", "href", "sourcePages", "supplementNotes"}
 
 
 # ★ C17. 3항목 이상 나열은 쉼표 (신설 2026-08-02, 사용자 결정).
 #
-# 사용자 지적: [사용자 발화 인용 생략] → 선택지 넷을 제시해 **쉼표**를 골랐다.
+# 사용자 지적: *[발화 생략]* → 선택지 넷을 제시해 **쉼표**를 골랐다.
 # `s·v·a` → `s, v, a`. **2항목 가운데점(`미분·적분`)은 그대로 둔다** — 사용자가 명시했다.
 #
 # **판정 범위를 좁게 잡는다: 공백 없이 붙은 가운데점이 한 덩어리에 둘 이상일 때만.**
@@ -5005,7 +6139,7 @@ def is_strict_chapter(ch_path, names, list_name):
     """이 챕터에서 그 검사가 **error 인가**.
 
     ★★ **기본값을 뒤집었다 (2026-08-15, 사용자 지적).**
-      [사용자 발화 인용 생략] —
+      *[발화 생략]* —
       승격이 과목별 선언이라 검사 하나를 만들면 **과목 수만큼 선언을 적어야** 켜졌고,
       빠뜨린 과목은 **경고조차 없이 조용히 꺼진 채** 남았다(실측: 과목당 선언 키 39~51개).
 
@@ -5027,7 +6161,7 @@ def is_strict_chapter(ch_path, names, list_name):
 
 
 # ★ 홑글자 `l` 은 길이 기호로 쓰지 않는다 — `ℓ`(`\ell`) 를 쓴다 (열린 날 2026-08-04).
-#   사용자: [사용자 발화 인용 생략]. 실측이 그대로였다 —
+#   사용자: *[발화 생략]*. 실측이 그대로였다 —
 #   본문 글꼴(Pretendard)에서 잉크 픽셀이 `l` **84** · `I` 112 · `1` 136 · `ℓ` **204** 로,
 #   `l` 이 **모든 글자 중 가장 적은 민무늬 세로획**이고 폭도 `i` 와 같다(8.71). 기호로 안 읽힌다.
 #   ★ `ℓ` 은 본문·등폭 두 스택 모두에 **실제 글리프**가 있다(등폭 폭 25.78 = 다른 글자와 동일).
@@ -5036,7 +6170,29 @@ def is_strict_chapter(ch_path, names, list_name):
 #   판정: 앞뒤가 글자가 아닌 홑 `l`. 앞의 `\` 를 제외해 LaTeX 명령(`\left`·`\log`·`\lambda`·
 #   `\ell` 자신)이 걸리지 않게 한다. 뒤에 `_`(첨자)가 와도 기호이므로 신고한다.
 #   SVG 는 `<text>` 안만 본다 — path 명령의 `l`(상대 lineto)까지 잡으면 오탐이 쏟아진다.
+#
+# ★★ **첨자 자리의 `l` 은 기호가 아니라 낱말이다 — lower (열린 날 2026-09-07, 실측 53건).**
+#   수치해석 ch05·ch07 의 경고 전부가 `x_l` 이었다. 이분법·가위치법의 **하한**이고 언제나
+#   `x_u`(upper)와 짝으로 나온다(Chapra 표기). 이 규칙이 막으려던 것은 *"l sin θ"* 처럼
+#   **홀로 서서 길이를 뜻하는 `l`** 인데, 첨자 자리의 `l` 은 홀로 서지 않는다 — 앞의 밑변
+#   기호(`x`)가 무엇인지 이미 말하고 있고 `u` 와의 대비가 뜻을 고정한다. `x_ℓ` 로 바꾸면
+#   「길이」로 읽혀 오히려 틀린다.
+#   → **판정선은 「같은 문자열에 `_u` 가 함께 있는가」** 다. 짝이 없는 `x_l` 은 그대로 신고한다
+#     (그때는 정말 길이 첨자일 수 있다). 밑변으로 쓰인 `l_1`·`l_2`(황금분할의 길이)는
+#     첨자가 아니라 **기호 자신**이라 이 예외에 안 걸린다 — 그쪽은 고쳐야 한다.
 _BARE_ELL = re.compile(r"(?<![A-Za-z\\])l(?![A-Za-z])")
+_LOWER_UPPER_PAIR = re.compile(r"_u(?![A-Za-z])")
+
+
+def _is_lower_bound_subscript(text, pos, context=None):
+    """`text[pos]` 의 `l` 이 «하한 첨자」인가 — 바로 앞이 `_` 이고 짝(`_u`)이 함께 있다.
+
+    ★ 짝을 찾는 범위가 `context` 다 (2026-09-07 첫 실행에서 드러났다). 산문·수식은 그
+      문자열 안이지만 **SVG 는 삽화 한 장이 범위**다 — 하한과 상한 라벨은 대개 서로 다른
+      `<text>` 로 그려지므로, 텍스트 조각마다 따로 보면 짝을 영영 못 찾는다.
+    """
+    hay = text if context is None else context
+    return pos > 0 and text[pos - 1] == "_" and bool(_LOWER_UPPER_PAIR.search(hay))
 
 
 def bare_ell_issues(node, trail="root", key=None):
@@ -5048,8 +6204,13 @@ def bare_ell_issues(node, trail="root", key=None):
     if isinstance(node, dict):
         for k, v in node.items():
             if k == "svg":
-                for txt in re.findall(r"<text\b[^>]*>(.*?)</text>", str(v), re.S):
-                    for m in _BARE_ELL.finditer(re.sub(r"<[^>]*>", "", txt)):
+                runs = re.findall(r"<text\b[^>]*>(.*?)</text>", str(v), re.S)
+                whole = re.sub(r"<[^>]*>", "", " ".join(runs))
+                for txt in runs:
+                    plain = re.sub(r"<[^>]*>", "", txt)
+                    for m in _BARE_ELL.finditer(plain):
+                        if _is_lower_bound_subscript(plain, m.start(), whole):
+                            continue
                         issues.append(trail + "/svg: 홑글자 `l` 을 길이 기호로 썼다 — "
                                       + repr(txt[:40]) + " → `ℓ` 로 쓸 것")
                 continue
@@ -5059,6 +6220,8 @@ def bare_ell_issues(node, trail="root", key=None):
             issues.extend(bare_ell_issues(v, trail + "[" + str(i) + "]", key))
     elif isinstance(node, str):
         for m in _BARE_ELL.finditer(node):
+            if _is_lower_bound_subscript(node, m.start()):
+                continue
             issues.append(trail + ": 홑글자 `l` 을 길이 기호로 썼다 — "
                           + repr(node[max(0, m.start() - 18):m.start() + 18])
                           + " → `ℓ`(산문·SVG) · `\\ell`(수식) 로 쓸 것")
@@ -5066,15 +6229,15 @@ def bare_ell_issues(node, trail="root", key=None):
 
 
 # ★ C36 — **기호 사이의 가운데점** (신설 2026-08-06).
-#   사용자 지적: [사용자 발화 인용 생략] 전수해 보니 **한 글자에 세 가지 뜻이 겹쳐 있었다**:
+#   사용자 지적: *[발화 생략]* 전수해 보니 **한 글자에 세 가지 뜻이 겹쳐 있었다**:
 #     ⑴ 물리량의 곱   `P·A` · `x·v_fg` · `g·Δz`
 #     ⑵ 단위의 곱     `kJ/(kg·K)` · `kg·m/s²`     ← 이것만 정당하다
 #     ⑶ 물리량 나열   `P_R·T_R` · `ke·pe` · `u·h`  ← **곱으로 읽힌다**
-#   ⑶ 이 가장 위험하다 — 사용자가 식 나열에 대해 이미 같은 지적을 했다([사용자 발화 인용 생략], AGENTS 「표기 세부」). 그 지적은 **식 나열**만
+#   ⑶ 이 가장 위험하다 — 사용자가 식 나열에 대해 이미 같은 지적을 했다(*[발화 생략]*, AGENTS 「표기 세부」). 그 지적은 **식 나열**만
 #   닫았고 **기호 나열·기호 곱**은 열린 채였다.
 #   ★ 규격: **물리량끼리는 곱이면 붙여 쓰고, 나열이면 쉼표. 가운데점은 단위의 곱에만.**
 #   ★★ **2026-08-13 에 「공백(병치)」에서 「붙여 쓰기」로 뒤집혔다** — 사용자:
-#     [사용자 발화 인용 생략]
+#     *[발화 생략]*
 #     규칙은 한 줄로 설명돼야 한다: **기호끼리의 곱은 붙이고, 연산자는 띄운다.**
 #     그래서 이항 연산자(`+ - = < >`) 좌우와 **미분자 `d` 앞**(`P\,dV` — `d` 는 연산자다)의
 #     공백은 남는다. 옛 문구를 남겨 두면 다음 세션이 처방을 보고 되돌리므로 함께 고쳤다.
@@ -5082,7 +6245,7 @@ def bare_ell_issues(node, trail="root", key=None):
 #     처방을 둘 다 적어 사람이 고르게 한다 — 여기서 하나를 찍으면 나열이 곱으로 바뀐다.
 #   ★★ 단위 판정은 **`UNIT_BASES` + `UNIT_PREFIXES` 하나뿐이다.** 처음에 여기에 목록을
 #   새로 적었다가 `test_math_slash_fraction`(2026-08-02, 사용자 8회째 지적으로 열린 것)에
-#   **곧바로 걸렸다** — 그 회귀가 [사용자 발화 인용 생략] 를 지키고 있다.
+#   **곧바로 걸렸다** — 그 회귀가 *[발화 생략]* 를 지키고 있다.
 #   자를 두 벌 두면 갈라진다는 것을 이 리포가 이미 분수에서 겪었고, 그 교훈이 나를 막았다.
 #   ★ `_is_unit_token` 을 그대로 부르지 않는 이유: 그 함수는 `_unit_notation == "mathrm"` 일 때
 #     **항상 False** 를 돌려준다(그 모드에서는 호출부가 `\mathrm{}` 표시로 먼저 판정하기 때문).
@@ -5105,7 +6268,7 @@ SYMBOL_MIDDOT_RE = re.compile(
 #   `\(v = v_f + x \cdot v_{fg}\)` 는 화면에서 `v = v_f + x·v_fg` 로 **똑같이** 그려지는데,
 #   글자가 `\cdot` 이라 날 `·` 만 보는 자에게는 없는 것과 같았다. 실제로 산문 쪽 `x·v_fg` 를
 #   전부 `x v_fg` 로 고친 뒤에도 **디스플레이 수식만 점을 달고 남아** 한 절 안에서 갈렸다 —
-#   사용자가 처음 든 지적("어떤건 붙이고 어떤건 공백") 그 자체다.
+#   사용자가 처음 든 지적([발화 생략]) 그 자체다.
 #   ★ 판정은 **`\mathrm{}`(로만체) 안인가** 하나뿐이다. 이 리포는 단위를 언제나 로만체로 조판하므로
 #     (`\mathrm{N \cdot m}` · `\mathrm{W/(m^2 \cdot °C)}`) 그 밖의 `\cdot` 은 물리량의 곱이다.
 #     날 텍스트 쪽 판정(`UNIT_BASES`)을 여기 다시 쓰지 않는다 — 수식에는 이미 로만체라는
@@ -5117,7 +6280,7 @@ SYMBOL_MIDDOT_RE = re.compile(
 #     첫 형태는 `\{[^{}]*\}` 라 **한 겹만** 봤다. 그런데 단위는 거의 언제나 지수를 달고,
 #     지수는 중괄호다 — `\mathrm{kg/(m \cdot s^{2})}` 의 `^{2}` 에서 마스크가 끊겨
 #     **로만체 안의 단위 곱이 「물리량의 곱」으로 신고**됐다. 열역학은 `\mathrm{N \cdot m}`
-#     처럼 지수 없는 단위뿐이라 조용했다 — 바로 위 주석이 예고한 [사용자 발화 인용 생략] 다.
+#     처럼 지수 없는 단위뿐이라 조용했다 — 바로 위 주석이 예고한 *[발화 생략]* 다.
 #     ★ 데이터를 고치는 쪽으로 가면 안 되는 자리다: 신고된 7건은 **전부 규격대로 쓴 것**이라
 #       고치면 규격이 틀어진다(ee 의 `&#8722;` 8글자 오산과 같은 부류 — 자를 고친다).
 #     한 겹 중첩까지 본다. 두 겹(`\mathrm{a^{b^{c}}}`)은 단위 표기에 안 나온다.
@@ -5134,7 +6297,19 @@ _LATEX_ROMAN_GROUP = re.compile(
 #     일의 정의는 `\mathbf{F} \cdot d\mathbf{r}` 이라 오른쪽이 `d` 로 시작한다. 그래서
 #     면제에 걸리지 않았다 — 미소 변위는 벡터가 아니라고 말하는 셈이다.
 _VEC = r"(?:\\mathrm\s*\{?d\}?\s*|[dδ∂]\s*)?\\(?:vec|hat|mathbf|boldsymbol)\s*\{[^{}]*\}"
-_LATEX_VECTOR_DOT = re.compile(_VEC + r"\s*\\cdot\s*" + _VEC)
+#   ★★★ **괄호로 묶은 벡터식도 피연산자다** (넓힘 2026-09-05, 공학수학 2 ch07 §7.4·§7.5 에서 실측).
+#     평면의 점-법선 방정식 `n \cdot (r - r_1) = 0` 과 스칼라 삼중적 `u \cdot (v \times w)` 는
+#     교재 표준 표기인데, 위 `_VEC` 는 `\cdot` 바로 옆이 **곧장** 벡터 매크로여야만 면제해
+#     여는 괄호 하나에도 막혔다. 벡터를 다루는 다음 과목(9장 벡터해석 포함)에서 또 터질
+#     부류라 괄호 안에 벡터 매크로가 하나라도 있으면(중첩 괄호는 안 본다 — 그 형태가
+#     여기 나오지 않는다) 그 괄호 전체를 피연산자로 인정한다.
+#   ★ 2026-09-19: 처음 꼴 `\((?:[^()]*<벡터>[^()]*)+\)` 은 `[^()]*` 가 반복 안팎에서 겹쳐
+#     **파국적 되추적**을 냈다 — 공수2 ch07 에 벡터 매크로 여럿 뒤에 `)` 없이 `(` 가 오는 줄이 들어오자
+#     lint 가 끝나지 않았다(`lint_chapter --trace` 로 이 줄을 짚었다). 같은 뜻(중첩 없는 괄호 안에 벡터
+#     매크로가 하나 이상)을 앞보기 + 한 번의 `[^()]*` 로 적어 선형으로 만든다.
+_VEC_PAREN = r"\((?=[^()]*\\(?:vec|hat|mathbf|boldsymbol)\s*\{)[^()]*\)"
+_VEC_OPERAND = r"(?:" + _VEC + r"|" + _VEC_PAREN + r")"
+_LATEX_VECTOR_DOT = re.compile(_VEC_OPERAND + r"\s*\\cdot\s*" + _VEC_OPERAND)
 _LATEX_CDOT = re.compile(r"\\cdot(?![A-Za-z])")
 
 
@@ -5149,7 +6324,7 @@ def latex_cdot_hits(text):
 
 # ★ 처방을 **자와 같은 파일에** 둔다 (2026-08-07). 위 검사가 신고만 하고 고치는 쪽이 없으면
 #   과목마다 손으로 고치게 되고, 손으로 고치면 `\,` 과 `\times` 가 삽화·풀이마다 갈린다 —
-#   그 갈림이 이 검사가 없애려던 결함([사용자 발화 인용 생략])과 같은 부류다.
+#   그 갈림이 이 검사가 없애려던 결함(*[발화 생략]*)과 같은 부류다.
 #   판정선 하나: **숫자가 한쪽에라도 닿으면 `\times`, 그 밖은 병치(`\,`)**.
 #   왜 숫자만 예외인가 — 병치는 '이어 쓰면 곱'이라는 관례인데 `2 0` 이나 `3 3C` 는 그 관례가
 #   깨진다(한 수로 읽힌다). 기호끼리는 `e^{-2x} e^{x}` 처럼 이어 써도 읽히므로 병치가 맞다.
@@ -5353,21 +6528,21 @@ def middot_list_issues(node, trail="root", key=None):
 
 # ★ C40. **수식 바로 뒤의 줄표는 콜론** (신설 2026-08-07, 동역학 ch12 9절에서 열림).
 #
-#   사용자: [사용자 발화 인용 생략]. **같은 메시지에서** 절 제목의 줄표
-#   ([사용자 발화 인용 생략])는 [사용자 발화 인용 생략] 라고 못 박았다 —
+#   사용자: *[발화 생략]*. **같은 메시지에서** 절 제목의 줄표
+#   (*[발화 생략]*)는 *[발화 생략]* 라고 못 박았다 —
 #   즉 문제는 줄표가 아니라 **줄표가 놓인 자리**다.
 #   ★ 왜 그 자리에서만 불편한가: 바로 앞에 `= -\dot{\theta}\,\mathbf{u}_r` 처럼 **진짜
 #     마이너스**가 있으면, 눈은 같은 높이·같은 굵기의 짧은 가로줄을 하나 더 보고 **연산자로
-#     읽는다.** 산문 뒤라면 그렇게 읽힐 여지가 없다. 판정선은 [사용자 발화 인용 생략] 하나다.
+#     읽는다.** 산문 뒤라면 그렇게 읽힐 여지가 없다. 판정선은 *[발화 생략]* 하나다.
 #   ★ **새 규격이 아니다.** 이 문형은 `수식(레이블) → 설명(값)` 이고, AGENTS 표기 세부가
-#     [사용자 발화 인용 생략] 이라고 이미 정해 두었다. 수식 뒤라는 이유로
+#     *[발화 생략]* 이라고 이미 정해 두었다. 수식 뒤라는 이유로
 #     아무도 그 자를 대지 않았을 뿐이다 — 실측 동역학 3챕터 11곳.
 #   ★ 콜론 뒤 공백까지 함께 본다. 줄표를 콜론으로 바꾸면서 공백을 빠뜨리기 쉬운데
-#     (실제로 한 번 그렇게 났다) AGENTS 는 [사용자 발화 인용 생략] 이라고 정해 두었다.
+#     (실제로 한 번 그렇게 났다) AGENTS 는 *[발화 생략]* 이라고 정해 두었다.
 #   처방은 `python tools/fix_math_label_dash.py --apply` — 손으로 고치면 일부가 남는다.
 #   ★ **양옆 공백을 요구한다 — 붙여 쓴 줄표는 합성어다.** 실측에서 걸린 오탐이
 #     `\(F\cos\theta\)–s 곡선`(가로축 이름 둘을 이은 말)이었다. 거기서 콜론으로 바꾸면
-#     [사용자 발화 인용 생략] 이 되어 뜻이 사라진다. 레이블 구분자는 언제나 띄어 쓰므로
+#     *[발화 생략]* 이 되어 뜻이 사라진다. 레이블 구분자는 언제나 띄어 쓰므로
 #     공백이 판정선이 된다 — 자를 넓게 잡아 처방을 돌리면 **멀쩡한 말을 고친다.**
 MATH_LABEL_DASH_RE = re.compile(r"\\\)[ \t]+[–—][ \t]+")
 MATH_LABEL_COLON_RE = re.compile(r"\\\):(?=\S)")
@@ -5427,7 +6602,7 @@ def math_label_dash_issues(node, trail="root", key=None):
 
 # ★ C41. **용어 한영 병기** (신설 2026-08-07, 동역학 ch13 에서 열림).
 #
-#   사용자: [사용자 발화 인용 생략]
+#   사용자: *[발화 생략]*
 #   ★★ **실측 — 시스템으로 안 올라와 있었다.** 빌드에 병기 검사가 하나도 없었고,
 #     `audit_content` §5 「한영 병기 용어」는 *이미 병기된 것*을 세어 링크 후보로 보여줄 뿐
 #     **빠진 것을 찾지 않는다.** 즉 열역학이 지켜 온 것은 규칙이 아니라 **습관**이었고,
@@ -5436,7 +6611,7 @@ def math_label_dash_issues(node, trail="root", key=None):
 #     못 쓴다(AGENTS 「공통 도구에 과목별 사실을 박지 않는다」). 파일이 없으면 그 과목은
 #     아직 선언하지 않은 것이라 검사가 돌지 않는다 — **폴백 목록을 두지 않는다.**
 #   ★ 판정은 **그 챕터 안의 첫 등장**이다. 앞 장에서 병기했더라도 그 장부터 읽는 독자가 있고,
-#     이 리포의 기본 독자는 [사용자 발화 인용 생략] 이다(AGENTS 「목표 독자」).
+#     이 리포의 기본 독자는 *[발화 생략]* 이다(AGENTS 「목표 독자」).
 #   ★ 제목·표제·키워드에서는 찾지 않는다. 거기는 짧은 이름표라 괄호를 넣을 자리가 아니고,
 #     첫 등장을 거기서 세면 본문 병기가 **있는데도** 어긋난 것으로 잡힌다.
 TERM_SEARCH_EXEMPT_KEYS = {"heading", "title", "chapterTitle", "keywords", "label", "name",
@@ -5462,7 +6637,7 @@ def _term_prose(node, key=None, out=None):
 
 # ★ C42. **분수 안의 분수는 뷰어가 못 그린다** (신설 2026-08-07, 동역학 ch13 8절).
 #
-#   사용자: [사용자 발화 인용 생략] — 화면에 `tan ψ = \fracr` 이라는
+#   사용자: *[발화 생략]* — 화면에 `tan ψ = \fracr` 이라는
 #   **날 LaTeX 이 찍혀 있었다.** 데이터는 멀쩡했다(`\tan\psi = \frac{r}{\frac{dr}{d\theta}}`).
 #   ★★ **범인은 렌더러다.** `renderMath` 의 분수 규칙이 `\\frac\{([^{}]*)\}\{([^{}]*)\}` 라
 #     **인자 안에 중괄호를 하나도 허용하지 않는다.** 그래서 안쪽 분수만 매치되고 바깥 `\frac` 은
@@ -5545,7 +6720,7 @@ def _terms_list(ch_path, key):
 
 # ★★ C44. **한 글자가 두 물리량을 뜻할 때 어느 쪽이 어느 표기인가** (신설 2026-08-12, 부류 2·12).
 #
-#   사용자: [사용자 발화 인용 생략] — 2026-08-08 판정(부피를 필기체)을
+#   사용자: *[발화 생략]* — 2026-08-08 판정(부피를 필기체)을
 #   뒤집은 것이다. 논거가 더 강하다: `v`(비체적)와 `V`(부피)는 **대소문자가 곧 「비(比)」의 표시**라
 #   그 쌍을 깨면 안 된다.
 #
@@ -5561,7 +6736,7 @@ def _terms_list(ch_path, key):
 #   ★ 목록은 **과목이 갖는다**. `symbols` 가 없는 과목에서는 검사가 돌지 않는다 —
 #     폴백을 두지 않는다(AGENTS 「공통 도구에 과목별 사실을 박지 않는다」).
 #   ★ 선언으로 세는 자리는 **단위 괄호 바로 앞의 한글 낱말** 하나다. 값 아무 데나 나오는
-#     낱말을 세면 [사용자 발화 인용 생략] 이 부피 선언으로 잡힌다 — 실제 데이터에 있다.
+#     낱말을 세면 *[발화 생략]* 이 부피 선언으로 잡힌다 — 실제 데이터에 있다.
 #     `가속도` 처럼 역할 이름을 품은 남의 낱말은 과목이 `symbolNotRoles` 에 적어 뺀다.
 _ROLE_WORD = re.compile(r"([가-힣]+)\s*\(")
 
@@ -5614,7 +6789,7 @@ def declared_roles(variables, symbols, not_roles=()):
 # ★★ C45. **산문·삽화에서 역할 낱말 바로 뒤에 오는 기호** (신설 2026-08-12).
 #
 #   ★ 왜 C44 만으로는 부족한가 — C44 는 `variables` **선언만** 본다. 그래서 산문이나 삽화가
-#     [사용자 발화 인용 생략] 라고 적어도 아무 말이 없다. 실제로 그 상태가 났다: 2026-08-12 에
+#     *[발화 생략]* 라고 적어도 아무 말이 없다. 실제로 그 상태가 났다: 2026-08-12 에
 #     속도를 필기체로 옮기며 카드 단위로 치환했는데, **선언이 없는 산문 두 자리**가 부피를
 #     속도 기호로 적은 채 남았고 **사람 눈으로만** 발견됐다(ch05 이론 3절 · 그 절의 삽화).
 #   ★ 판정선은 **저자가 낱말로 뜻을 밝혀 둔 자리**다. `부피 𝒱` 처럼 역할 낱말 바로 뒤에
@@ -5654,14 +6829,14 @@ def symbol_role_word_issues(ch, symbols, not_roles=(), glyphs=None):
 
 # ★★ C46 — **한 항목 안에서 같은 형태가 두 표기로 갈린 자리** (열린 날 2026-08-12).
 #
-# 사용자가 검수하며 같은 부류를 여섯 번 짚었다: [사용자 발화 인용 생략] · [사용자 발화 인용 생략] · [사용자 발화 인용 생략] · [사용자 발화 인용 생략].
+# 사용자가 검수하며 같은 부류를 여섯 번 짚었다: *[발화 생략]* · *[발화 생략]* · *[발화 생략]* · *[발화 생략]*.
 #
 # ★ **왜 C44·C45 가 이걸 못 봤나 — 둘 다 「저자가 선언한 자리」만 본다.**
 #   C44 는 `variables` 선언을, C45 는 역할 낱말 바로 뒤를 본다. 그런데 실제 누락은
 #   **선언이 없는 자리**(문풀·힌트·답 슬롯 옆·삽화 라벨·칩)에 몰려 있었다. 자가 못 보는
 #   자리는 도구도 안 옮기므로(둘이 같은 함수를 쓴다) 매 회차 그대로 남는다.
 #
-# ★ **이 자는 과목 사실을 몰라도 된다.** 판정은 [사용자 발화 인용 생략] 하나다. 실측 사례:
+# ★ **이 자는 과목 사실을 몰라도 된다.** 판정은 *[발화 생략]* 하나다. 실측 사례:
 #     ch05 유도 4  — `latex` 는 `\mathcal{V}^{2}` 인데 `variables` 키만 `V^{2}`
 #     ch05 5.5 삽화 — 한 삽화 안에 `𝒱₁` 과 `V₁` 이 함께 있다
 #   즉 **저자가 이미 한 자리에서 답을 적어 두었으므로** 기계가 문맥을 추측할 필요가 없다.
@@ -5757,7 +6932,7 @@ def symbol_split_issues(ch, symbols, glyphs=None):
     out = []
     for kind, item in _iter_check_owners(ch):
         # ★ **기호 표기 자체를 설명하는 항목은 예외다** (열린 날 2026-08-12, 첫 실행에서 났다).
-        #   ch02 기호 안내 절은 [사용자 발화 인용 생략] 처럼
+        #   ch02 기호 안내 절은 *[발화 생략]* 처럼
         #   **두 표기가 함께 있어야 말이 되는** 자리다. 갈림 규칙만 보면 위반으로 읽히고,
         #   실제로 처방이 그 절의 부피를 필기체로 바꿔 버렸다(C45 가 곧바로 신고했다).
         #   자동 판정으로 가르려다 규칙을 더 흐리게 만들기보다 **저자가 선언**하게 한다 —
@@ -5797,10 +6972,10 @@ def term_pairing_issues(ch, terms):
 
     ★ 세 가지를 실측으로 좁혔다(첫 실행 33건 중 상당수가 오탐이었다).
       ⑴ **이론 본문만 본다.** 학습목표·챕터 도입부는 본문이 정의하기 **전에** 용어를 부르는
-        요약이라, 거기를 첫 등장으로 세면 [사용자 발화 인용 생략] 는 이상한 요구가 된다.
-        AGENTS 도 [사용자 발화 인용 생략] 이라고 적어 두었다.
+        요약이라, 거기를 첫 등장으로 세면 *[발화 생략]* 는 이상한 요구가 된다.
+        AGENTS 도 *[발화 생략]* 이라고 적어 두었다.
       ⑵ **앞 글자가 한글이면 그 자리는 건너뛴다.** `구동력` 안의 `동력` 을 첫 등장으로 잡아
-        [사용자 발화 인용 생략] 을 신고했다 — 낱말의 조각은 그 용어가 아니다.
+        *[발화 생략]* 을 신고했다 — 낱말의 조각은 그 용어가 아니다.
       ⑶ **괄호 안에 함께 든 형태도 통과시킨다.** `b축(종법선, binormal)` 은 병기가 되어 있는데
         *바로 뒤*만 보면 못 찾는다. 그래서 **뒤쪽 짧은 창**에 원어가 있으면 통과다.
         선언한 원어와 글자까지 같은지는 다투지 않는다(줄여 쓴 형태도 통과다) —
@@ -5876,7 +7051,7 @@ def inline_math_issues(node, trail="root", key=None):
         #   ★ 2026-08-02 정정 — 그때의 처방(`\exp(…)`로 우회)이 표기를 갈라놓았다.
         #   실측: ch01 `e^{` 75 vs `\exp` 12 · ch02 96 vs 19, 게다가 적분인자 절 한 문단 안에
         #   `F(x) = \exp(∫R dx)` 와 `F = e^{\int p\,dx}` 가 공존했다(사용자 지적:
-        #   [사용자 발화 인용 생략]). 데이터를 렌더러에 맞추는 대신 **렌더러를 고쳤다** —
+        #   *[발화 생략]*). 데이터를 렌더러에 맞추는 대신 **렌더러를 고쳤다** —
         #   renderMath의 첨자 변환을 `\sqrt`·`\int_{}^{}` 와 같은 한 단계 중첩 허용 패턴으로.
         #   그래서 이 검사의 판정 기준도 "중첩이 있는가"가 아니라
         #   **"renderMath의 정규식이 여기서 매치하는가"**(SUPSUB_RENDERABLE_RE)로 바꾼다.
@@ -6023,7 +7198,7 @@ DERIV_DICT_FIELDS = ("variables",)                      # Object.keys() 를 부�
 def chapter_title_agreement_issues(ch, ch_path):
     """챕터 제목이 `index.json` 과 `chNN.json` 에서 같은가. 순수 함수에 가깝다(파일 하나를 읽는다).
 
-    ★ **열린 날 2026-08-07 (동역학 ch13).** 사용자: [사용자 발화 인용 생략]
+    ★ **열린 날 2026-08-07 (동역학 ch13).** 사용자: *[발화 생략]*
 
     실측하니 지적한 것보다 넓었다 — **제목이 두 파일에 각각 있고 아무도 대조하지 않았다.**
 
@@ -6068,7 +7243,7 @@ def derivation_shape_issues(ch):
 
     ★★ **열린 날 2026-08-06 (동역학). 유도 카드 제목이 화면에 `undefined` 로 찍혀 있었다.**
 
-    사용자: [사용자 발화 인용 생략]
+    사용자: *[발화 생략]*
 
     뷰어 `renderDerivCard` 는 `fmtText(f.name)` 과 `fmtText(f.notes)` 를 **가드 없이** 부른다.
     `fmtText` 는 첫 줄이 `String(raw)` 라 `undefined` 가 그대로 문자열 `"undefined"` 가 된다
@@ -6077,13 +7252,13 @@ def derivation_shape_issues(ch):
     실측: ch12 유도 4장 × 1곳 + ch13 유도 2장 × 2곳 = **8곳**.
 
     ★★ **이것은 재발이다.** 바로 위 `outline_shape_issues` 가 2026-08-04 에 같은 부류로 열렸다 —
-      [사용자 발화 인용 생략]
+      *[발화 생략]*
       그때 닫은 것은 **`solutionOutline` 한 필드**였고, 나머지 필드는 그대로 열려 있었다.
       즉 인스턴스만 닫고 부류를 안 닫은 것이다(AGENTS 규칙 7).
       → 이번에는 **유도 카드가 읽는 필드 전부**를 계약으로 박는다.
 
     ★ 왜 사람도 못 봤나 — `chapter-schema-notes.md` 가 `title` 이라고 적어 두었다.
-      그 문서 스스로 [사용자 발화 인용 생략] 라고 밝혀 두었는데, **빌드는 통과했다** — 아무도 안 보는 필드였기 때문이다.
+      그 문서 스스로 *[발화 생략]* 라고 밝혀 두었는데, **빌드는 통과했다** — 아무도 안 보는 필드였기 때문이다.
 
     전 과목 **error** 다. 취향 규격이 아니라 **런타임 계약**이라서다.
     """
@@ -6096,7 +7271,7 @@ def derivation_shape_issues(ch):
                 issues.append(where + ": `" + key + "` 가 없다 — 뷰어 renderDerivCard 가 가드 없이"
                               " 읽으므로 화면에 `undefined` 가 그대로 찍힌다."
                               # ★ 여기에 **과목 이름을 적지 않는다** (2026-08-07, 회귀가 잡았다).
-                              #   처음 문구는 [사용자 발화 인용 생략] 였는데, 그러면 공통 코드가
+                              #   처음 문구는 *[발화 생략]* 였는데, 그러면 공통 코드가
                               #   한 과목을 아는 셈이고 `test_tools_do_not_hardcode_a_subject` 에 걸린다.
                               #   갈 길은 **필드 이름 자체**로 말할 수 있다 — 과목을 들 이유가 없다.
                               + (" 필드 이름은 `name` 이다 — `title` 로 적었다면 키를 바꿀 것"
@@ -6118,7 +7293,7 @@ def derivation_shape_issues(ch):
                               " 부르므로 없으면 유도 탭이 통째로 빈다(TypeError)")
         # ★★ **단계의 설명 키** (2026-08-07 에 넓혔다 — 같은 부류 네 번째).
         #
-        # 사용자: [사용자 발화 인용 생략] → **설명이 적은 것이 아니라
+        # 사용자: *[발화 생략]* → **설명이 적은 것이 아니라
         # 화면에 아예 안 나오고 있었다.** 뷰어 `renderStep` 은 `st.text` 를 읽는데
         # 동역학 ch12·ch14 는 `description` 으로 적혀 있었다(ch13 만 `text`).
         # 실측: **ch12 31개 · ch14 16개, 총 47개 설명이 통째로 버려지고 있었다.**
@@ -6184,9 +7359,9 @@ def derivation_kind_declaration_issues(ch):
     r"""C43 — 유도 카드가 자기 **종류**를 선언했는가. 순수 함수 — 테스트가 직접 부른다.
 
     ★★ **열린 날 2026-08-12 (열역학 인박스 부류 3).** 사용자(ch01 유도 4/13·5/13):
-    [사용자 발화 인용 생략]
+    *[발화 생략]*
 
-    **원인은 조항이 대상을 안 정한 것이다.** 2026-08-08 에 들어온 [사용자 발화 인용 생략] 는 **어떤 카드가 그 대상인지**를 말하지 않았고, 그래서 「밀도는 단위 부피당
+    **원인은 조항이 대상을 안 정한 것이다.** 2026-08-08 에 들어온 *[발화 생략]* 는 **어떤 카드가 그 대상인지**를 말하지 않았고, 그래서 「밀도는 단위 부피당
     질량이다」한 줄짜리 정의까지 전부 `{text, equations}` 로 갈렸다.
 
     ★ 위 `derivation_shape_issues` 는 **선언이 있을 때** 모양이 맞는지만 본다. 그것만으로는
@@ -6275,8 +7450,8 @@ def slide_step_figures(ch):
 def derivation_slide_issues(ch):
     r"""C50 — 유도 슬라이드의 **삽화 한 벌 계약**. 순수 함수 — 테스트가 직접 부른다.
 
-    ★★ **열린 날 2026-08-18.** 사용자: [사용자 발화 인용 생략] · 뒤이어
-    [사용자 발화 인용 생략]
+    ★★ **열린 날 2026-08-18.** 사용자: *[발화 생략]* · 뒤이어
+    *[발화 생략]*
 
     ★ **막는 문제는 없었고 순서가 있었다.** 빌드업 슬라이드를 옛 스키마(단계마다 SVG 를 통째로
       박는 형태)로 만들면 **거의 같은 SVG 를 N 벌 복제**하게 되고, 나중에 색·글자·규격을 고칠 때
@@ -6364,13 +7539,13 @@ def difficulty_issues(ch):
 def follow_up_issues(ch):
     """`followUp` — 「답을 맞힌 직후 곧바로 떠오르는 질문」에 그 자리에서 답하는 칸.
 
-    열린 날 2026-08-14. 사용자: [사용자 발화 인용 생략]
+    열린 날 2026-08-14. 사용자: *[발화 생략]*
 
     ★ **왜 `explanation` 을 안 쓰나.** connect·explain 은 `explanation` 을 가질 수 없다 —
       ch02 에서 **답**을 explanation 으로 미룬 회귀를 막으려고 **필드가 있는지**만 보는 조항이다.
       여기 들어갈 것은 답이 아니라 **답을 맞힌 뒤에 생기는 다음 질문**이라 다른 물건인데,
       같은 필드를 나눠 쓰면 그 금지가 흔들린다. 그래서 **이름을 갈랐다**
-      (사용자 승인 2026-08-14 「C로 해봐」 — 조항을 좁히는 안 대신 새 필드를 골랐다).
+      (사용자 승인 2026-08-14 [발화 생략] — 조항을 좁히는 안 대신 새 필드를 골랐다).
 
     ★ **경계: 「그래서 만약에 ~라면」 은 여기서 답하지 않는다.** 그건 독자가 스스로 파고들
       자리이고, 자료가 그것까지 먹으면 재미가 사라진다. 자료는 **한 단계**만 맡는다.
@@ -6400,6 +7575,210 @@ def follow_up_issues(ch):
     return out
 
 
+# ── 본문 · 잘 놓쳐요 · 떠올리기가 같은 말을 세 번 ────────────────────────────
+#
+# 사용자(2026-08-02 최초 · **2026-09-07 재지적**): *[발화 생략]*
+#
+# ★★ **판정 로직이 여기 있는 이유 — 「세기만 하는 자」를 「막는 자」로 승격했다 (2026-09-07).**
+#   이 부류는 `tools/audit_conventions.py` 의 `[L]` 이 **이미 잡아 두고 있었다**
+#   (`[L] 기계공작법 ch10 · sec-fluid-flow 0.53 본문 ¶5 ↔ pit-10-straight-sprue`).
+#   그런데 후보만 내고 아무것도 막지 않아 **아무도 판정하지 않았고**, `close_report` 도
+#   세지 않았다 — 실행 규율 17 이 말하는 «재는 자만 있고 마감을 막는 수가 없는» 상태였다.
+#   그래서 점수 내는 자리를 감사 도구에서 **buildlib 로 옮겼다.** 사본을 두면 「감사 0건과
+#   빌드 error 가 동시에 나는」 상태가 만들어진다(이 파일에서 이미 세 번 겪은 부류다).
+#
+# ★ **점수는 판정이 아니다.** 글자 2-gram 겹침일 뿐이라 어휘만 같은 정상 쌍이 섞여 나온다.
+#   그래서 게이트가 요구하는 것은 «지워라» 가 아니라 **«판정을 적어라»** 다 —
+#   `data/<과목>/card-overlap-verdicts.json` 에 「중복 아님 + 사유」 또는 「고쳤다」.
+#   사유가 빈 줄은 판정으로 안 친다(`strictWaivers`·`orphan-checks-allow.txt` 와 같은 규율).
+_CARD_KEEP = re.compile(r"[가-힣A-Za-z0-9]+")
+
+# ★ **너무 짧은 카드는 재지 않는다** (2026-08-06, 열역학 ch01 실측).
+#   점수를 `min(len)` 으로 정규화하므로 짧은 쪽이 짧을수록 점수가 튄다 — `T(K) = T(°C) + ___`
+#   같은 식 빈칸은 2-gram 이 6개뿐이라 그 6개가 함정에 다 나오면 **자동으로 1.00** 이 된다.
+#   내용이 겹쳐서가 아니라 **잴 것이 없어서** 나온 점수다.
+CARD_OVERLAP_MIN_GRAMS = 16
+
+# 감사(`[L]`)가 **후보로 내는** 하한. 실측(동역학 ch12): 후보 3건이 0.31~0.37 이고 그 아래는
+# 뚝 떨어진다. 낮추면 어휘가 같을 뿐인 정상 쌍이 쏟아지고, 올리면 사용자가 짚은 0.33 이 빠진다.
+CARD_OVERLAP_MIN = 0.30
+
+# ★ 빌드가 **판정을 요구하는** 문턱 — 후보 하한보다 높다 (실행 규율 16 「고른 값」).
+#   근거는 `python tools/audit_conventions.py --class=L --dist` 의 실측 분포다(그 표가 정본).
+#   0.50 을 고른 이유 셋:
+#     ⑴ 사용자가 실제로 짚은 두 자리가 **0.53**(기계공작법 ch10 본문 ¶5 ↔ 곧은 스프루)과
+#        **0.54**(응용열역학 ch07 본문 ¶6 ↔ cc-07-1-connect)라 둘 다 걸린다 — 이 자의 검정이다.
+#     ⑵ 0.45 로 내리면 2-2 에서만 후보가 배 가까이 늘고, 그 증가분은 사람이 이미
+#        「겹침 아님」으로 판정해 둔 대역(0.30~0.45)이다 — 경보 피로로 검사기를 죽인다.
+#     ⑶ 0.55 로 올리면 0.53 이 빠진다. 즉 **위쪽 한계는 사용자 지적이 정한다.**
+#   숫자를 올려 후보를 줄이는 것은 완화다 — 문턱을 옮길 때는 ⑴ 이 여전히 참인지 먼저 잰다.
+CARD_OVERLAP_GATE_MIN = 0.50
+
+
+def card_bigrams(text):
+    """글자 2-gram 집합. 한국어는 조사가 붙어 낱말 단위 비교가 어긋난다(형태소 분석기 없이 쓰는 표준)."""
+    out = set()
+    for run in _CARD_KEEP.findall(mask_inline_math(text)):
+        if len(run) == 1:
+            out.add(run)
+        for i in range(len(run) - 1):
+            out.add(run[i:i + 2])
+    return out
+
+
+def card_overlap_score(left_text, right_text):
+    """두 글의 2-gram 겹침 비율(짧은 쪽 기준). 잴 것이 없으면 `None` — 순수 함수."""
+    a, b = card_bigrams(left_text), card_bigrams(right_text)
+    if min(len(a), len(b)) < CARD_OVERLAP_MIN_GRAMS:
+        return None
+    return len(a & b) / float(min(len(a), len(b)))
+
+
+def card_overlap_rows(ch):
+    """(소유자, 왼쪽 id, 오른쪽 id, 점수, 미리보기) — 점수 내림차순. 순수 함수.
+
+    감사 `[L]` 과 빌드 게이트가 **이 하나**를 쓴다(`tools/audit_conventions.py` 가 임포트한다).
+
+    ★ **본문도 잰다** (2026-08-06 — 사용자가 발견한 사각지대). 처음에는 함정 ↔ 이해도 체크만
+      봤는데, 사용자가 짚은 것은 *[발화 생략]* 이었다 — **한 화면에 같은 말이
+      세 번** 나오는데 자는 그중 한 쌍만 보고 있었다. 본문은 문단 단위로 쪼갠다(절 전체를 한
+      덩어리로 재면 긴 쪽에 묻혀 0.1 아래로 깔린다).
+    ★ 본문과 견줄 때는 **연결하기(connect)** 만 본다 — 빈칸 회상(recall)의 답은 정의상 본문에서
+      뽑은 낱말이라 겹치는 것이 정상이다(섞어 재면 ch03 한 장에서 후보가 56건으로 불었다).
+    """
+    rows, all_connects = [], []
+
+    def owners(node):
+        if isinstance(node, dict):
+            if node.get("comprehensionChecks") or node.get("pitfalls"):
+                yield node
+            for v in node.values():
+                yield from owners(v)
+        elif isinstance(node, list):
+            for v in node:
+                yield from owners(v)
+
+    for own in owners(ch):
+        oid = own.get("id")
+        pits = [(p.get("id"), str(p.get("note") or "")) for p in own.get("pitfalls") or []]
+        checks = [(c.get("id"), str(c.get("prompt") or "") + " " + str(c.get("answer") or ""))
+                  for c in own.get("comprehensionChecks") or []]
+        connects = [(c.get("id"), str(c.get("prompt") or "") + " " + str(c.get("answer") or ""))
+                    for c in own.get("comprehensionChecks") or []
+                    if c.get("stage") == "connect"]
+        paras = [("본문 ¶%d" % (i + 1), para)
+                 for i, para in enumerate(str(own.get("content") or "").split("\n\n"))
+                 if len(para.strip()) >= 60]
+        all_connects.extend((oid, cid, ctext) for cid, ctext in connects)
+        for left, right in ((pits, checks), (paras, connects), (paras, pits)):
+            for lid, ltext in left:
+                for rid, rtext in right:
+                    sc = card_overlap_score(ltext, rtext)
+                    if sc is not None:
+                        rows.append((oid, lid, rid, sc, ltext.strip()[:38]))
+    # ★ **절과 절 사이도 본다** (2026-08-06). §2 의 연결하기를 바꿨더니 §7 에 이미 같은 현상을
+    #   묻는 카드가 있었다 — 소유자 안에서만 비교해서 0건이었다. 회상은 절마다 그 절의 용어를
+    #   묻는 것이 정상이라 연결하기끼리만 본다.
+    for i, (o1, id1, t1) in enumerate(all_connects):
+        for o2, id2, t2 in all_connects[i + 1:]:
+            sc = card_overlap_score(t1, t2)
+            if sc is not None and sc >= CARD_OVERLAP_MIN:
+                rows.append(("절 간 " + str(o1) + "↔" + str(o2), id1, id2, sc, t1.strip()[:38]))
+    rows.sort(key=lambda r: -r[3])
+    return rows
+
+
+def card_overlap_verdicts(subject_dir):
+    """사람이 적은 판정 — `data/<과목>/card-overlap-verdicts.json` 의 `verdicts`.
+
+    ★ 판정 파일을 **과목 폴더**에 둔다. 무엇이 중복인지는 그 과목의 콘텐츠 사실이라 공통
+      코드가 알면 안 된다(선례 `problem-originality-verdicts.json`). 없으면 빈 사전이다.
+    """
+    path = os.path.join(subject_dir, "card-overlap-verdicts.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return (json.load(fh) or {}).get("verdicts") or {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def card_overlap_verdict_written(entry):
+    """이 값이 **판정**인가 — 사유가 있어야 판정이다. 순수 함수.
+
+    판정은 둘 중 하나다: 「중복 아님 + 사유」 또는 「고쳤다」. 어느 쪽이든 **글로 적혀야** 한다.
+    빈 줄·빈 dict 를 판정으로 치면 «키만 채워 넣어 게이트를 끄는 길» 이 열리고, 그건 완화다
+    (`strictWaivers` 의 「사유 없는 면제는 면제가 아니다」와 같은 판정선).
+    """
+    if isinstance(entry, str):
+        return bool(entry.strip())
+    if isinstance(entry, dict):
+        return any(str(entry.get(k) or "").strip() for k in ("basis", "why", "사유"))
+    return False
+
+
+def card_overlap_verdict_hit(verdicts, ch_name, left, right):
+    """이 쌍에 **적힌 판정**의 키(없으면 None). 순수 함수 — 테스트가 직접 부른다.
+
+    ★ **카드 id 는 챕터 안에서만 유일하다** (2026-08-06, 고체역학 실측). `p1`·`c2` 는 챕터마다
+      다시 붙으므로 챕터를 담지 않은 키는 한 챕터의 판정이 **남의 챕터까지 조용히 면제**한다.
+      정본은 `chNN::왼쪽::오른쪽` 이고, 챕터 없는 두 토막 키는 뒤로 호환만 한다.
+    """
+    pair = str(left) + "::" + str(right)
+    for key in (str(ch_name) + "::" + pair, pair):
+        if key in verdicts and card_overlap_verdict_written(verdicts[key]):
+            return key
+    return None
+
+
+def card_overlap_issues(ch, ch_path, rows=None, verdicts=None):
+    """문턱을 넘었는데 **판정이 안 적힌** 쌍 — 신고 문구 목록. 순수 함수(rows·verdicts 주입 가능).
+
+    파일 I/O 를 인자로 뺄 수 있게 둔 이유는 이 파일의 다른 판정들과 같다 — 실데이터가 전부
+    통과하는 상태에서는 회귀 단언이 **공허하게 참**이 된다(아무것도 안 보고도 0건이 나온다).
+    """
+    ch_name = os.path.splitext(os.path.basename(ch_path))[0]
+    if rows is None:
+        rows = card_overlap_rows(ch)
+    if verdicts is None:
+        verdicts = card_overlap_verdicts(os.path.dirname(ch_path))
+    out = []
+    for owner, left, right, score, _note in rows:
+        if score < CARD_OVERLAP_GATE_MIN:
+            continue
+        # ★ **id 없는 카드는 판정을 적을 자리가 없다** (2026-09-07 첫 실행에서 드러났다 —
+        #   기계재료·기계요소설계에 `본문 ¶4 ↔ None` 이 나왔다). 조용히 건너뛰면 그 쌍은
+        #   영원히 안 보이므로, 「id 를 붙이라」는 다른 신고로 낸다.
+        if not left or not right:
+            out.append("%s: 본문·잘 놓쳐요·떠올리기 겹침 %.2f 인데 한쪽에 id 가 없다 "
+                       "(%s ↔ %s) — 판정을 적을 키를 만들 수 없으니 그 카드에 id 를 붙일 것"
+                       % (owner, score, left, right))
+            continue
+        if card_overlap_verdict_hit(verdicts, ch_name, left, right):
+            continue
+        out.append("%s: 본문·잘 놓쳐요·떠올리기 겹침 %.2f — %s ↔ %s. "
+                   "card-overlap-verdicts.json 에 \"%s::%s::%s\" 판정을 적을 것"
+                   " (「중복 아님 + 사유」 또는 「고쳤다」 — 사유 없는 줄은 판정이 아니다)"
+                   % (owner, score, left, right, ch_name, left, right))
+    return out
+
+
+def card_overlap_declared(ch_path):
+    """이 챕터에서 [L] 게이트가 **도는가** — 그 과목 `strictChapters.card_overlap` 선언.
+
+    ★★ **왜 「새 키는 전 과목 기본 error」를 안 쓰나** (판정 2026-09-07, 실측이 근거다).
+      `--class=L --dist` 로 재 보니 문턱 0.50 에서 미판정 쌍이 **2-2 173건 · 그 외 266건**
+      이다. 이 판정은 «두 글이 같은 내용인가» 라 전부 사람 몫이고, 기본 error 로 켜면
+      **19개 과목의 빌드가 그 자리에서 멈춘다** — 「남의 빌드를 멈추는 승격은 승격이 아니다」
+      (2026-08-02 실사고와 같은 자리). 그렇다고 `docs/검사-기본값-기준선.txt` 에 적지도
+      않는다: 그 목록은 **2026-08-15 시점의 사실**이고 늘리지 말라고 못 박혀 있다.
+      → 그래서 이 검사만의 opt-in 을 그 과목 선언 하나로 판정한다.
+    ★ **안 켠 과목을 조용히 두지 않는다** — `close_report` 가 과목마다 남은 미판정 쌍을
+      세어 「선언 / 미선언 / 잔량」으로 찍는다(`close_report.card_overlap_backlog`).
+      그 자가 없으면 이 opt-in 은 곧 「아무 데서도 안 도는 검사」가 된다.
+    """
+    return os.path.basename(ch_path) in subject_strict_chapters(ch_path, "card_overlap")
+
+
 def lint_chapter(ch, ch_path):
     errors, warnings = [], []
     # 단위 판정 방식은 **과목이 선언**한다(위 UNIT_NOTATION_MODES 주석). 챕터마다 다시 읽어
@@ -6411,6 +7790,8 @@ def lint_chapter(ch, ch_path):
                                                 "arrow_connection")
     density_strict = is_strict_chapter(ch_path, DENSITY_STRICT_CHAPTERS, "density")
     prose_strict = is_strict_chapter(ch_path, PROSE_STYLE_STRICT_CHAPTERS, "prose_style")
+    (errors if is_strict_chapter(ch_path, (), "odd_star_pair") else warnings).extend(
+        odd_star_pair_issues(ch))
     motif_path = os.path.join(os.path.dirname(ch_path), "textbook-motifs.json")
     motifs = []
     if os.path.isfile(motif_path):
@@ -6490,6 +7871,13 @@ def lint_chapter(ch, ch_path):
     errors.extend(difficulty_issues(ch))
     # 뷰어가 렌더할 수 있는 모양인가 — 런타임 계약이라 전 과목 error(위 주석이 정본).
     errors.extend(outline_shape_issues(ch))
+    # 도판 바깥의 세로 매트는 뷰어가 아는 두 상태만 허용한다. 자유 수치를 열면 같은 장 안에서도
+    # 여백이 다시 제각각이 되므로, 밀도가 필요한 도판만 `compact`로 선언한다.
+    for fig_id, dg in iter_chapter_diagrams(ch):
+        vertical_padding = dg.get("verticalPadding")
+        if vertical_padding is not None and vertical_padding != "compact":
+            errors.append("figure " + fig_id + ": verticalPadding은 'compact' 또는 미지정이어야 함 — "
+                          + repr(vertical_padding))
 
     # 챕터 도입부 — status가 done인 챕터에만 요구한다(제작 중 챕터를 막지 않으려고).
     errors.extend(chapter_intro_issues(ch, ch_path))
@@ -6545,6 +7933,8 @@ def lint_chapter(ch, ch_path):
     errors.extend(theory_link_number_issues(ch, os.path.splitext(os.path.basename(ch_path))[0]))
     # C50 — 장별 요약 절의 자리(위 함수 독스트링이 정본). 선언한 장에서만 발동한다.
     errors.extend(chapter_summary_placement_issues(ch))
+    # C54 — 교재 추천 문제의 형태·원문 금지(위 함수 독스트링이 정본). 그 키를 쓰는 장에서만.
+    errors.extend(textbook_problem_issues(ch))
     # C51 — 시험 수치 답 칸의 식 사슬(위 함수 독스트링이 정본). `exam` 을 쓰는 장에서만.
     errors.extend(exam_step_equation_issues(ch))
     # C52 — 시험 모드 장의 문항 삽화는 영어다(위 함수 독스트링이 정본). `examMode` 장에서만.
@@ -6553,8 +7943,17 @@ def lint_chapter(ch, ch_path):
     errors.extend(summary_formula_issues(ch))
     errors.extend(derivation_section_order_issues(ch))
     errors.extend(reader_environment_issues(ch))
+    errors.extend(unsupported_math_delimiter_issues(ch))
+    errors.extend(table_math_pipe_issues(ch))
+    errors.extend(citation_leak_issues(ch))
+    errors.extend(production_file_leak_issues(ch))
     errors.extend(math_slash_fraction_issues(ch))
     errors.extend(split_inline_subscript_issues(ch))
+    # C71·C72 — 새 키라 기본 error(면제는 그 과목 strictWaivers 에 사유와 함께).
+    (errors if is_strict_chapter(ch_path, (), "quote_pair")
+     else warnings).extend(quote_pair_issues(ch))
+    (errors if is_strict_chapter(ch_path, (), "literal_newline")
+     else warnings).extend(literal_newline_issues(ch))
     # ★ 2026-07-30 신설 C1·C3·C4·C5 — 소급이 끝나 전 챕터 0건이 되었으므로 **error 로 승격**했다.
     # 승격 목록은 CONTENT_SPEC_STRICT_CHAPTERS 가 정본이고,
     # `test_strict_promotion_covers_all_chapters` 가 새 챕터의 누락을 자동으로 잡는다.
@@ -6606,6 +8005,8 @@ def lint_chapter(ch, ch_path):
     # **처음부터 error** 다 — 신고된 6건을 같은 커밋에서 고쳐 0건으로 만들었으므로,
     # 경고로 두면 그저 경고 더미에 묻힌다(C1~C5 의 교훈).
     errors.extend(svg_text_fraction_issues(ch))
+    # 삽화 글자 속 링크 문법 — 신설 즉시 전 과목 0건(발견 1건을 같은 배치에서 고침)이라 error 로 바로 둔다
+    errors.extend(svg_text_link_issues(ch))
     # C7 은 신설 즉시 3건을 잡았고(ch01 1 · ch02 2) 그 3건을 같은 커밋에서 고쳐 0건이 됐으므로
     # **경고를 거치지 않고 바로 승격**한다. 경고로 남기면 경고 더미에 묻힌다(C1~C5 의 교훈).
     spec_out.extend(untagged_dimension_issues(ch))
@@ -6636,7 +8037,7 @@ def lint_chapter(ch, ch_path):
     #   지금 열역학의 미적용분이 수십 건이라 경고로 내보내면 그 더미에 새 결함이 묻힌다.
     #   적용은 삽화 배치를 건드리는 일이라 별도 배치로 돈다(2026-08-02 사용자 판단: 70건 백로그와 같이).
     # ★ C32 — 삽화가 없으면 **없는 이유를 선언**하게 한다 (2026-08-05, 인박스 R-48).
-    #   사용자: [사용자 발화 인용 생략] → **답할 근거가 없다는 것이 결함이었다.**
+    #   사용자: *[발화 생략]* → **답할 근거가 없다는 것이 결함이었다.**
     #   규격은 *어떻게 그릴지*만 정하고 *언제 넣어야 하는지*를 안 정해서, 유무가 그때그때
     #   정해졌고 **안 넣은 이유가 아무 데도 없었다** — 의도인지 누락인지 구별할 방법이 없다.
     #   이 리포가 이미 쓰는 형태로 닫는다(`pendingChapters`·`lintWaivers`·`*-verdicts.json`):
@@ -6743,13 +8144,15 @@ def lint_chapter(ch, ch_path):
         where = "problems[" + str(prob.get("id", "?")) + "]"
         spec_out.extend(where + ": " + m for m in answer_slot_count_mismatch(prob))
 
-    # pitfalls 스키마: source 필수 + 허용 3종
+    # pitfalls 스키마: source 필수 + 등록된 접두사(`textutil.PITFALL_BOOK_BY_SUBJECT`)
     def check_pits(owner, pits):
         for pit in pits or []:
             if not all(k in pit for k in ("id", "note", "source")):
                 errors.append(owner + ": pitfall 필드 누락 (id/note/source)")
-            elif not pit["source"].startswith(PITFALL_SOURCE_PREFIXES):
-                errors.append(owner + ": pitfall source 형식 위반 — " + repr(pit["source"]))
+                continue
+            issue = pitfall_source_issue(pit["source"])
+            if issue:
+                errors.append(owner + ": " + issue + " — " + repr(pit["source"]))
     # 이해도 체크 개수 상한 — 한 절에 너무 많으면 읽는 흐름이 끊겨 오히려 역효과다
     # (2026-07-22 지적: sec-stored-energy 12개). 진짜 중요한 것만 남긴다.
     for kind, item in _iter_check_owners(ch):
@@ -6804,7 +8207,7 @@ def lint_chapter(ch, ch_path):
                               + " · ".join(sorted(CHECK_ANSWER_MAX_SENTENCES)) + " 중 하나여야 한다")
 
     # C49 — 이해도 점검의 답 길이 상한 (열린 날 2026-08-13, 승격 잔량 ch01 「G」 를 갚으며).
-    #   그 항목이 남긴 말: [사용자 발화 인용 생략]
+    #   그 항목이 남긴 말: *[발화 생략]*
     #   ★ 자를 눈으로 고르지 않았다 — `audit_checks_load.py --lengths` 로 먼저 쟀다.
     #     실측(2026-08-13 · 열역학 240개): 떠올리기 1문장 **95%** · 연결하기 1~2문장 **93%** ·
     #     설명하기 최대 4문장. 상한은 **그 분포의 꼬리 바깥**에 둔다(아래 상수 옆 주석).
@@ -6855,11 +8258,11 @@ def lint_chapter(ch, ch_path):
     # 본문 인라인 딥링크 [[chNN:section-id|라벨]]의 대상이 실제로 있는지 검사한다.
     # 대상 절 이름이 바뀌면 조용히 죽은 링크가 되므로 빌드에서 잡는다.
     xlink_pat = re.compile(r"\[\[(ch\d{2}):([A-Za-z0-9_-]+)(?:/([A-Za-z0-9_-]+))?\|([^\]]+)\]\]")
-    # 과목 간 딥링크 [[과목폴더@chNN:sec-id|라벨]] (2026-08-29). 대상이 다른 git 브랜치에 있어
-    # 이 빌드는 건너가 검증하지 못한다(과목 = 브랜치 경계, AGENTS 「과목 병렬 작업」) — 형식만
-    # 확인하고 존재 여부는 저자가 `git show <브랜치>:data/<과목>/chNN.json` 로 손수 확인해야
-    # 한다는 경고를 낸다. error 로 올리지 않는 이유: 못 보는 것을 못 본다고 하는 것과 틀렸다고
-    # 하는 것은 다르다(AGENTS 규칙 11 「미검증」).
+    # 과목 간 딥링크 [[과목폴더@chNN:sec-id|라벨]] (2026-08-29 신설 · 2026-09-07 실검증으로 승격).
+    # 열린 날짜 2026-09-07 / 새어나간 것: 구조 이전(2026-09-06)으로 전 과목이 한 트리에 들어왔는데
+    # 이 검사만 「다른 브랜치라 못 건너간다」는 옛 전제로 남아 **경고만** 냈다 — 대상 절 이름이
+    # 바뀌면 조용히 죽은 링크가 되는 것을 같은 트리에 두고도 안 잡았다. 지금은 같은 과목 딥링크와
+    # 똑같이 `data/<과목폴더>/chNN.json` 을 열어 대상 절의 실존을 error 로 판정한다.
     cross_xlink_pat = re.compile(
         r"\[\[([^@\[\]]+)@(ch\d{2}):([A-Za-z0-9_-]+)(?:/([A-Za-z0-9_-]+))?\|([^\]]+)\]\]")
     chapter_dir = os.path.dirname(ch_path)
@@ -6881,10 +8284,18 @@ def lint_chapter(ch, ch_path):
      else warnings).extend(unrendered_subscript_issues(ch, prose_sub_res))
     for s in ch["theory"]["sections"]:
         for m in cross_xlink_pat.finditer(s.get("content", "")):
-            subj, target_ch, target_id = m.group(1), m.group(2), m.group(3)
-            warnings.append("section " + s["id"] + ": 과목 간 딥링크 — " + subj + "@" + target_ch
-                            + ":" + target_id + " 존재 여부는 이 빌드가 검사하지 못한다"
-                            " (git show 로 손수 확인할 것)")
+            subj, target_ch = m.group(1), m.group(2)
+            target_id, target_child = m.group(3), m.group(4)
+            where = "section " + s["id"] + ": 과목 간 딥링크 — " + subj + "@" + target_ch + ":" + target_id
+            target_path = os.path.join(os.path.dirname(chapter_dir), subj, target_ch + ".json")
+            if not os.path.isfile(target_path):
+                errors.append(where + " 대상 없음 — data/" + subj + "/" + target_ch + ".json 이 없다")
+                continue
+            with open(target_path, encoding="utf-8") as fh:
+                cross_target = json.load(fh)
+            if not xlink_target_valid(cross_target, target_id, target_child):
+                errors.append(where + ("/" + target_child if target_child else "")
+                              + " 대상 절 없음 (" + m.group(5) + ")")
         for m in xlink_pat.finditer(s.get("content", "")):
             target_ch, target_id, target_child, label = m.group(1), m.group(2), m.group(3), m.group(4)
             target_path = os.path.join(chapter_dir, target_ch + ".json")
@@ -6932,14 +8343,14 @@ def lint_chapter(ch, ch_path):
 
     # ★ 물음의 단위 ↔ 답의 단위 (2026-07-21 신설 → **2026-07-30 방향 반전**).
     #
-    # 원래 이 검사는 [사용자 발화 인용 생략] 이었다 — 프롬프트가 `[N]` 이면 답도 `N` 으로 쓰고
+    # 원래 이 검사는 *[발화 생략]* 이었다 — 프롬프트가 `[N]` 이면 답도 `N` 으로 쓰고
     # 접두어는 괄호 병기로만 두라는 규칙이었다. **그것이 W-46 의 진짜 원인이었다.**
-    # 사용자가 [사용자 발화 인용 생략] 라고 지적한 자리들이
+    # 사용자가 *[발화 생략]* 라고 지적한 자리들이
     # 바로 이 검사가 **지키고 있던** 형태다. 즉 데이터가 게을러서 남은 게 아니라
     # **검사가 기본단위를 강제**하고 있었다(2026-07-30 실측: `8440 N/m³ (8.44 kN/m³)` 형태가 그 산물).
     #
     # 사용자 결정은 반대다 — **접두어가 정본**이고, 그러면 바뀌어야 하는 것은 **프롬프트의 `[단위]`** 다.
-    # 그래서 규칙을 "어느 쪽을 앞세우라" 가 아니라 **"양쪽이 같아야 한다"** 로 바꾼다(대칭).
+    # 그래서 규칙을 *[발화 생략]* 가 아니라 **"양쪽이 같아야 한다"** 로 바꾼다(대칭).
     # 어느 쪽으로 맞출지는 사람이 정한다 — 검사는 어긋남만 신고한다.
     for q in ch.get("problems") or []:
         for msg in prompt_answer_unit_mismatch(q):
@@ -7032,6 +8443,10 @@ def lint_chapter(ch, ch_path):
         # ★ 새 필드를 만들면 **여기 등록**해야 아래첨자를 쓸 수 있다 —
         # 등록을 잊으면 검사가 "미렌더 필드"로 막는다(그게 이 등록부의 목적이다).
         "symbol",
+        # why·outline(2026-09-18, 교재 추천 문제 C54): 뷰어 renderTextbook 이 `fmtText(it.why)` ·
+        # `renderStep(st)` 로 그린다. 등록이 없어 ch09 의 \(a_T\)·\(\int_0^1\) 이 전부 「미렌더」로 막혔다.
+        # exam.steps[].why 도 같은 이름인데 화면은 fmtText, 채점용 글은 plain() 이라 첨자가 안 샌다.
+        "why", "outline",
     }
 
     def scan_subscripts(node, key=None, trail="root", rendered=False):
@@ -7064,6 +8479,9 @@ def lint_chapter(ch, ch_path):
             for fid in item.get("relatedFormulas") or []:
                 if fid not in fids:
                     errors.append(coll + " " + item["id"] + ": relatedFormulas 미해결 id " + fid)
+
+    # 참조 구조만 검사한다. 실제 본문에서 해당 식/방법을 설명하는지는 사람 검토다.
+    errors.extend(formula_learning_path_issues(ch))
 
     # 별표 강조는 뷰어가 렌더하지 않아 화면에 날것으로 나온다 — 이론 본문만이 아니라
     # 산문이 사는 모든 자리에서 막는다(2026-07-24 재발, iter_prose_fields 주석 참조).
@@ -7107,6 +8525,7 @@ def lint_chapter(ch, ch_path):
                 errors.append("section " + s["id"] + " " + dg.get("id", "?") + ": " + why)
             else:
                 dg["afterParagraph"] = idx
+        errors += spotlight_paragraph_issues(s, paragraphs)
         definition_ids = set()
         for definition in s.get("definitions") or []:
             did = definition.get("id")
@@ -7182,10 +8601,23 @@ def lint_chapter(ch, ch_path):
     #   2026-08-02 '잔여 6곳'). 정리 전 과목에는 **경고**로 남고, 경고는 `close_report` 가
     #   close 를 막으므로 묻히지 않는다 — C17(가운데점)에서 이미 검증된 경로다.
     figure_math_strict = is_strict_chapter(ch_path, (), "figure_math")
+    # ★★ **슬라이드 카드의 그림은 아래 순회에 안 들어온다** (2026-09-08). `_iter_diagrams` 는
+    #   `diagrams[]` 만 훑고 슬라이드 삽화는 `formulas[].figure` 에 있다 — 그래서 세로 균형을
+    #   **아무 자도 안 재고 있었다**(단계 조각은 `[단계 N]` 이라 `balance_issue` 가 건너뛴다).
+    # ★ 재는 대상은 **전부 켠 저장 SVG** 다. 겹침 검사가 그것을 안 재는 이유(«화면에 없는
+    #   상태다»)는 여기에 안 걸린다 — 판(viewBox)은 **모든 단계가 함께 쓰는 하나**이고,
+    #   단계마다 다시 맞추면 단계를 넘길 때 그림이 튄다. 저자가 잡는 판은 그 하나뿐이다.
+    for _f in ((ch.get("derivation") or {}).get("formulas") or []):
+        _fig = _f.get("figure") or {}
+        if _fig.get("svg"):
+            balance_issue(str(_fig.get("id") or _f.get("id") or "?"), _fig["svg"], errors)
     for dg in list(_iter_diagrams(ch)) + slide_step_figures(ch):
         check_svg(dg.get("id", "?"), dg.get("svg", ""), errors, warnings,
                   layout_strict=layout_strict, numeric_labels=dg.get("numericLabels"),
                   halo_gap_strict=halo_gap_strict, clearance_strict=clearance_strict)
+        # 세로 균형은 **저장된 삽화**에만 묻는다 — 조각을 감싼 시험용 판은 대상이 아니다
+        # (`checks_svg.balance_issue` 독스트링이 정본).
+        balance_issue(dg.get("id", "?"), dg.get("svg", ""), errors)
         check_figure_lint(dg.get("id", "?"), dg.get("svg", ""), errors, warnings,
                           strict=figure_lint_strict,
                           geometry_strict=arrow_connection_strict)
@@ -7212,6 +8644,11 @@ def lint_chapter(ch, ch_path):
         # 걸려서 전 과목 error 로 박으면 그 빌드가 통째로 멈춘다(C20 주석의 그 부류).
         for why in figure_subtext_scale_hits(dg.get("id", "?"), dg.get("svg", "") or ""):
             (errors if is_strict_chapter(ch_path, (), "subtext_scale")
+             else warnings).append(why)
+        # C47-b. 소문자 밑 숫자 첨자의 비율(사용자 판정 2026-09-11) — 근거는
+        # `checks_svg.DIGIT_UNDER_LOWER_RATIO` 주석이 정본. 새 키라 기본 error 다.
+        for why in digit_subscript_ratio_hits(dg.get("id", "?"), dg.get("svg", "") or ""):
+            (errors if is_strict_chapter(ch_path, (), "digit_subscript")
              else warnings).append(why)
         # C34. 점선이 실선을 덮었는가(위 `dashed_over_solid_issues` 주석이 정본).
         for why in dashed_over_solid_issues(dg.get("svg", "")):
@@ -7243,6 +8680,29 @@ def lint_chapter(ch, ch_path):
         # `data-fan` 이 없는 삽화는 애초에 대상이 아니라 남의 빌드를 멈추지 않는다.
         errors.extend(dg.get("id", "?") + ": " + why
                       for why in fan_shape_issues(dg.get("svg", "")))
+        # C50. **동작은 프레임을 펴서 프레임마다 잰다** (2026-09-08 — 정본
+        # `docs/2026-09-07-삽화-동작-사양.md`, 모듈 `buildlib/motion.py`).
+        # 지금 검사는 삽화당 한 번이라 12프레임 중 3프레임짜리 결함은 눈으로만 봐서는
+        # 그대로 지나간다. 선언을 펴면 그 자리가 정지 삽화 검사 N번이 된다.
+        # ★ 전 과목 error 로 둔다 — `motion` 이 없는 삽화는 애초에 대상이 아니라
+        #   남의 빌드를 멈추지 않는다(C29 와 같은 형태).
+        motion = dg.get("motion")
+        if motion is not None:
+            fid = dg.get("id", "?")
+            errors.extend(motion_issues(fid, motion))
+            errors.extend(fid + " [motion]: 선언이 가리키는 id 가 SVG 에 없다 — '" + t + "'"
+                          for t in missing_targets(dg.get("svg", ""), motion))
+            errors.extend(fid + " [motion]: " + why
+                          for why in grow_target_issues(dg.get("svg", ""), motion))
+            for idx, frame_svg in expand_frames(dg.get("svg", ""), motion):
+                check_svg(fid + " [프레임 %d]" % idx, frame_svg, errors, warnings,
+                          layout_strict=layout_strict,
+                          numeric_labels=dg.get("numericLabels"),
+                          halo_gap_strict=halo_gap_strict,
+                          clearance_strict=clearance_strict)
+                check_figure_lint(fid + " [프레임 %d]" % idx, frame_svg, errors, warnings,
+                                  strict=figure_lint_strict,
+                                  geometry_strict=arrow_connection_strict)
 
     # 정답을 펼치면 '?'가 긴 수치·단위로 바뀐다. 원본 SVG만 검사하면 이때 생기는
     # 글자-외형선 겹침과 viewBox 이탈을 놓치므로 런타임과 같은 확장 상태도 검사한다.
@@ -7279,8 +8739,68 @@ def lint_chapter(ch, ch_path):
     errors.extend(lang_errors)
     warnings.extend(lang_warnings)
 
+    # ★ 지문 부담 램프 (C54) — 위 `prompt_ramp_issues` 독스트링·`RAMP_SPEC` 주석이 정본.
+    #   **새 키라 전 과목 기본 error 다**(「close 의 정의」). 아직 램프를 안 매긴 과목은
+    #   자기 `index.json` 의 `strictWaivers.prompt_ramp` 에 **사유와 함께** 적어 두었고,
+    #   같은 과목 안에서 아직 못 간 챕터는 `pendingChapters.prompt_ramp` 가 갖는다 —
+    #   「선언 안 함」과 「보류」를 가르는 자리다.
+    if is_strict_chapter(ch_path, (), "prompt_ramp"):
+        errors.extend(prompt_ramp_issues(ch, declared_prompt_language(ch_path)))
+
+    # ★ 절 예제 (C55) — 위 `section_example_issues` 독스트링이 정본. 열린 날 2026-09-14,
+    #   사용자 넷째 지적 *[발화 생략]*. 새 키라 전 과목 기본 error 이고,
+    #   아직 못 맞춘 과목은 `strictWaivers.section_example` 에 사유를 적었다.
+    if is_strict_chapter(ch_path, (), "section_example"):
+        errors.extend(section_example_issues(ch))
+
+    # ★ 학습목표 연결 (C60) — 위 `objective_coverage` 독스트링이 정본. 열린 날 2026-09-19,
+    #   사용자 [발화 생략]. 새 키라 전 과목 기본 error 이고,
+    #   아직 대응표를 안 만든 과목은 `strictWaivers.objective_coverage` 에 사유, 마친 장은 `strictChapters`.
+    if is_strict_chapter(ch_path, (), "objective_coverage"):
+        errors.extend(objective_coverage_issues(ch, ch_path))
+    # C62 — 풀이 해설 첫 줄 되읊기(위 `outline_preamble_issues`). 처방으로 전 과목 0건을 만든 뒤 열어 전 과목 error.
+    errors.extend(outline_preamble_issues(ch))
+
+    # ★ 풀이틀이 물음을 다시 묻는다 (C56) — 위 `template_echo_issues` 독스트링이 정본. 열린 날
+    #   2026-09-14, 사용자 *[발화 생략]*. 새 키라 전 과목 기본 error.
+    if is_strict_chapter(ch_path, (), "template_echo"):
+        errors.extend(template_echo_issues(ch))
+
+    # ★ 답 표지와 지문 표지 (C57) — 위 `answer_label_prompt_issues` 독스트링이 정본. 새 키라 전 과목 기본 error,
+    #   아직 못 맞춘 과목은 `strictWaivers.answer_label_prompt` 에 사유를 적었다.
+    if is_strict_chapter(ch_path, (), "answer_label_prompt"):
+        errors.extend(answer_label_prompt_issues(ch))
+    # ★ 빈칸이 곧 답인데 최종 답을 되읊는다 (C58) — 위 `blank_only_final_answer_issues` 독스트링이 정본. 새 키라
+    #   전 과목 기본 error, 못 맞춘 과목은 `strictWaivers.blank_only_final_answer` 에 사유.
+    if is_strict_chapter(ch_path, (), "blank_only_final_answer"):
+        errors.extend(blank_only_final_answer_issues(ch))
+    # ★ 영문 지문 낱말 풀이(C59) — 선언한 문항만 보므로 면제가 필요 없다. 위 `glossary_issues` 가 정본.
+    errors.extend(glossary_issues(ch))
+
+    # ★ [L] 본문·잘 놓쳐요·떠올리기가 같은 말을 세 번 — **게이트**(승격 2026-09-07).
+    #   선언한 챕터에서만 돈다(위 `card_overlap_declared` 독스트링이 그 판정선의 정본).
+    #   신고 문구는 «지워라» 가 아니라 «판정을 적어라» 다 — 점수는 판정이 아니기 때문이다.
+    if card_overlap_declared(ch_path):
+        errors.extend(card_overlap_issues(ch, ch_path))
+
     orig_errors, orig_warnings, orig_skipped = check_originality(ch, ch_path)
-    if orig_skipped:
+    # ★ `--fail-only` (2026-09-08) — `--quiet` 보다 한 단계 더 조인다. 실행 규율 12 가
+    #   *[발화 생략]* 라고 못 박아 뒀는데 **빌드에는 그 깃발이 없었고**,
+    #   모르고 넘긴 인자는 조용히 무시돼 「켰다고 믿는」 상태가 된다(실측: 이 세션에서
+    #   그렇게 한 번 속았다). 전 과목 빌드 출력이 400줄을 넘어 **실패가 중간 잘림에
+    #   묻히는 것**이 실제 손해였다 — 실패 목록을 보려고 빌드를 두 번 돌리게 된다.
+    #   조용해지는 것은 판정이 끝난 줄뿐이다(`[ok]`·`[건너뜀]`·`[면제]`).
+    #   **`[FAIL]`·`[warn/미해결]` 은 어떤 깃발로도 안 줄어든다.**
+    #   ★★ **깃발은 실행기까지 확인한다.** 처음엔 `sys.argv` 만 봤는데,
+    #   `test_checks.py --fail-only` 가 자기 깃발을 그대로 물려줘 **lint 의 면제 출력이
+    #   조용해졌고** `test_waived_errors_are_visible` 이 그 자리에서 터졌다(2026-09-08).
+    #   라이브러리 깊은 곳에서 `argv` 를 읽으면 **아무 호출자나 같은 이름의 깃발로
+    #   검사 출력을 바꿀 수 있다** — 회귀가 잡아 준 진짜 결함이라 이름으로 남긴다.
+    import os as _os
+    import sys as _sys
+    _fail_only = ("--fail-only" in _sys.argv
+                  and _os.path.basename(_sys.argv[0] or "").startswith("build_site"))
+    if orig_skipped and not _fail_only:
         print("  [건너뜀] 독자성 검사 — 교재 지문 없음"
               " (`python tools/audit_problem_originality.py --build` 로 생성, 교재 PDF 필요)")
     errors.extend(orig_errors)
@@ -7288,14 +8808,13 @@ def lint_chapter(ch, ch_path):
 
     waived, unwaived = split_waived_warnings(warnings, _waiver_map(ch))
     # ★ `--quiet` — **면제 줄은 이미 판정이 끝난 것**이라 매 빌드마다 다시 읽을 이유가 없다.
-    #   신설 이유(2026-08-12, 사용자: [사용자 발화 인용 생략]): 루프 회차마다
+    #   신설 이유(2026-08-12, 사용자: *[발화 생략]*): 루프 회차마다
     #   이 덤프가 출력의 대부분을 차지해, 실제 작업에 쓸 여유를 그만큼 갉아먹고 있었다.
     #   **실패·미해결 경고는 조용해지지 않는다** — 그건 아직 판정이 안 끝난 것이라서다.
-    import sys as _sys
-    if "--quiet" not in _sys.argv:
+    if "--quiet" not in _sys.argv and not _fail_only:
         for w, reason in waived:
             print("  [면제]", w, "← 사유:", reason)
-    elif waived:
+    elif waived and not _fail_only:
         print("  [면제] %d건 (사유 있음 — 보려면 --quiet 없이)" % len(waived))
     for w in unwaived:
         print("  [warn/미해결·close 차단]", w)
@@ -7308,12 +8827,13 @@ def lint_chapter(ch, ch_path):
     #   구조적으로 통과할 수 없어 저자가 사유를 적어 뒀는데, figure_math strict 승격 뒤
     #   그 사유가 하나도 안 읽히고 빌드가 멈췄다.
     waived_errors, errors = split_waived_warnings(errors, _waiver_map(ch))
-    if "--quiet" not in _sys.argv:
+    if "--quiet" not in _sys.argv and not _fail_only:
         for e, reason in waived_errors:
             print("  [면제·error]", e, "← 사유:", reason)
-    elif waived_errors:
+    elif waived_errors and not _fail_only:
         print("  [면제·error] %d건 (사유 있음 — 보려면 --quiet 없이)" % len(waived_errors))
     if errors:
         for e in errors:
             print("  [FAIL]", e)
         raise ValueError(ch_path + ": data lint failed (" + str(len(errors)) + " errors)")
+

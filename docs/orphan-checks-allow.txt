@@ -27,3 +27,4 @@ gen_two_line_cases.py     # 삽화 1회 생성기
 # ---- 인프라 1회성 ----
 fix_ps1_bom.py            # PS1 BOM 교정 — 잠금은 test_powershell_scripts_have_bom 이 갖는다
 rewrite_quotes.py         # 공용 폴더 공개본의 1인칭 인용 → 사실 서술 전환용. 261곳을 다 옮기면 안 돈다
+scan_diagram_backlog.py   # 자기 docstring이 명시한 "일회성 조사용" — noDiagramReason 잔여 큐 스냅샷

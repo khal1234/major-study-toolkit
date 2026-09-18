@@ -72,8 +72,9 @@ def test_fix_math_slash_fraction_rewrite_is_conservative():
            (simple_out, simple_n))
 
     tricky_out, tricky_n, tricky_manual = rewrite(r"\dot{m}/A")
-    expect("백슬래시로 시작하는 분자는 기계가 손대지 않는다(사람에게 넘긴다)",
-           tricky_n == 0 and len(tricky_manual) == 1, (tricky_out, tricky_n, tricky_manual))
+    expect(r"중괄호 매크로 원자는 기계가 고친다 — \dot{m}/A",
+           tricky_out == r"\frac{\dot{m}}{A}" and tricky_n == 1 and not tricky_manual,
+           (tricky_out, tricky_n, tricky_manual))
 
 
 def test_mathfrak_and_mathcal_registries_match_the_renderer():
@@ -107,6 +108,7 @@ def test_guard_bash_blocks_command_substitution_but_allows_status():
       `echo` 금지처럼 **문자열 자체에서 판정되는** 규칙들이다. 여기서 하나라도 새면
       AGENTS.md에 적힌 "임의 실행은 막는다"는 문장이 이 파일 밖에서는 산문이 된다.
     """
+    sys.path.insert(0, os.path.join(ROOT, ".claude", "hooks"))
     from guard_bash import deny_reason
 
     expect("백틱 명령 치환은 막힌다",

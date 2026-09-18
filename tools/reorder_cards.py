@@ -9,8 +9,7 @@
 
 ## 왜 도구인가 (2026-08-12)
 
-사용자 지적(열역학 부류 4): *"`E = U + KE + PE` 를 설명하면 **KE·PE 를 안다는 전제**인데
-**그 뒤에** 운동에너지·위치에너지 카드가 나온다 → 없애든가 바꾸든가."*
+사용자 지적(열역학 부류 4): *[발화 생략]*
 **같은 부류가 과목마다 난다** — 카드 순서가 학습 순서와 어긋나는 것은 열역학 특유가 아니다.
 
 손으로 옮기면 안 되는 이유는 셋이다:
@@ -26,6 +25,7 @@
   *그 판정을 안전하게 실행하는 손*이다(`fix_velocity_symbol` 이 판정을 안 하는 것과 같다).
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -36,7 +36,16 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def data_root():
-    """이 리포의 `data/<과목>` — 과목 이름을 코드에 박지 않는다(공통 도구 규칙)."""
+    """이 리포의 `data/<과목>` — 과목 이름을 코드에 박지 않는다(공통 도구 규칙).
+
+    ★ 2026-09-14: 평탄화(2026-09-06)로 `data/` 아래 과목이 21개가 되자 「하나로 특정할 수
+      없다」로 **어느 과목에서도 못 돌았다.** 과목은 다른 도구와 같은 `SUBJECT` 환경변수로
+      지목한다. `--chapter` 에 `data/<과목>/chNN.json` 경로를 주면 이 함수를 안 거친다.
+    """
+    want = os.environ.get("SUBJECT", "").strip()
+    if want:
+        p = REPO / "data" / want
+        return p if p.is_dir() else None
     roots = [p for p in (REPO / "data").iterdir() if p.is_dir()] if (REPO / "data").is_dir() else []
     return roots[0] if len(roots) == 1 else None
 
@@ -119,10 +128,15 @@ def main():
             order = [s.strip() for s in arg.split("=", 1)[1].split(",") if s.strip()]
     if not (chapter and collection and len(order) >= 2):
         sys.exit("쓰는 법: --chapter=chNN.json --collection=formulas --order=id1,id2[,...] [--apply]")
-    root = data_root()
-    if root is None:
-        sys.exit("data/ 아래 과목 폴더를 하나로 특정할 수 없다")
-    path = root / chapter
+    direct = REPO / chapter
+    if direct.is_file():
+        path = direct
+    else:
+        root = data_root()
+        if root is None:
+            sys.exit("data/ 아래 과목 폴더를 하나로 특정할 수 없다 — SUBJECT=<과목> 을 주거나"
+                     " --chapter=data/<과목>/chNN.json 경로로 줄 것")
+        path = root / chapter
     if not path.is_file():
         sys.exit("없는 파일: %s" % path)
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)

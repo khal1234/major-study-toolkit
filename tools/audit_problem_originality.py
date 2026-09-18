@@ -43,7 +43,7 @@ FP_DIR = os.path.join(DATA, ".textbook-fingerprint")
 
 # ★ 과목별 매핑은 **그 과목 폴더**에서 읽는다 (2026-08-01 dynamics 실측 · 같은 날 사용자 지시로 폴백 제거).
 #
-# 사용자 지적 — 이 도구를 만들 때 특정 과목 이름을 하드코딩하지 말고 다른 과목도 쓸 수 있게 하라는 것(다른 과목 채팅에서도 같은 요청이 반복됨).
+# 사용자: *[발화 생략]*
 #
 # 여기에는 **열역학 5챕터를 담은 `PDF_FOR` 폴백이 남아 있었다.** 폴백이 있으면
 # ⑴ 공통 코드가 특정 과목을 계속 알고 있게 되고 ⑵ 다른 과목은 **매핑이 없다는 사실조차
@@ -242,10 +242,82 @@ def audit_chapter(chapter):
     return rows
 
 
+# 사유로 인정하는 글자 수 하한. 「없음」·「해당없음」 같은 **이름만 붙인 보류**를 막는 자다 —
+# `strictWaivers`(사유 없으면 면제 아님)와 같은 판정선이고, 그쪽이 이미 그렇게 쓰이고 있다.
+WAIVER_MIN_CHARS = 20
+
+
+def waiver_reason(waivers, chapter):
+    """그 챕터의 「대조 불가」 사유. 없거나 너무 짧으면 빈 문자열 — 순수 함수(회귀가 직접 부른다).
+
+    ★ **「매핑이 없다」에는 두 가지가 섞여 있다** — 빠뜨린 것과 **댈 교재가 없는 것**이다.
+      둘을 안 가르면 정당한 쪽이 잡음이 되어 목록 전체가 안 읽힌다(커버리지 감사에서
+      열한 줄을 갈랐던 것과 같은 갈래 나누기). 그래서 과목이 사유와 함께 적으면 뺀다.
+    ☐ 이 자는 **사유가 참인지**는 못 본다 — 길이만 잰다. 참인지는 사람이 본다.
+    """
+    if not isinstance(waivers, dict):
+        return ""
+    why = waivers.get(chapter) or waivers.get("*")
+    if isinstance(why, str) and len(why.strip()) >= WAIVER_MIN_CHARS:
+        return why.strip()
+    return ""
+
+
+def resolve_only(chapters):
+    r"""경로 조각이 **지금도 파일 하나를 가리키나**만 본다. PDF 를 열지 않는다.
+
+    ★ **열린 날 2026-09-08 — 검사가 통째로 안 돌고 있었다.** 전기전자의 조각이
+      `5. 전기전자공학기초 및 실험/…` 인데 교재 폴더가 2-2 아래 `0. …` 으로 옮겨져 있었다.
+      `find_pdf` 는 부분일치라 후보가 0개가 되고, 빌드는 그때마다
+      `[건너뜀] 독자성 검사 — 교재 지문 없음` 을 찍었다 — **실패가 아니라 건너뜀이라
+      열네 장이 조용히 안 재어졌다.** 「0건」이 아니라 **한 건도 안 본 것**이다.
+
+    ★ 왜 `--build` 로는 못 잡나: 그것도 같은 사실을 찍기는 하지만 **전권 PDF 를 다 파싱해야
+      거기까지 간다**(이 과목은 42.8MB, 21과목이면 몇십 분이다). 그래서 아무도 안 돌렸다.
+      **재는 데 드는 값이 크면 그 자는 안 돌아간다** — 그것 자체가 결함이라 싼 길을 따로 낸다.
+
+    ☐ 이 자가 못 보는 것: 조각이 **엉뚱한 한 파일**을 정확히 가리키는 경우(후보 1개라 통과한다).
+      그건 `--build` 의 낱말 수와 `verdict_line` 이 잡는다.
+    """
+    try:
+        with open(PDF_MAP_FILE, encoding="utf-8") as fh:
+            waivers = (json.load(fh).get("_대조_불가") or {})
+    except (OSError, ValueError):
+        waivers = {}
+
+    bad = 0
+    for c in chapters:
+        frags = pdf_fragment(c)
+        if not frags:
+            why = waiver_reason(waivers, c)
+            if why:
+                if has_prompts(c):
+                    print("[해당 없음] %-8s %s" % (c, why))
+                continue
+            if has_prompts(c):
+                print("[조각] %-11s 매핑 없음 — 문항이 있는데 대조할 교재가 선언되지 않았다" % c)
+                bad += 1
+            continue
+        for frag in frags:
+            hits = find_pdf(frag)
+            if len(hits) == 1:
+                continue
+            why = ("후보 0개 — 경로가 옮겨졌거나 조각이 낡았다"
+                   if not hits else "후보 %d개 — 조각을 더 구체적으로" % len(hits))
+            print("[조각] %-11s %s ← %r" % (c, why, frag))
+            bad += 1
+    print(("\n조각 전부 해석됨 — " if not bad else "\n★ 못 푸는 조각 %d건 — " % bad)
+          + "%d개 챕터" % len(chapters)
+          + ("" if not bad else " · **이 과목의 「0건」은 「못 본 0」이다**"))
+    return 1 if bad else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--build", action="store_true", help="교재 PDF에서 지문을 만든다(느림)")
     ap.add_argument("--chapter", default="", help="chNN.json 하나만")
+    ap.add_argument("--resolve-only", action="store_true",
+                    help="PDF 를 안 열고 **경로 조각이 실제 파일을 가리키나**만 본다(빠름)")
     args = ap.parse_args()
 
     # ★ 순회 대상은 **이 과목에 실재하는 챕터**다 (2026-08-01 수정).
@@ -255,6 +327,9 @@ def main():
     #   도구 자신이 같은 함정에 빠져 있었다.
     chapters = ([args.chapter] if args.chapter
                 else [c + ".json" for c in CHAPTERS])
+
+    if args.resolve_only:
+        return resolve_only(chapters)
 
     if args.build:
         dead, blind = [], []

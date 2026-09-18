@@ -4,7 +4,7 @@
     python tools/audit_path_names.py             # 이 리포의 git 추적 파일
     python tools/audit_path_names.py <폴더>       # 그 폴더의 모든 파일(공용 시스템 폴더 등)
 
-왜 (2026-08-12) — 내 컴퓨터에서 잘 보이는 파일이 다른 컴퓨터에서도 같은 모양으로 보인다는 뜻은 아니라는 문제의식.
+왜 (2026-08-12): *[발화 생략]* 발상은 공개 CLI `git-path-audit`(Go)에서 가져왔고, **도구가 아니라 검사 항목만**
 가져왔다 — 새 툴체인을 까는 비용이 이 검사의 값어치보다 크다.
 
 **우리에게 실제로 닥치는 자리:** 공용 시스템 폴더를 공개하면 폴더 이름이 전부 한글이다
@@ -101,9 +101,15 @@ def selftest():
 
     chk("양성 — 대소문자 충돌을 잡는다",
         any(k == "대소문자 충돌" for k, _ in issues(["a/Foo.md", "a/foo.md"])))
+    # ★ 2026-09-11(knu-bot 제보, 공용 폴더 자신에서도 재현) — 소스에 NFD 리터럴을 그대로
+    #   적으면 **파일을 저장하는 순간 에디터·git 이 NFC 로 되돌린다.** 그러면 두 리터럴이
+    #   똑같은 NFC 바이트가 되어 «충돌」 이 아니라 «완전히 같은 문자열」 이 되고,
+    #   `set(group)` 이 1개로 줄어 이 테스트 자체가 **언제나 통과할 수 없었다** — 몇 달째
+    #   숨어 있던 자기모순이다. `unicodedata.normalize` 로 **런타임에** NFD 를 만들어야
+    #   저장 단계의 재정규화를 피한다.
     chk("양성 — NFC/NFD 정규화 충돌을 잡는다",
         any(k == "유니코드 정규화 충돌(NFC/NFD)" for k, _ in
-            issues(["a/가.md", "a/가.md"])))
+            issues(["a/가.md", "a/" + unicodedata.normalize("NFD", "가") + ".md"])))
     chk("양성 — Windows 예약 이름을 잡는다",
         any(k == "Windows 예약 이름" for k, _ in issues(["a/CON.txt"])))
     chk("양성 — 끝에 점·공백을 잡는다",

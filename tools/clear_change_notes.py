@@ -1,11 +1,11 @@
 r"""끝난 배치의 `changeNote` 를 걷어낸다 — **기준선을 옮기는 그 자리에서 함께 돈다.**
 
 열린 날 2026-08-12 (열역학 검수 인박스 **부류 11**).
-사용자: [사용자 발화 인용 생략] · [사용자 발화 인용 생략]
+사용자: *[발화 생략]* · *[발화 생략]*
 → **두 요구는 충돌하지 않는다: 끝난 것은 지우고, 이번 배치 것만 남긴다.**
 
 ★★ **왜 도구인가 — 규칙은 있었는데 아무도 안 돌렸다.**
-  AGENTS 는 [사용자 발화 인용 생략] 고 적어 두었지만
+  AGENTS 는 *[발화 생략]* 고 적어 두었지만
   **그 일을 하는 코드가 없었다.** `--accept-review-*` 는 스냅샷만 쓰고 데이터는 안 건드린다.
   그래서 규칙이 사람의 성실성에 걸려 있었고, 실제로 **ch05 5.1 에 2026-07-29 자 기록이
   살아남아** 사용자가 지적했다(인박스 부류 11 의 실증). 실측 2026-08-12: 남아 있던 것 **47개**.
@@ -63,7 +63,7 @@ def main():
     names = ([args.chapter] if args.chapter else [n + ".json" for n in audit_content.CHAPTERS])
     total, stuck = 0, 0
     for name in names:
-        path = os.path.join(audit_content.DATA, name)
+        path = audit_content.chapter_file(name)
         if not os.path.isfile(path):
             continue
         with open(path, encoding="utf-8", newline="") as fh:

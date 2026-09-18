@@ -83,8 +83,7 @@ def iter_diagrams(node):
             yield from iter_diagrams(value)
 
 
-# ★★ **왜 엔진이 둘인가** (열린 날 2026-08-12, 사용자 지적: *"그라데이션 왜 못 그려?
-#   엑셀도 그렇고 되게 기본적인 기능 같던데"*).
+# ★★ **왜 엔진이 둘인가** (열린 날 2026-08-12, 사용자 지적: *[발화 생략]*).
 #
 #   맞는 지적이다 — 그라데이션은 SVG 의 기본 기능이고 **브라우저는 정상으로 그린다.**
 #   못 그리는 것은 이 파일이 쓰던 **래스터라이저(fitz/PyMuPDF)** 하나뿐이다. 실측
@@ -92,7 +91,7 @@ def iter_diagrams(node):
 #   `linearGradient` 를 쓴 오른쪽 피스톤이 **통째로 검은 사각형**으로 나온다.
 #
 #   ★ 이게 왜 중요한가 — **검수 경로의 한계가 데이터 규격을 좁히고 있었다.** 삽화 시각 문법
-#     초안이 *"그라데이션은 좁게 쓰자(PNG 검수가 약해진다)"* 라고 적었는데, 그건 그림을
+#     초안이 *[발화 생략]* 라고 적었는데, 그건 그림을
 #     도구에 맞추는 것이다. 도구를 고치면 그 제약 자체가 사라진다.
 #
 #   그래서 **설치된 브라우저(Edge·Chrome)를 헤드리스로** 돌려 찍는 길을 기본으로 둔다.
@@ -270,6 +269,7 @@ def changed_since(chapter_path, sha):
 
 
 def render(chapter_path, ids, output_root=AUDIT_ROOT, engine="auto"):
+    from figure_proof import proof_directory, source_key
     chapter_path = Path(chapter_path)
     data = json.loads(chapter_path.read_text(encoding="utf-8"))
     figures = {figure["id"]: figure for figure in iter_diagrams(data)}
@@ -277,7 +277,7 @@ def render(chapter_path, ids, output_root=AUDIT_ROOT, engine="auto"):
     if missing:
         raise ValueError("unknown diagram id: " + ", ".join(missing))
 
-    destination = output_root / chapter_path.stem
+    destination = proof_directory(chapter_path, ROOT, output_root)
     destination.mkdir(parents=True, exist_ok=True)
     exe = None if engine == "fitz" else find_browser()
     outputs, engines = [], set()
@@ -291,11 +291,13 @@ def render(chapter_path, ids, output_root=AUDIT_ROOT, engine="auto"):
         output.write_bytes(png)          # 엔진이 무엇이든 **쓰는 자리는 하나**로 둔다
         engines.add(used)
         # ★ **어느 엔진으로 찍었는지 증거에 남긴다.** fitz 는 그라데이션·halo·첨자를 못 그리므로
-        #   *"검게 나온다"* 가 데이터 결함인지 아티팩트인지 갈리는데, 남기지 않으면 다음 세션이
+        #   *[발화 생략]* 가 데이터 결함인지 아티팩트인지 갈리는데, 남기지 않으면 다음 세션이
         #   PNG 만 보고 판정한다(2026-07-25 에 실제로 반려할 뻔했다).
         (destination / f"{figure_id}.json").write_text(json.dumps({
             "figure_id": figure_id,
+            "source": source_key(chapter_path, ROOT),
             "svg_sha256": hashlib.sha256(svg.encode("utf-8")).hexdigest(),
+            "png_sha256": hashlib.sha256(png).hexdigest(),
             "png": output.name,
             "engine": used,
         }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

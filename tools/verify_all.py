@@ -95,7 +95,7 @@ def main(argv):
             build = (None, "과목 없음" if not has_data else "건너뜀", 0)
         else:
             build = run(path, "build_site.py", ["--all", "--quiet"])
-        tests = run(path, "test_checks.py", ["--fail-only"]) if os.path.isfile(os.path.join(path, "tools", "test_checks.py")) else (True, "[skip] 공개판에 없음", 0)
+        tests = run(path, "test_checks.py", ["--fail-only"])
         for ok, _msg, n in (build, tests):
             if ok is False:
                 bad_branches.add(branch)

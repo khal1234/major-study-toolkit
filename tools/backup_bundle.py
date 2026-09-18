@@ -1,6 +1,6 @@
 """저장소 전체를 **파일 하나**로 말아 백업한다 (2026-08-02 신설).
 
-사용자: [사용자 발화 인용 생략]
+사용자: *[발화 생략]*
 
 ★ **동기화 폴더 안에 작업 저장소를 두면 안 된다 — 충돌이 아니라 손상 위험이다.**
   Drive·OneDrive·Dropbox 는 파일 단위로 실시간 업로드하는데, git 은 작업할 때마다
@@ -81,7 +81,7 @@ def git(*args, cwd=None):
 def resolve_dest():
     """백업 목적지 — **저장소 전체가 하나로 공유한다.**
 
-    ★ 열린 날 2026-08-02 (사용자: [사용자 발화 인용 생략]).
+    ★ 열린 날 2026-08-02 (사용자: *[발화 생략]*).
       처음엔 워크트리 루트의 `backup-dest.txt`(`.gitignore` 대상)에 뒀다. 그런데 이 백업은
       **저장소 전체**(모든 브랜치 + 모든 워크트리의 검수 기준선)를 담는다 — 즉 목적지는
       과목마다 다를 이유가 없는 값인데, 파일을 워크트리 안에 두는 바람에 **정한 과목에만 있고
@@ -104,11 +104,37 @@ def resolve_dest():
 
 
 def worktree_paths():
-    """`git worktree list` 로 실제 워크트리 경로를 읽는다 — 과목 이름을 박지 않는다."""
-    paths = []
+    """실제 워크트리 경로 — 과목 이름을 박지 않는다.
+
+    ★ 정본은 `rev-parse --show-toplevel` 이다 (열린 날 2026-09-07 · 평탄화).
+      새어나간 것: 평탄화로 워크트리가 하나가 되면서 `worktree list` 가 주 워크트리를
+      **git 디렉터리(`.bare`)** 로 찍는다. 그 경로는 `isdir` 을 통과하는데 `data/` 도
+      `.claude/` 도 없어서 `collect_extras()` 가 **빈손을 돌려주고도 백업은 성공처럼 보였다** —
+      기준선은 git 밖이라 백업이 유일한 사본인데 그게 조용히 비는 자리다.
+      목록의 각 경로도 toplevel로 해석한다. 연결 워크트리에서 실행하면 현재 git-dir와
+      주 저장소의 .bare가 다르므로 현재 git-dir 하나를 빼는 것만으로는 부족하다.
+    """
+    paths, seen = [], set()
+    candidates = [git("rev-parse", "--show-toplevel").strip()]
     for line in git("worktree", "list", "--porcelain").splitlines():
         if line.startswith("worktree "):
-            paths.append(line[len("worktree "):].strip())
+            candidates.append(line[len("worktree "):].strip())
+    for p in candidates:
+        if not p:
+            continue
+        try:
+            p = git("rev-parse", "--show-toplevel", cwd=p).strip()
+        except RuntimeError:
+            if git("rev-parse", "--is-bare-repository", cwd=p).strip() == "true":
+                continue  # 실제 bare 저장소에는 작업 파일이 없다.
+            raise  # 접근 실패를 빈 백업 성공으로 바꾸지 않는다.
+        if not p:
+            raise RuntimeError("백업 작업 루트가 비어 있습니다")
+        key = os.path.normcase(os.path.abspath(p))
+        if key in seen:
+            continue
+        seen.add(key)
+        paths.append(p)
     return paths
 
 
@@ -197,7 +223,9 @@ def snapshot_entries(zip_path):
       (AGENTS 「바깥에서 들어오는 텍스트는 무조건 UTF-8」의 zip 판이다.)
     """
     label = os.path.basename(ROOT.rstrip("/\\")) or "root"
-    prefix = "worktrees/" + label + "/review-snapshot/"
+    # ★ 평탄화(2026-09-07) 전 백업은 라벨이 `main` 이다 — 그 zip 들이 **기준선의 유일한 사본**이라
+    #   못 읽으면 복원 자체가 사라진다. 옛 라벨을 함께 본다(새 라벨이 먼저다).
+    prefixes = ["worktrees/" + l + "/review-snapshot/" for l in (label, "main")]
     out = []
     with zipfile.ZipFile(zip_path) as zf:
         for info in zf.infolist():
@@ -207,7 +235,8 @@ def snapshot_entries(zip_path):
                     name = name.encode("cp437").decode("utf-8")
                 except (UnicodeDecodeError, UnicodeEncodeError):
                     pass
-            if not name.startswith(prefix) or name.endswith("/"):
+            prefix = next((p for p in prefixes if name.startswith(p)), None)
+            if prefix is None or name.endswith("/"):
                 continue
             rest = name[len(prefix):].split("/")
             if len(rest) == 2:

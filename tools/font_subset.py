@@ -13,8 +13,7 @@ r"""화면에 실제로 나오는 글자만 남긴 **웹폰트 부분집합**을
   줄어든다. 그래서 «전부 싣기»가 아니라 «쓰는 것만 싣기»가 맞는 형태다.
 
 ★★ **부분집합은 OFL 이 말하는 «수정본(Modified Version)» 이다.**
-  OFL FAQ 가 못 박는다 — *"웹폰트로 내보낼 때 안 쓰는 글리프를 덜어내는 것도 수정이다.
-  OFL 이 허용하지만 예약 이름(RFN)을 쓰는 것은 보통 허용되지 않는다."*
+  OFL FAQ 가 못 박는다 — *[발화 생략]*
   Pretendard 의 RFN 은 `Pretendard`·`Source`·`Inter`·`M PLUS 1`, 나눔글꼴의 RFN 은
   `NanumMyeongjo`·`Nanum` 계열이다. 따라서 **부분집합에는 원래 이름을 쓸 수 없고**,
   이 도구가 `--as` 로 받은 새 이름을 글꼴 안의 이름표에도 함께 박는다.
@@ -61,7 +60,14 @@ TEMPLATE_FILES = (
 
 # 항상 넣는 것 — 아직 안 쓰였어도 다음 문장에서 바로 나올 수 있는 자리다.
 # 이걸 안 넣으면 «숫자 하나 고쳤더니 그 숫자만 두부» 같은 사고가 난다.
+# ★★ **뷰어가 그리는 기호도 여기 든다** (2026-09-08). `‖`(U+2016, 노름)은 데이터 어디에도
+#   글자로 안 적힌다 — 저자는 `\|` 라고 쓰고 **뷰어의 `renderMath` 가 그 글리프를 만든다.**
+#   말뭉치는 데이터와 템플릿 «문자열»만 훑으므로 이런 글자는 영원히 안 걸리고, 그래서
+#   *[발화 생략]* 가 사실처럼 굳어 ASCII 이중 파이프로 대신 그리고 있었다.
+#   원본 넷 전부에 있다(`font_subset.py has --src=… ‖` 로 확인).
+#   → **렌더러가 만들어 내는 글자는 여기 적는다.** 말뭉치가 못 보는 자리다.
 ALWAYS = set(
+    "‖ "
     "0123456789"
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
@@ -73,14 +79,14 @@ def _strip_comments(src):
     r"""**주석을 걷어낸다** — 주석의 한글은 화면에 안 나간다.
 
     ★ 왜 중요한가: 주석까지 세면 부분집합에 안 쓰는 글자가 섞이는 것은 둘째 문제이고,
-      **빌드 경고가 오탐을 낸다.** 주석 한 줄을 고쳤을 뿐인데 *"실어 둔 글꼴에 없는 글자"* 가
+      **빌드 경고가 오탐을 낸다.** 주석 한 줄을 고쳤을 뿐인데 *[발화 생략]* 가
       뜨면 그 경고는 곧 무시된다 — **경보 피로가 검사기를 죽인다.**
     ★ `//` 는 **줄 맨 앞에 올 때만** 주석으로 본다. 문자열 안의 `//`(경로·URL)까지 지우면
       진짜 화면 문구를 잃는데, 그건 두부로 이어지는 반대편 실패다. 둘 중에서는 **더 넣는 쪽**이 낫다.
 
     ★★ **`<!-- -->` 를 안 걷고 있었다 (2026-08-15).** 위 두 줄은 CSS·JS 형태만 알았는데
       이 도구가 주로 읽는 `viewer.template.html` 은 **HTML 이다.** 그래서 템플릿에 설명
-      주석을 한 줄 붙였더니 그 한글이 말뭉치에 들어와 빌드가 *"실어 둔 글꼴에 없는 글자 — 앤"*
+      주석을 한 줄 붙였더니 그 한글이 말뭉치에 들어와 빌드가 *[발화 생략]*
       을 신고했다(실측: 뷰어 분리 주석의 «없**앤**»). **바로 이 독스트링이 막겠다고 적어 둔
       그 오탐**이라, 주석 문구를 고치는 것이 아니라 자를 고친다.
       · 조건부 주석(`<!--[if IE]>`)도 함께 걷는다 — 거기 한글이 있을 수 없어 손해가 없다.
@@ -166,8 +172,20 @@ def branch_chapters(branch):
             print("  [건너뜀] JSON 을 못 읽었다: %s:%s" % (branch, path))
 
 
+SWEPT_SUBJECTS = []
+"""마지막 `--all-subjects` 순회가 **실제로 읽은 과목 폴더** 이름들.
+
+★ 왜 갈래가 아니라 과목을 적나 (2026-09-08). 이 자는 「갈래 하나만 보고 만들면 남의 과목이
+두부가 된다」를 막으려고 **갈래 목록**을 남겼는데, 2026-09-07 평탄화로 갈래가 `main` 하나가
+됐다. 그래서 목록은 언제나 `['main']` 이고 그것을 세던 회귀는 **영원히 통과할 수 없는 자**가
+됐다(실제로 이 날 걸렸다). 지키려던 것은 「합집합인가」이지 「갈래가 여럿인가」가 아니므로,
+**읽은 과목 수**로 다시 적는다 — 전제가 죽으면 조항이 아니라 전제를 다시 잰다.
+"""
+
+
 def _sources(all_subjects):
     """말뭉치의 출처를 `(라벨, 챕터데이터)` 로 흘린다 — 한 과목이냐 전 과목이냐만 가른다."""
+    del SWEPT_SUBJECTS[:]
     if not all_subjects:
         for ch in CHAPTERS:
             with open(os.path.join(DATA, ch + ".json"), encoding="utf-8") as fh:
@@ -175,8 +193,12 @@ def _sources(all_subjects):
         return
     for branch in subject_branches():
         seen = 0
-        for _path, data in branch_chapters(branch):
+        for path, data in branch_chapters(branch):
             seen += 1
+            # `data/<과목>/chNN.json` 에서 과목 이름을 뽑는다 — 과목 이름을 코드가 알지 않는다.
+            parts = path.split("/")
+            if len(parts) >= 3 and parts[-2] not in SWEPT_SUBJECTS:
+                SWEPT_SUBJECTS.append(parts[-2])
             yield branch, data
         if not seen:
             # ★ 0장도 **찍는다.** 안 찍으면 «읽었는데 비었다»와 «못 읽었다»가 화면에서 같아진다
@@ -331,6 +353,7 @@ def cmd_build(argv):
     with open(manifest, "w", encoding="utf-8", newline="\n") as fh:
         json.dump({"scope": "all-subjects" if all_subjects else "this-subject",
                    "branches": subject_branches() if all_subjects else [],
+                   "subjects": sorted(SWEPT_SUBJECTS),
                    "chars": "".join(sorted(chars))}, fh, ensure_ascii=False, indent=1)
 
     print("[부분집합] %s → %s" % (os.path.basename(src), os.path.relpath(out, ROOT)))
@@ -369,12 +392,41 @@ def missing_from_shipped_fonts():
     return missing_chars(shipped, chars)
 
 
+def cmd_has(argv):
+    """원본 글꼴이 그 글자를 **가지고 있나** — 부분집합을 뜨기 전에 묻는 물음.
+
+    ★ 왜 열었나 (2026-09-08). 뷰어가 노름 `‖`(U+2016)을 ASCII 이중 파이프 `||` 로 대신
+      그리고 있었고, 그 근거가 *[발화 생략]* 였다.
+      그런데 **그 실측은 「부분집합에 없다」였다** — 부분집합은 말뭉치에 그 글자가 없으면
+      당연히 안 넣는다. 「원본에 없다」와 「우리가 안 넣었다」는 다른 말이고, 둘을 가르는
+      창구가 없어서 대안이 없는 것처럼 굳어 있었다(규칙 11 — 순회 범위를 모르는 「없다」).
+    """
+    try:
+        from fontTools.ttLib import TTFont
+    except ImportError:
+        sys.exit("fonttools 가 없다. `python -m pip install \"fonttools[woff]\"`")
+    src = next((a.split("=", 1)[1] for a in argv if a.startswith("--src=")), None)
+    text = "".join(a for a in argv[1:] if not a.startswith("--"))
+    if not src or not text:
+        sys.exit("--src=<원본 글꼴 파일> 과 찾을 글자가 필요하다.")
+    cmap = set()
+    for table in TTFont(src)["cmap"].tables:
+        cmap.update(table.cmap)
+    print("[원본] %s" % os.path.basename(src))
+    for c in dict.fromkeys(text):
+        print("  U+%04X %s — %s" % (ord(c), c, "있다" if ord(c) in cmap else "없다"))
+    return 0
+
+
 def main():
     argv = sys.argv[1:]
-    if not argv or argv[0] not in ("corpus", "build"):
+    if not argv or argv[0] not in ("corpus", "build", "has"):
         sys.exit(__doc__.strip().splitlines()[0] + "\n"
                  "  python tools/font_subset.py corpus [--list] [--symbols]\n"
-                 "  python tools/font_subset.py build --src=<파일> --as=<새이름> [--out=<디렉터리>]")
+                 "  python tools/font_subset.py build --src=<파일> --as=<새이름> [--out=<디렉터리>]\n"
+                 "  python tools/font_subset.py has --src=<파일> <글자…>")
+    if argv[0] == "has":
+        return cmd_has(argv)
     return cmd_corpus(argv) if argv[0] == "corpus" else cmd_build(argv)
 
 

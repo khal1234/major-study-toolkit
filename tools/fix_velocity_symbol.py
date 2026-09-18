@@ -1,7 +1,7 @@
 r"""한 글자가 두 물리량을 뜻할 때, **그 카드가 선언한 뜻대로** 기호를 옮긴다.
 
 열린 날 2026-08-12 (열역학 검수 인박스 부류 2·12).
-사용자: [사용자 발화 인용 생략]
+사용자: *[발화 생략]*
 → 2026-08-08 판정(부피를 필기체)을 뒤집었다. 규격의 정본은 `data/<과목>/terms.json` 의
 `symbols` 이고, 막는 것은 빌드 **C44** `symbol_role_issues` 다. 이 도구는 **이미 들어온 것을
 옮기는** 쪽이다.
@@ -457,7 +457,7 @@ def main():
     COMPOUNDS = frozenset(_terms_list(probe, "symbolCompounds"))
     if not symbols:
         # ★ **선언이 곧 opt-in 이다 — 대상이 아닌 과목은 「해당 없음」이지 오류가 아니다**
-        #   (열린 날 2026-08-12, 동역학 세션 보고: [사용자 발화 인용 생략]).
+        #   (열린 날 2026-08-12, 동역학 세션 보고: *[발화 생략]*).
         #   여기서 exit 1 을 내면 배치 스크립트와 사람 둘 다 *실패했다* 로 읽는다.
         #   선언은 「기호 v 가 무슨 뜻인가」라는 **사람의 판정**이라 이 도구가 대신할 수 없고,
         #   판정 전까지는 옮길 것이 없는 것이 정상이다.
@@ -508,7 +508,7 @@ def main():
                   % (name, f.get("id"), " · ".join("%s→%s" % p for p in pairs), n, len(keymap)))
         # 선언이 없는 자리 — 사람이 `--items` 로 판정을 넘긴 것만 옮기고, 나머지는 알려만 준다.
         # ★ 쓰기는 **아래 한 번**이다. 카드 pass 뒤에 따로 쓰면 두 번째 write_chapter 가
-        #   [사용자 발화 인용 생략] 로 거부한다(before 스냅샷이 낡는다).
+        #   *[발화 생략]* 로 거부한다(before 스냅샷이 낡는다).
         want = {s.strip() for s in args.items.split(",") if s.strip()}
         if args.role not in symbols:
             sys.exit("`terms.json` 의 symbols 에 없는 역할이다: " + args.role)
@@ -517,7 +517,7 @@ def main():
         #   pairs 가 비면 위 pass 가 그 카드를 통째로 건너뛰기 때문이다.
         # ★ `theory`·`derivation` 은 **한 겹 더 들어가 있다**(`{"sections": …}`·`{"formulas": …}`).
         #   처음에 `data["theory"]` 로 읽었더니 이론 절이 통째로 순회 밖이었고, 출력이
-        #   [사용자 발화 인용 생략] 이라 **없는 것처럼 보였다** — AGENTS 규칙 11 이 경고하는 그 모양이다.
+        #   *[발화 생략]* 이라 **없는 것처럼 보였다** — AGENTS 규칙 11 이 경고하는 그 모양이다.
         collections = {"theory": (data.get("theory") or {}).get("sections") or [],
                        "practice": data.get("practice") or [],
                        "problems": data.get("problems") or [],

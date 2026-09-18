@@ -31,6 +31,6 @@ description: Use when introducing or reviewing a physics/engineering symbol (var
 
 ## 기록
 
-재발하면 `기록/feedback-ledger.md`(나루)에 한 줄 남기고, 세 번째 재발부터는 그 과목의
+재발하면 `기록/feedback-ledger.md`(공용 폴더)에 한 줄 남기고, 세 번째 재발부터는 그 과목의
 `terms.json`에 고정 표기로 등록해 다음 챕터에 자동 상속되게 한다(유체역학 V 속도/부피 충돌 사례
 참고).

@@ -7,9 +7,7 @@
 
 ## 왜 열렸나 — 사용자 지적 (전 프로젝트)
 
-*"하나 작업 열나게 하고 있어. 딴거 할거 있긴 하다만 **그거 작업 도중이면 「그거 할까요」
-묻는게**, 그거 끝나고 나면 **「남은 작업 뭐뭐 있다」 라고 묻진 않더라.** 그래서 내가
-「남은거 있니」라고 계속 물어보게 만들어."*
+*[발화 생략]*
 
 ★ **묻는 시점이 정확히 반대다.** 도중에는 묻고(방해), 끝났을 때는 안 알린다(사람이 묻게 된다).
 
@@ -56,7 +54,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 def _fallback_root(here=HERE):
     """`CLAUDE_PROJECT_DIR` 이 없을 때(손으로 돌릴 때) 훑을 뿌리.
 
-    ★ 나루 판본은 훅 폴더의 부모(`나루/훅/..`)를 썼는데, 이 리포에서는 그 자리가
+    ★ 공용 폴더 판본은 훅 폴더의 부모(`공용 폴더/훅/..`)를 썼는데, 이 리포에서는 그 자리가
       `main/.claude` 라 **아무것도 못 찾고 조용히 0건**을 낸다 — 「꺼진 자」와
       「깨끗한 세션」이 겉모습이 같아지는 그 부류다(전공정리 이식 2026-08-25).
       그래서 `tools/`(또는 `도구/`)를 가진 **가장 가까운 조상**을 뿌리로 본다.
@@ -97,6 +95,12 @@ def open_items(text):
     """열린 항목의 제목들. 제목 줄에 표시가 있는 것만 센다."""
     out = []
     for line in text.splitlines():
+        if line.startswith("|") and OPEN.search(line):
+            # 표 행(공용 폴더 2026-09-11 이식) — 번호 · 요지만 낸다
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if len(cells) >= 2:
+                out.append(" ".join(f"{cells[0]} {cells[1]}".split())[:70])
+            continue
         if not line.startswith("#"):
             continue
         if OPEN.search(line) and not CLOSED.search(line):

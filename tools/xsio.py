@@ -14,7 +14,7 @@
    그때 **그 파일 하나에만** `reconfigure` 를 넣었다. **부류로 고치지 않았다.**
 2. **2026-08-08** — `close_report.py` 를 `> /dev/null` 로 돌리니 **exit 1**.
    새로 만든 게이트 6개가 전부 같은 구멍을 갖고 있었다. 하마터면
-   *"다시 돌리니 되네"* 로 넘어갈 뻔했다 — 그 두 번째 실행에는 내가
+   *[발화 생략]* 로 넘어갈 뻔했다 — 그 두 번째 실행에는 내가
    `PYTHONIOENCODING=utf-8` 을 붙여 놨었다.
 
 구조적 원인
@@ -48,7 +48,7 @@ def force_utf8() -> None:
 
 # ── 삭제는 휴지통으로 (2026-08-12 사용자 지시) ────────────────────────────────
 #
-# 원본 지적: *"강제 삭제는 좀 그런데 삭제하더라도 휴지통으로 보내야지"*
+# 원본 지적: *[발화 생략]*
 #
 # 계기: `vod_pipeline --sweep` 이 원본 VOD 5.9GB 를 `os.remove` 로 지웠고,
 # 휴지통을 안 거쳐 **복구가 불가능**했다. 판독 결과는 살았지만 원본은 사라졌다.
@@ -98,3 +98,17 @@ def trash(path: str) -> bool:
     op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
     rc = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
     return rc == 0 and not _os.path.exists(path)
+
+
+# 명령줄 `python tools/xsio.py trash <경로…>` — 셸에서 지울 때도 휴지통을 거치게 하는 자리.
+# 하나라도 실패하면 exit 1(그 파일은 그대로 남는다).
+if __name__ == "__main__":
+    import sys as _sys
+    _sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    if len(_sys.argv) < 3 or _sys.argv[1] != "trash":
+        _sys.exit("사용법: python tools/xsio.py trash <경로…>")
+    force_utf8()
+    failed = [p for p in _sys.argv[2:] if not trash(p)]
+    for p in _sys.argv[2:]:
+        print(("실패(그대로 둠) " if p in failed else "휴지통으로 ") + p)
+    _sys.exit(1 if failed else 0)

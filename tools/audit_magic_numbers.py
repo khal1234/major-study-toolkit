@@ -25,7 +25,7 @@
 그때 근거를 적고 줄을 지운다.
 
 ★ **사유 칸을 요구하지 않는다** — 이 리포의 다른 예외 대장(`orphan-checks-allow.txt`·
-`개인정보-예외.txt`)은 [사용자 발화 인용 생략] 인데 **여기만 반대**다. 그 대장들은
+`개인정보-예외.txt`)은 *[발화 생략]* 인데 **여기만 반대**다. 그 대장들은
 **사람이 한 줄씩 판정해 넣는 것**이고 이 기준선은 **기계가 한 번에 찍는 소급 면제**라, 사유를
 요구하면 곧 지어낸 사유가 붙는다(그게 15항이 금지한 바로 그것이다). **빚은 코드에 근거를
 적어서** 갚는다.
@@ -283,9 +283,19 @@ def show(items, label, limit=20):
 def main(argv):
     show_all = "--all" in argv
     accept = "--accept" in argv
+    full = "--full" in argv
+    only = [a.split("=", 1)[1] for a in argv if a.startswith("--accept-only=")]
     found = scan()
     ungrounded = [f for f in found if not f["grounded"]]
     baseline = load_baseline()
+
+    if only:
+        # 고른 파일의 새 것만 빚에 올린다 — 나머지(사람 판정 대기)는 계속 막힌다.
+        paths = {p.strip().replace("\\", "/") for p in only[0].split(",") if p.strip()}
+        picked = {f["key"] for f in ungrounded if f["path"] in paths and f["key"] not in baseline}
+        save_baseline(baseline | picked)
+        print("[수치 근거] 고른 파일 %d개의 새 것 %d건을 기준선에 더했다 — 빚이다" % (len(paths), len(picked)))
+        return 0
 
     if accept:
         save_baseline({f["key"] for f in ungrounded})
@@ -320,8 +330,8 @@ def main(argv):
         return 0
 
     print("  ★ 아래 상수에 **근거**를 적을 것 — 잰 값이면 무엇을 재서, 고른 값이면 무엇과 견줘.")
-    show(fresh, "근거 없음")
-    print("  (정말로 지금 못 적으면 `--accept` 로 빚에 올린다 — 그 실행은 diff 에 남는다.)")
+    show(fresh, "근거 없음", limit=len(fresh) if full else 20)
+    print("  (정말로 지금 못 적으면 `--accept` 로 빚에 올린다 — 파일을 골라 올리려면 `--accept-only=<경로,…>`.)")
     return 1
 
 

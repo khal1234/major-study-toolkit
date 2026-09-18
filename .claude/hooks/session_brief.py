@@ -3,7 +3,7 @@
 
 **왜 이 훅인가.** 같은 사고가 두 번 났다 — 폴더 이름으로 목표를 짐작해 **엉뚱한 프로젝트**의
 할 일 목록을 뽑았고, 사용자가 아직 편입 시험을 준비하는 줄 알고 답했다. 원인은 성실성이 아니라
-**세션 첫 화면에 사실이 하나도 없다**는 것이다. 규칙으로 *"폴더 이름으로 추정하지 마라"* 고
+**세션 첫 화면에 사실이 하나도 없다**는 것이다. 규칙으로 *[발화 생략]* 고
 적어 두면 읽은 것과 안 읽은 것이 구별되지 않는다(규칙 11) — 그래서 **사실을 눈앞에 놓는다.**
 
 **여기서 판정은 하나도 하지 않는다.** 무엇을 할지는 인박스·워크오더가 정하고, 이 훅은
@@ -64,11 +64,17 @@ def worktrees_under(root):
 
 def subjects_in(root):
     """`data/` 아래 실재하는 과목 폴더 이름. **목록을 코드에 적지 않는다** — 적으면
-    새 과목이 생긴 날 이 훅만 옛 세상을 말한다(공통에 과목을 박지 않는다는 규칙)."""
+    새 과목이 생긴 날 이 훅만 옛 세상을 말한다(공통에 과목을 박지 않는다는 규칙).
+
+    ★ 점으로 시작하는 폴더는 과목이 아니다 (2026-09-07). `data/.textbook-fingerprint` 가
+      과목으로 찍혀 매 세션 브리핑이 «과목 22개» 라고 말했다 — 사실만 낸다는 이 훅의 약속을
+      스스로 어긴 자리다. 판정 정본은 `audit_content.subject_dirs()` 이고 거기엔 이미 있었다.
+    """
     data = root / "data"
     if not data.is_dir():
         return []
-    return sorted(p.name for p in data.iterdir() if p.is_dir())
+    return sorted(p.name for p in data.iterdir()
+                  if p.is_dir() and not p.name.startswith("."))
 
 
 def open_files(root, patterns, limit=MAX_PER_KIND):
@@ -88,7 +94,7 @@ def lines(root):
         # `guard_bash.container_root_violation` 이 실제로 막는다(말로만 적어 두지 않는다).
         trees = worktrees_under(root)
         out.append("[세션] **컨테이너 루트 — 과목이 없다.** 여기서는 공통만 다룬다"
-                   "(tools/ · AGENTS.md · site/template · site/fonts · .claude/ · docs/).")
+                   "(tools/ · CLAUDE.md · site/template · site/fonts · .claude/ · docs/).")
         if trees:
             out.append("  갈래 " + str(len(trees)) + "개: " + ", ".join(trees))
         out.append("  ☞ 과목 작업은 그 폴더의 세션에서. 남의 과목은 `git show <갈래>:<경로>` 로 읽는다.")
@@ -109,12 +115,53 @@ def lines(root):
         out.append("  인박스(최근): " + " · ".join(inbox))
     if orders:
         out.append("  워크오더(최근): " + " · ".join(orders))
+    out.extend(handoff_lines(root))
     tail = "  ☞ 할 일은 **이 파일을 읽어서** 정한다(추정 금지)."
     ledger = shared_ledger()
     if ledger:
         tail += " 삽질 전에 공용 원장부터 검색: " + ledger
     out.append(tail)
     return out
+
+
+HANDOFF = "docs/인계.md"
+
+
+def handoff_lines(root):
+    """`docs/인계.md` 맨 위 줄(도구 · 마지막 커밋)과 **그 커밋 이후 인계 줄 없는 커밋 수**.
+
+    무엇을 재나: Claude↔GPT 를 한도가 찰 때마다 바꿔 쓰면, 상대가 한 일을 다음 세션이 모른다
+    (XSanity 2026-09-17 «몰랐어» — GPT 가 만든 페이지를 Claude 가 없는 것으로 판정). 인계 줄은
+    사람이 적는 요약이고, 빠뜨린 커밋은 git 이 센다 — 줄이 없어도 «인계 없는 변경 N개» 는 뜬다.
+    문턱: 없음. 셈만 찍고 판정은 세션이 한다(이 훅의 약속). 못 보는 것: 미커밋 변경(`git status`
+    는 세션이 본다) · 인계 줄의 내용이 맞는지 · 다른 브랜치의 커밋.
+    한 줄로 낸다 — 브리핑 상한 5줄(`test_session_brief_states_facts_not_guesses`)을 두 줄이 넘겼다(2026-09-17).
+    """
+    path = root / HANDOFF
+    if not path.is_file():
+        return []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    rows = [ln for ln in text.splitlines()
+            if ln.startswith("| 20") and ln.count("|") >= 6]
+    if not rows:
+        return []
+    cells = [c.strip() for c in rows[0].strip("|").split("|")]
+    date, tool, sha = cells[0], cells[1], cells[2].strip("`")
+    line = ("  인계(최근): " + date + " " + tool + " · 마지막 커밋 " + sha
+            + " · 다음 「" + cells[4][:60] + "」 — 전문은 " + HANDOFF)
+    try:
+        r = subprocess.run(["git", "-C", str(root), "rev-list", "--count", sha + "..HEAD"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        n = int(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip().isdigit() else None
+    except (OSError, ValueError):
+        n = None
+    if n:
+        line += (" · ★ 그 뒤 인계 줄 없는 커밋 " + str(n) + "개 — `git log " + sha
+                 + "..HEAD --format=%s` 로 먼저 읽는다(상대 도구가 한 일일 수 있다)")
+    return [line]
 
 
 def shared_ledger():

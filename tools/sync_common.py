@@ -87,7 +87,7 @@ def common_paths_in(names):
 
     열린 날 2026-08-13 — `tools/commit.py` 가 커밋 직후 이 도구를 자동으로 부르게 하면서
     필요해졌다(공통을 고쳐 커밋하고 main 반영을 하루에 두 번 빠뜨린 사고). 그때
-    *"무엇이 공통인가"* 를 부르는 쪽에 다시 적으면 **목록이 두 벌**이 되어 반드시 갈라진다 —
+    *[발화 생략]* 를 부르는 쪽에 다시 적으면 **목록이 두 벌**이 되어 반드시 갈라진다 —
     이 리포가 여러 번 겪은 부류라(폴백 사전·검사 두 벌) 판정을 여기 하나로 둔다.
     공통의 정의는 SYNC_PATHS·NEVER_SYNC 뿐이고 이 함수는 그것을 읽기만 한다.
 
@@ -101,6 +101,10 @@ def common_paths_in(names):
         if n.startswith("./"):
             n = n[2:]
         if not n or n in NEVER_SYNC:
+            continue
+        # 2026-09-15: 담당별 기록은 공통 도구 배포 트리거가 아니다.
+        # docs/분업/공통-배포.md 같은 상위 공통 문서는 계속 포함한다.
+        if n.startswith("docs/분업/") and len(n.split("/")) >= 4:
             continue
         if any(n == p or n.startswith(p + "/") for p in SYNC_PATHS):
             out.append(n)
@@ -387,91 +391,24 @@ def mirror_shared(root):
     return plan, copied
 
 
-# ── 컨테이너 루트 세션 배선 (2026-08-15) ────────────────────────────────────
+# ── 컨테이너 루트 세션 배선 — **은퇴했다 (2026-09-07, 사용자: [발화 생략])** ─────────
 #
-# **실측으로 열렸다.** 세션이 과목 워크트리가 아니라 그것들을 담은 **컨테이너 폴더**에서
-# 열리면 그 폴더의 `.claude/` 가 비어 있어서 **훅이 하나도 안 걸린다**(실측: 파일 0개).
-# `guard_bash`·`guard_write`·`common_guard`·`session_brief`·`cost_brief`·`shared_sync_check`
-# 가 전부 꺼진 채로 돌았고, 그래서 `cd … &&` 가 거부되지 않고 «모두 허용» 창까지 흘러갔다.
+# 무엇이었나: 세션이 과목 워크트리가 아니라 그것들을 담은 컨테이너 폴더에서 열리면 그 폴더의
+# `.claude/` 가 비어 훅이 하나도 안 걸렸다(2026-08-15 실측). 그래서 커밋할 때마다 컨테이너
+# 루트에 `main/` 을 가리키는 파생 `settings.json` 을 깔았다.
 #
-# ★ **훅 파일을 복사하지 않는다 — main 것을 가리킨다.** 사본은 갈라지고, 이 리포는 그
-#   부류로 여러 번 당했다(폴백 사전·검사 두 벌·목록 두 벌). `main` 이 공통 정본이고 언제나
-#   그 자리에 있으므로 경로 하나만 바꿔 쓰면 된다.
-# ★★ **그 settings.json 을 손으로 쓰지 않는다.** 손으로 쓰면 main 것과 갈라지는데, 갈라진
-#   쪽이 «허용 규칙» 이라 조용히 프롬프트가 늘거나 조용히 넓어진다. 그래서 **파생물로**
-#   만들고, 트리거를 «반드시 하는 일»(커밋 → commit.py → sync_common)에 건다.
-# ★ 컨테이너 루트는 git 워크트리가 아니라 **리포 밖**이다. AGENTS 규칙 9 의 쓰기 경계를
-#   넘는 유일한 자리라, 대상 경로를 «워크트리들의 부모 한 칸»으로 못 박고 그 밖으로 안 넓힌다.
-
-CONTAINER_MARK = "이 파일은 파생물이다 — sync_common.mirror_container_root() 가 만든다"
-
-
-def container_settings(main_settings_text):
-    """main 의 settings.json → 컨테이너 루트용 텍스트. **순수 함수 — 테스트 대상.**
-
-    바꾸는 것은 **경로 한 칸**이다. 컨테이너 루트에는 워크트리가 없어서 `.claude/hooks/…` 도
-    `tools/…` 도 성립하지 않으므로, 둘 다 `main/` 한 칸 아래를 가리키게 옮긴다.
-
-    ★ **처음에는 훅 경로만 옮겼고, 그 판본이 2026-08-15 에 실측으로 깨졌다.** 그때 독스트링은
-      *"허용 규칙을 손대지 않는 것이 요점"* 이라고 적혀 있었는데, 안 손댄 결과가 이랬다 —
-      ⑴ Stop·StopFailure 훅이 **없는 파일**(`<컨테이너>/tools/shutdown_timer.py`)을 가리켜
-        **등록됐는데 파일이 없는** 상태로 돌았다(`check_floor` 가 *그쪽이 더 나쁘다* 고 적어 둔 형태다).
-      ⑵ `Bash(python tools/*.py)` 류가 **어느 명령에도 안 걸려** 빌드·회귀가 매번 승인창을 탔다 —
-        컨테이너 루트에서 실제로 치는 명령은 `python main/tools/…` 이기 때문이다.
-      즉 «갈라짐»을 막으려다 **아예 안 도는 배선**을 만들었다.
-    ★ 그 «갈라짐» 걱정 자체는 여전히 옳다. 그래서 **규칙을 더하거나 빼지 않는다** — 개수도
-      형태도 그대로 두고 경로만 옮긴다(잠금 `test_container_root_session_has_no_subject` ⑻-d).
-    """
-    out = main_settings_text.replace('$CLAUDE_PROJECT_DIR/.claude/hooks',
-                                     '$CLAUDE_PROJECT_DIR/main/.claude/hooks')
-    out = out.replace('$CLAUDE_PROJECT_DIR/tools/', '$CLAUDE_PROJECT_DIR/main/tools/')
-    # 허용·거부 규칙 안의 **상대** 경로 — `Bash(python tools/…)` · `Edit(tools/**)`.
-    out = out.replace('(tools/', '(main/tools/').replace(' tools/', ' main/tools/')
-    return out.replace('{\n', '{\n  "//": "' + CONTAINER_MARK + '",\n', 1)
-
-
-def mirror_container_root(root):
-    """워크트리들의 부모 폴더에 `.claude/settings.json` 을 깔아 준다. 쓴 경로 또는 None.
-
-    **아무것도 안 하는 경우가 정상이다** — 부모가 워크트리들의 컨테이너가 아니면(즉
-    형제 워크트리가 안 보이면) 손대지 않는다. 남의 폴더에 쓰지 않기 위한 판정이다.
-    """
-    parent = os.path.dirname(os.path.abspath(root))
-    listing = _git(["worktree", "list", "--porcelain"], cwd=root).stdout
-    siblings = [ln[len("worktree "):].strip() for ln in listing.splitlines()
-                if ln.startswith("worktree ")]
-    inside = [p for p in siblings
-              if os.path.dirname(os.path.abspath(p)) == parent]
-    if len(inside) < 2:
-        return None
-    src = os.path.join(root, ".claude", "settings.json")
-    if not os.path.isfile(src):
-        return None
-    with open(src, encoding="utf-8") as fh:
-        want = container_settings(fh.read())
-    dst_dir = os.path.join(parent, ".claude")
-    dst = os.path.join(dst_dir, "settings.json")
-    try:
-        with open(dst, encoding="utf-8") as fh:
-            if fh.read() == want:
-                return None
-    except OSError:
-        pass
-    os.makedirs(dst_dir, exist_ok=True)
-    with open(dst, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(want)
-    return dst
+# 왜 지우나: **컨테이너가 없어졌다.** 2026-09-07 평탄화로 리포가 곧 최상단이라 「워크트리들의
+# 부모」라는 자리 자체가 없고, `mirror_container_root()` 는 형제 워크트리가 2개 미만이면
+# `None` 을 돌려주므로 **이미 아무 일도 안 하고 있었다.** 안 도는 코드를 남겨 두면 다음 사람이
+# 「이 배선이 뭘 하나」를 다시 읽어야 하고, 그 판정 비용이 코드가 주는 값보다 크다.
+#
+# 되돌릴 곳: 경위 전문은 `docs/폐기된-규약.md` 「컨테이너 루트 세션 배선」. 컨테이너 구조로
+# 되돌아가는 사람은 조항이 아니라 **그 전제**(워크트리가 여럿이고 부모 폴더가 세션 자리가
+# 된다)를 먼저 다시 재야 한다.
 
 
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    # ★ 어느 경로로 들어와도 **먼저** 돈다. 아래 분기들은 저마다 일찍 return 하는데,
-    #   그 아래에 두면 «main 에서 커밋한 날에는 안 도는» 형태가 된다 — 공용 미러가
-    #   정확히 그렇게 조용히 꺼져 있었다(2026-08-14).
-    wired = mirror_container_root(root)
-    if wired:
-        print("[컨테이너] 세션 배선을 깔았다: " + wired +
-              "\n        훅은 main 것을 가리킨다(사본을 만들지 않는다).")
     if "--merge-all" in sys.argv[1:]:
         # 전파 방향이 반대다(main → 갈래). 그래서 아래 「뒤졌는가」 검사를 타지 않는다.
         return cmd_merge_all(root)

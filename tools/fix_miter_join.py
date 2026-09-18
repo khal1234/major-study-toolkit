@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """예각 꼭짓점의 **마이터 가시** 없애기 — 그 요소에 `stroke-linejoin='round'` 를 준다.
 
-열린 날 2026-08-23. 사용자: [사용자 발화 인용 생략] (3차원 유체 요소).
+열린 날 2026-08-23. 사용자: *[발화 생략]* (3차원 유체 요소).
 
 판정과 근거는 `buildlib/checks_svg.MITER_SPIKE_RATIO` 위 주석이 정본이다. 요지만:
 SVG 기본 이음이 `miter` 라 끼인각이 예각인 꼭짓점에서 이음의 끝이 선폭의 몇 배까지 나간다.
@@ -58,7 +58,9 @@ def figures_of(data):
 
 def main():
     ap = argparse.ArgumentParser(description="예각 꼭짓점의 마이터 가시를 둥근 이음으로 없앤다")
-    ap.add_argument("--chapter", help="chNN.json 하나만")
+    ap.add_argument("--chapter",
+                    help="chNN.json 하나만 — 다른 과목이면 경로로 준다"
+                         " (예: data/&lt;과목&gt;/ch02.json)")
     ap.add_argument("--apply", action="store_true", help="실제로 파일을 고친다")
     args = ap.parse_args()
 
@@ -67,8 +69,15 @@ def main():
              else [name + ".json" for name in audit_content.CHAPTERS])
     total = figs = stuck = 0
     for name in names:
-        path = os.path.join(audit_content.DATA, name)
+        # ★ 경로로 줘도 받는다 — 이 자는 `audit_content.DATA` 한 과목만 보게 돼 있어서
+        #   다른 과목의 `chNN.json` 을 주면 **파일을 못 찾고 조용히 «0개» 를 찍었다**
+        #   (2026-09-08 실측: 열역학 ch02 를 주었는데 계측공학 폴더를 뒤졌다).
+        #   화면이 「고칠 것이 없다」와 똑같아 보이는 것이 이 리포가 반복해 닫는 부류다.
+        path = name if os.path.isfile(name) else os.path.join(audit_content.DATA, name)
         if not os.path.isfile(path):
+            if args.chapter:                       # 이름을 대 놓고 못 찾은 것은 실패다
+                sys.exit("그 챕터를 못 찾았다: " + name
+                         + "\n  다른 과목이면 경로로 줄 것 — 예: data/&lt;과목&gt;/ch02.json")
             continue
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)

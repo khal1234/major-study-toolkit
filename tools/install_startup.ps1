@@ -4,16 +4,14 @@
 # 알맹이가 빈 .lnk가 만들어진다(2026-07-22 실사고, 부팅 후 서버가 안 떴다).
 # 여기서는 경로를 리터럴로 쓰지 않고 $PSScriptRoot에서 런타임에 얻는다.
 #
-# ★ 워크트리마다 따로 등록한다 (2026-07-26 개편). 과목 = 브랜치 = worktree 폴더라
-#   바로가기 이름도 폴더 이름으로 가른다(local-server-<폴더>.lnk).
-#   이름이 하나뿐이면 나중에 등록한 과목이 앞 과목을 덮어써 한쪽이 영영 안 뜬다.
-#   포트는 serve_site.vbs가 폴더 이름으로 정한다: thermo 8801 · math 8802.
+# ★ 등록 대상은 **리포 하나**다 (2026-09-07 평탄화). 과목 = 브랜치 = worktree 였을 때는
+#   과목 수만큼 등록해야 했지만, 한 트리로 합친 뒤에는 서버 하나가 전 과목을 낸다.
+#   이름 LocalServer-main · 포트 8800 · 접속 http://localhost:8800/<과목>/chNN.html
 #
 # 사용: powershell -ExecutionPolicy Bypass -File tools\install_startup.ps1 -All   ← 권장
-#       한 워크트리만: ... -File tools\install_startup.ps1 [-RepoRoot C:\...\전공정리프로젝트\thermo]
-#       제거는        ... -File tools\install_startup.ps1 -Uninstall  [-RepoRoot ...]
+#       제거는 ... -File tools\install_startup.ps1 -AsTask -All -Uninstall
 #
-# ★ -All 을 넣은 이유 (2026-07-28, 사용자 지적: *"실행프로그램 목록에 없고 8801~02 만 있는 것 같은데"*).
+# ★ -All 을 넣은 이유 (2026-07-28, 사용자 지적: *[발화 생략]*).
 #   이 스크립트는 **워크트리 하나씩** 등록하는 구조였다. 그래서 과목이 늘 때마다 사람이
 #   다시 실행해야 하는데 **아무것도 그것을 알려주지 않았다** — 실측하니 과목 5개 중 2개만
 #   등록돼 있었고(dynamics·materials·solids 누락), 8803~8805 는 로그온해도 뜨지 않았다.
@@ -21,7 +19,8 @@
 #   → `-All` 은 **아래 포트 맵에 있는 과목 전부**를 훑어 현재 상태로 맞춘다(멱등).
 #   포트 맵은 `new_subject.py add_startup_port` 가 새 과목 등록 때 자동으로 채운다.
 
-# -AsTask 를 넣은 이유(2026-08-06) — 자동 시작 등록이 실제로 됐는지 확인이 필요했던 사례(등록 자체는 돼 있었고, 아직 안 떠 있던 것뿐이었다).
+# ★ -AsTask 를 넣은 이유 (2026-08-06, 사용자: *[발화 생략]* → 실측하니 **등록은 5개 다 돼 있었고 지금은 잘 돈다**. 즉 안 뜬 게
+#   아니라 **아직** 안 떠 있었다).
 #   원인: 시작프로그램 **폴더** 항목은 Explorer 가 데스크톱을 띄운 뒤 **일부러 늦게** 순차
 #   실행한다. 그런데 같은 폴더에 `Brave.lnk` 가 있어 브라우저가 이전 탭을 복원하는 시점이
 #   파이썬 서버가 포트를 잡는 시점보다 빠를 수 있다 → 그 탭만 ERR_CONNECTION_REFUSED.
@@ -39,44 +38,41 @@ param([switch]$Uninstall, [switch]$All, [switch]$AsTask, [string]$RepoRoot)
 $ErrorActionPreference = 'Stop'
 $startup = [Environment]::GetFolderPath('Startup')
 
-# 표시용 포트 맵 — 실제 판정은 serve_site.vbs 가 한다(두 목록의 표류는 test_checks.py 가 막는다).
-$PortMap = @{ 'quality' = 8821; 'smartmfg' = 8820; 'vib' = 8819; 'appfluid' = 8818; 'heat' = 8817; 'numeth' = 8816; 'instru' = 8815; 'sysctrl' = 8814; 'medesign' = 8813; 'family' = 8812; 'math2' = 8811; 'ee' = 8810; 'appsolids' = 8809; 'appthermo' = 8808; 'fluids' = 8807; 'mfg' = 8806; 'thermo' = 8801; 'math' = 8802; 'dynamics' = 8803; 'materials' = 8804; 'solids' = 8805; 'main' = 8800 }
+# ★★ 포트는 하나다 — 8800 (2026-09-06 구조 이전). 과목마다 워크트리가 따로였을 때는 서버도
+#    과목 수만큼 떠야 했고(각 site\ 에 자기 과목만 있었다) 그래서 이 맵이 21줄이었다.
+#    브랜치를 main 하나로 합친 뒤에는 **서버 하나가 전 과목을 낸다.**
+$PortMap = @{ 'main' = 8800 }
 # ★ 'main'(전공정리 홈, 포트 8800)은 애초부터 이 맵에 없었다(2026-09-02 실측 — schtasks 에 홈 항목이
-#   0개, 사용자가 "왜 직접 켜야해? 자동 켜지게 했잖아"로 지적). 폴더 이름이 «main»(하이픈 없음)이라
+#   0개, 사용자가 [발화 생략]로 지적). 폴더 이름이 «main»(하이픈 없음)이라
 #   $tag 도 그대로 'main' 이 되므로, 이 한 줄만 있으면 아래 -All 루프가 다른 과목과 똑같이 찾아낸다 —
 #   $All 루프를 손대지 않아도 된다(그 루프는 이미 PortMap 의 키만 보고 도는 구조였다).
 
+# ★★ 훑을 형제가 없다 (2026-09-07 평탄화). 옛 판은 «컨테이너/{main, 열역학-thermo, …}» 를
+#    전제로 **저장소 폴더의 형제**를 훑었다. 리포가 컨테이너 자리로 올라오면서 그 부모는
+#    `Documents` 가 됐고, PortMap 키 'main' 과 맞는 폴더가 거기 없어 `-All` 이 **등록 0개**로
+#    끝났다 — 출력은 «skip: main (워크트리 없음)» 한 줄이라 통과와 구별이 안 됐다.
+#    실측(2026-09-07): `LocalServer-main` 이 껍데기만 남은 «…\전공정리프로젝트\main\tools\
+#    serve_site.vbs» 를 가리킨 채 Last Result 1(그 폴더엔 `site\` 가 없다), 옛 워크트리
+#    20개는 폴더가 사라져 0x8007010B. 로그온해도 8800 이 안 뜬 원인이 **포트가 아니라 경로**다.
+#    → 대상은 **이 스크립트가 들어 있는 리포 하나**다. 폴더 이름을 읽지 않으므로 한글 이름
+#      («전공정리프로젝트») 도 ANSI 함정·ASCII 뭉개기에 안 걸린다.
 if ($All) {
-    # 워크트리는 저장소 폴더의 형제다. git 출력을 파싱하지 않고 파일 시스템으로 찾는다 —
-    # 한글 경로가 섞여 있어 git 표준출력 인코딩에 기대면 깨진다(이 리포의 알려진 함정).
-    #
-    # ★ 폴더 이름을 **짐작하지 않는다** (2026-08-23). 폴더가 «열역학-thermo» 로 바뀌었으므로
-    #   `Join-Path $parent 'thermo'` 는 전부 «워크트리 없음» 으로 조용히 빠진다 — 증상이
-    #   조용한 부류(2026-07-28 등록 누락과 같은 모양)라 훑어서 찾는다.
-    #   갈래는 마지막 '-' 뒤 ASCII 토큰 (정본: tools/worktree_names.py).
-    $parent = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-    $done = 0
-    $seen = @{}
-    foreach ($dir in (Get-ChildItem -LiteralPath $parent -Directory | Sort-Object Name)) {
-        $tag = ($dir.Name -split '-')[-1].ToLower()
-        if (-not $PortMap.ContainsKey($tag)) { continue }
-        if ($seen.ContainsKey($tag)) {
-            Write-Host "skip   : $($dir.Name) (갈래 $tag 는 이미 등록했다)"
-            continue
-        }
-        if (-not (Test-Path -LiteralPath (Join-Path $dir.FullName 'tools\serve_site.vbs'))) {
-            Write-Host "skip   : $($dir.Name) (런처 없음)"
-            continue
-        }
-        $seen[$tag] = $true
-        & $PSCommandPath -RepoRoot $dir.FullName -AsTask:$AsTask -Uninstall:$Uninstall
-        $done++
-    }
-    foreach ($name in ($PortMap.Keys | Sort-Object)) {
-        if (-not $seen.ContainsKey($name)) { Write-Host "skip   : $name (워크트리 없음)" }
+    & $PSCommandPath -RepoRoot (Split-Path $PSScriptRoot -Parent) -AsTask:$AsTask -Uninstall:$Uninstall
+
+    # 옛 구조가 남긴 등록을 걷어낸다. 판정은 **대상 vbs 가 실제로 있는가** 하나다 —
+    # 이름을 열거하면 다음 개편 때 또 빠뜨린다(열거는 빠뜨려도 통과되고 접두/실존은 아니다).
+    # 남기면 매 로그온마다 조용히 실패하고, 폴더가 되살아나면 8800 을 다투기까지 한다.
+    $killed = 0
+    foreach ($t in (Get-ScheduledTask -TaskName 'LocalServer-*' -ErrorAction SilentlyContinue)) {
+        $target = ($t.Actions[0].Arguments -replace '"', '').Trim()
+        if ($target -match '^(.*serve_site\.vbs)') { $target = $matches[1] } else { continue }
+        if (Test-Path -LiteralPath $target) { continue }
+        Write-Host "removing dead task: $($t.TaskName) -> $target"
+        Unregister-ScheduledTask -TaskName $t.TaskName -Confirm:$false
+        $killed++
     }
     Write-Host ""
-    Write-Host "[all] 등록 완료 $done 개 — 로그온하면 전부 자동 실행된다."
+    Write-Host "[all] 죽은 등록 $killed 개 제거 — 로그온하면 http://localhost:8800/ 이 뜬다."
     return
 }
 
@@ -84,10 +80,12 @@ if (-not $RepoRoot) { $RepoRoot = Split-Path $PSScriptRoot -Parent }
 $RepoRoot = (Resolve-Path $RepoRoot).Path
 $vbs      = Join-Path $RepoRoot 'tools\serve_site.vbs'
 
-# 바로가기 이름은 워크트리의 **갈래**로 (ASCII만 — 인코딩 사고 방지).
-# 폴더가 «열역학-thermo» 라도 태그는 `thermo` 다. 한글을 '_' 로 뭉개면
-# «____-thermo» 같은 이름이 되고, 폴더 표시를 바꿀 때마다 옛 등록이 남는다.
-$tag = ((Split-Path $RepoRoot -Leaf) -split '-')[-1] -replace '[^A-Za-z0-9_]', '_'
+# ★ 태그를 **폴더 이름에서 뽑지 않는다** (2026-09-07 평탄화).
+#   브랜치=워크트리=폴더 였을 때는 폴더 이름이 갈래를 알려 줬다(«열역학-thermo» → thermo).
+#   지금은 리포가 하나뿐이고 그 이름이 한글(«전공정리프로젝트») 이라, 옛 규칙을 그대로 돌리면
+#   ASCII 뭉개기가 «____________» 을 만들어 **이미 등록돼 있는 이름과 어긋난다.**
+#   등록 이름은 밖에 나가 있는 것을 그대로 쓴다 — LocalServer-main · local-server-main.lnk.
+$tag = 'main'
 $lnk = Join-Path $startup "local-server-$tag.lnk"
 
 # ★★ 포트를 **인자로 넘긴다** (2026-08-23). 런처도 폴더 이름으로 포트를 정할 줄 알지만,

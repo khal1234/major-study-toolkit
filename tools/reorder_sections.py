@@ -7,10 +7,8 @@
     담당하는 도구를 둔다.
 
 ★ 이 도구를 **언제 쓰지 않는가** (정정 2026-08-02, 사용자):
-    처음 이 자리에는 *"규칙 12⑴ 이 1:1 을 금지하므로 절 이동은 되풀이될 작업"* 이라고
-    적혀 있었다. **그 읽기가 틀렸다.** 사용자 원문: *"보통은 순서대로 따라가는게 합당해서
-    그렇게 배치한거일테니 … 지금 2장은 크게 바꿀게 없을 것 같긴하네. 벡터에 대해 정의하는데
-    그걸 알려주는 순서가 달라질만한게 크게 없으니."*
+    처음 이 자리에는 *[발화 생략]* 이라고
+    적혀 있었다. **그 읽기가 틀렸다.** 사용자 원문: *[발화 생략]*
 
     - 순서 1:1 은 **위반이 아니라 신호**다(감사도 `[FAIL]` 이 아니라 `[blind spot]`).
     - **의존 관계가 순서를 정하는 곳은 바꾸지 않는 것이 옳다** — 힘을 정의하기 전에
@@ -28,11 +26,11 @@
     python tools/reorder_sections.py --chapter ch12.json --move sec-a --after sec-b --apply
 
 ★ 유도 카드도 같은 도구로 옮긴다 — `--collection derivation` (신설 2026-08-02).
-    사용자 지적: *"이론은 순서바꿨잖아 유도는 왜 순서 안바꿈?"* — 옳다. 이론만 재배열하고
+    사용자 지적: *[발화 생략]* — 옳다. 이론만 재배열하고
     유도를 두면 **두 탭이 서로 다른 이야기를 한다.** 실측(공학수학 ch01): 이론은
     변수분리 → 선형 → 완전미분 → 적분인자인데 유도는 교재 순서 그대로
     변수분리 → 완전미분 → 적분인자 → 선형이었고, 그 결과 이론 본문의
-    *"적분인자는 **앞의** 선형 ODE 절에서 이미 썼습니다"* 가 유도 탭에서는 거짓이 됐다.
+    *[발화 생략]* 가 유도 탭에서는 거짓이 됐다.
     이 도구가 이론만 다뤘던 것이 그 상태를 **손이 많이 가는 쪽**으로 만든 원인이다.
 
 ★ 옮긴 뒤 반드시 할 것 (이 도구는 못 한다):
@@ -78,14 +76,21 @@ def move_section(sections, move_id, before_id=None, after_id=None):
 
 # 컬렉션 이름 → (JSON 상위 키, 목록 키). 유도를 나중에 덧붙인 것이 아니라
 # **처음부터 같은 자리**로 다루기 위한 표다 — 갈라 두면 한쪽만 고치는 오늘의 결함이 반복된다.
-COLLECTIONS = {"theory": ("theory", "sections"), "derivation": ("derivation", "formulas")}
+COLLECTIONS = {"theory": ("theory", "sections"), "derivation": ("derivation", "formulas"),
+               # ★ 2026-09-08 신설 — 사용자 판정으로 **연습문제는 쉬운 것부터** 놓게 됐다
+               #   (*[발화 생략]*).
+               #   문항은 최상위 리스트라 owner 가 없다. 화면 번호는 **위치**가 매기므로
+               #   (뷰어 `'Q' + (i+1)`) 순서만 바꾸면 독자가 보는 번호가 따라 바뀌고,
+               #   **id 는 그대로 둔다** — id 를 재번호하면 검산기 라벨 228곳과 다른 장의
+               #   verbatim 슬롯까지 따라와야 하고, 하나만 어긋나도 검산이 엉뚱한 문항에 붙는다.
+               "problems": (None, "problems"), "practice": (None, "practice")}
 
 
 def main():
     ap = argparse.ArgumentParser(description="이론 절·유도 카드 순서 바꾸기 (내용은 안 건드린다)")
     ap.add_argument("--chapter", required=True, help="chNN.json")
     ap.add_argument("--collection", default="theory", choices=sorted(COLLECTIONS),
-                    help="theory(기본) | derivation")
+                    help="theory(기본) | derivation | problems | practice")
     ap.add_argument("--move", required=True, help="옮길 절·카드 id")
     group = ap.add_mutually_exclusive_group(required=True)
     group.add_argument("--before", help="이 절 **앞**으로")
@@ -97,14 +102,19 @@ def main():
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     owner_key, list_key = COLLECTIONS[args.collection]
-    sections = (data.get(owner_key) or {}).get(list_key) or []
+    sections = (data.get(list_key) if owner_key is None
+                else (data.get(owner_key) or {}).get(list_key)) or []
     if not sections:
         print(args.collection + " 항목이 없다 — 아무것도 하지 않았다")
         return 1
 
     before = [s.get("id") for s in sections]
-    data[owner_key][list_key] = move_section(sections, args.move, args.before, args.after)
-    after = [s.get("id") for s in data[owner_key][list_key]]
+    reordered = move_section(sections, args.move, args.before, args.after)
+    if owner_key is None:
+        data[list_key] = reordered
+    else:
+        data[owner_key][list_key] = reordered
+    after = [s.get("id") for s in reordered]
 
     print("[대상] " + path)
     for i, (b, a) in enumerate(zip(before, after), 1):
@@ -121,6 +131,9 @@ def main():
         json.dump(data, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
     print("\n저장했다. ★ 본문의 §N 상호참조와 '앞 절 전제'를 직접 고칠 것 — 이 도구는 안 한다.")
+    if owner_key is None:
+        print("★ 문항은 화면 번호가 **위치**로 매겨진다 — Q 번호가 바뀌었고 id 는 그대로다."
+              "\n   「앞 문항에서 본 것처럼」 같은 산문과 다른 장의 참조를 직접 볼 것.")
     return 0
 
 

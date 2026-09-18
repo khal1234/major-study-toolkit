@@ -2,8 +2,8 @@
 """삽화의 '균형'을 수치로 잰다 — 읽기 전용 감사.
 
 왜 만들었나 (열린 날 2026-07-29):
-    `fig-closed-open-isolated` 가 [사용자 발화 인용 생략] 으로 **3회** 지적됐다. 6회차에 원인을
-    [사용자 발화 인용 생략] 로 정확히 진단해 놓고, 7회차에서는
+    `fig-closed-open-isolated` 가 *[발화 생략]* 으로 **3회** 지적됐다. 6회차에 원인을
+    *[발화 생략]* 로 정확히 진단해 놓고, 7회차에서는
     **간격을 눈으로 정해** 재배치했다. 기준이 없으니 두 번째 시도도 빗나갔다.
 
     빌드 검사(F1)는 `< 0.5em` 만 막는다. 그건 **하한**이지 **균형**이 아니다.
@@ -28,6 +28,7 @@ import argparse
 FAIL_ONLY = False
 import json
 import math
+import os
 import re
 import sys
 from pathlib import Path
@@ -43,11 +44,16 @@ from buildlib.checks_svg import (  # noqa: E402
     _text_bbox, _segment_to_rect_distance, arrow_geometry, fraction_unit_boxes,
     BOX_CENTER_MAX_RATIO, BOX_CENTER_TOL_EM, LABEL_PAIR_RATIO_MAX, figure_box_centering,
     figure_label_pair_gap_hits, symbol_below_caption_rows,
+    FIGURE_BALANCE_TOL_PX, figure_vertical_extent,
 )
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+# ★ 나가는 쪽도 고친다 — 안 고치면 **오류 메시지만** 깨진다(AGENTS 「알려진 함정」).
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parent.parent
 LABEL_TO_SHAPE_EM = 1.0
-BALANCE_TOL_PX = 6.0
+BALANCE_TOL_PX = FIGURE_BALANCE_TOL_PX   # 정본은 빌드 쪽 상수다(F7 게이트)
 CAPTION_HANGUL_MIN = 6   # 한글 음절 이만큼 이상이면 '설명 문장'으로 본다
 TIP_TOL_PX = 0.5         # 화살촉 끝점이 기준선의 stroke 폭 밖으로 이만큼 넘으면 결함
 # 끝점에서 이 범위 안에 있는 기준선만 '자기 기준선'으로 본다.
@@ -85,7 +91,7 @@ _DRAWABLE = re.compile(r"<(path|rect|circle|ellipse|line|polygon|polyline)\b")
 def drawable_count(svg):
     """그리기 요소 수 — 배경판 하나는 뺀다. 순수 함수.
 
-    왜 재나 (2026-08-04, 인박스 R-40) — [사용자 발화 인용 생략] 라는 지적이 반복되는데
+    왜 재나 (2026-08-04, 인박스 R-40) — *[발화 생략]* 라는 지적이 반복되는데
     **성의는 기계가 못 본다.** 대신 *지문의 주인공을 그리려면 요소가 몇 개는 든다*는 것은 잴 수 있다.
     실측 근거: 퍼니큘러 삽화가 고치기 전 **6개**(막대·보조선·호·화살표뿐), 고친 뒤 30개 남짓.
     ★ 이것은 **후보 목록**이지 판정이 아니다 — 개념 삽화는 원래 요소가 적을 수 있다.
@@ -98,7 +104,7 @@ def iter_diagrams(node):
     """chNN.json 안의 삽화를 전부 낸다.
 
     ★ 유도 카드의 슬라이드 삽화(`derivation.formulas[].figure`, 단수 객체)도 여기서 낸다
-    (2026-08-29, 사용자: [사용자 발화 인용 생략] — 새로 만든 슬라이드 삽화 두 개가
+    (2026-08-29, 사용자: *[발화 생략]* — 새로 만든 슬라이드 삽화 두 개가
     이 감사에 한 번도 안 걸렸다. `diagrams`(배열) 만 보고 `figure`(단수)는 안 봐서, 유도 탭의
     삽화는 태생적으로 사각지대였다 — 원인은 「배열이 아니라 단수 하나」라는 스키마 차이다).
     """
@@ -122,41 +128,12 @@ def _viewbox(svg):
 
 
 def _content_extent(svg, vb):
-    """배경(viewBox 테두리에 붙은 선)을 뺀 실제 콘텐츠의 세로 범위."""
-    vx, vy, vw, vh = vb
-    top, bottom = None, None
-    for seg in _svg_segments(svg):
-        x1, y1, x2, y2 = seg[0], seg[1], seg[2], seg[3]
-        # 배경 사각형의 네 변은 콘텐츠가 아니다 — viewBox 경계에 붙은 선은 뺀다.
-        on_border = (abs(y1 - vy) < 1.5 and abs(y2 - vy) < 1.5) \
-            or (abs(y1 - (vy + vh)) < 1.5 and abs(y2 - (vy + vh)) < 1.5) \
-            or (abs(x1 - vx) < 1.5 and abs(x2 - vx) < 1.5) \
-            or (abs(x1 - (vx + vw)) < 1.5 and abs(x2 - (vx + vw)) < 1.5)
-        if on_border:
-            continue
-        lo, hi = min(y1, y2), max(y1, y2)
-        top = lo if top is None else min(top, lo)
-        bottom = hi if bottom is None else max(bottom, hi)
-    for text in _svg_texts(svg):
-        box = _text_bbox(text)
-        top = box[1] if top is None else min(top, box[1])
-        bottom = box[3] if bottom is None else max(bottom, box[3])
-    # ★ 원은 선분으로 분해되지 않아 _svg_segments 가 못 본다 (열린 날 2026-07-29).
-    #   `fig-zeroth-law-transitivity` 는 원 3개가 도판의 거의 전부인데 그게 안 세어져
-    #   '아래 여백 32px 과다'로 **잘못** 신고됐다. 실제로는 원까지 세면 위아래 10px로 균형이다.
-    #   감사 도구의 순회 범위를 확인하지 않은 '0건'은 '없다'가 아니라는 규칙(11)의 역방향 사례 —
-    #   범위 밖이면 **없는 결함을 만들어내기도** 한다.
-    for m in re.finditer(r"<circle([^>]*)>", svg):
-        a = m.group(1)
-        try:
-            cy, r = float(_attr(a, "cy", "0")), float(_attr(a, "r", "0"))
-        except ValueError:
-            continue
-        if not r:
-            continue
-        top = cy - r if top is None else min(top, cy - r)
-        bottom = cy + r if bottom is None else max(bottom, cy + r)
-    return top, bottom
+    """배경을 뺀 콘텐츠의 세로 범위 — **정본은 빌드 쪽**이다.
+
+    2026-09-09 에 이 판정을 `buildlib/checks_svg.figure_vertical_extent` 로 올렸다
+    (F7 게이트). 같은 값을 두 자로 재면 갈리므로 여기서는 그 함수를 그대로 부른다.
+    """
+    return figure_vertical_extent(svg, vb)
 
 
 _NUM = r"-?(?:\d+(?:\.\d*)?|\.\d+)"
@@ -373,9 +350,9 @@ def _runs_along_an_edge(base, tip, ux, uy, segments):
 
     열린 날 2026-08-13 — **감사 도구 자체의 오탐**(고체역학 ch11 실측 2건).
     전단응력 화살표는 정의상 **면과 나란하게** 그려진다. 그런데 이 자는 411행에서
-    [사용자 발화 인용 생략] 이라며 **자기 면을 후보에서 빼고**, 그러면 모서리에서
+    *[발화 생략]* 이라며 **자기 면을 후보에서 빼고**, 그러면 모서리에서
     만나는 **옆 면**(축과 수직이다)이 「자기 기준선」으로 잡힌다. 실제로 마름모 요소의
-    전단 화살촉 넷 중 둘이 [사용자 발화 인용 생략] 으로 신고됐다 — 그 옆 면은 겨냥한 대상이
+    전단 화살촉 넷 중 둘이 *[발화 생략]* 으로 신고됐다 — 그 옆 면은 겨냥한 대상이
     아니고, 신고대로 늘리면 **화살표가 모서리를 뚫고 나간다.**
 
     판정선: **밑변과 끝점이 둘 다 같은 선분 위에 있다**(±`FLOAT_TOUCH_PX`)면 그 화살표는
@@ -821,7 +798,7 @@ def audit(chapter_path, wanted=None):
 
     # ★★ `--fail-only` — 아래 다섯 절은 **전부 참고용**(위반이 아니라 분포·목록을 보여 준다).
     #   합쳐 60~90줄이라 감사를 한 번 부를 때마다 1~3k 토큰을 먹는데, 대개는 그중 한 절만 본다.
-    #   신설 이유(2026-08-12, 사용자: [사용자 발화 인용 생략]).
+    #   신설 이유(2026-08-12, 사용자: *[발화 생략]*).
     #   ★ 위반을 세는 절(세로 균형·라벨 간격·치수보조선·글자 위계)은 **끄지 않는다** —
     #     그건 조용해지면 안 되는 자리다.
     # ★★★ **위반이 있는 절은 참고 절이라도 낸다** (고침 2026-08-13).
@@ -927,9 +904,68 @@ def audit(chapter_path, wanted=None):
     return rows, gap_rows, tier_rows, tip_rows, dim_rows
 
 
+def balance_rows(chapter_path):
+    """세로 균형만 잰다 — **전 과목 순회용**이라 무거운 절(간격·화살촉·칸)은 안 돈다.
+
+    ★ 열린 날 2026-09-08. 이 자는 `chapter` 를 **필수 위치 인자**로 받아서
+      전 과목 순회가 아예 불가능했다(순회기에 물리면 21과목이 전부 `exit 2`).
+      그래서 「위 7.0 / 아래 30.4」 같은 쏠림이 **아무 데서도 안 세어졌다** —
+      감사가 있는데 한 챕터씩 손으로 부르지 않으면 안 도는 상태였다.
+    """
+    try:
+        data = json.loads(Path(chapter_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    out = []
+    for diagram in iter_diagrams(data):
+        svg = diagram.get("svg") or ""
+        vb = _viewbox(svg) if svg else None
+        if not vb:
+            continue
+        vx, vy, vw, vh = vb
+        top, bottom = _content_extent(svg, vb)
+        if top is None:
+            continue
+        pad_top, pad_bottom = top - vy, (vy + vh) - bottom
+        out.append((diagram.get("id") or "?", vw, vh, pad_top, pad_bottom,
+                    pad_bottom - pad_top))
+    return out
+
+
+def sweep_all():
+    """전 과목 세로 균형 — 위반만 찍고, **훑은 수를 함께 낸다**(0 이 «없다» 가 아니게)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import audit_content                                                     # noqa: E402
+    subjects = audit_content.subject_dirs()
+    total = off = 0
+    for folder in subjects:
+        name = os.path.basename(folder)
+        hits = []
+        for fname in sorted(n for n in os.listdir(folder)
+                            if re.fullmatch(r"ch\d{2}\.json", n)):
+            for fig_id, vw, vh, pt, pb, diff in balance_rows(os.path.join(folder, fname)):
+                total += 1
+                if abs(diff) > BALANCE_TOL_PX:
+                    off += 1
+                    hits.append((fname[:-5], fig_id, vw, vh, pt, pb, diff))
+        if hits:
+            print(f"\n-- {name} -- {len(hits)}건")
+            for ch, fig_id, vw, vh, pt, pb, diff in hits:
+                print(f"   {ch} {fig_id:36} {vw:5.0f}x{vh:<5.0f}"
+                      f" 위 {pt:6.1f} 아래 {pb:6.1f} 차이 {diff:+7.1f}")
+    print(f"\n합계 — 균형 이탈 {off}건 / 삽화 {total}개 · 훑은 과목 {len(subjects)}개"
+          f" (허용치 ±{BALANCE_TOL_PX:g}px)")
+    if total == 0:
+        sys.exit("삽화를 한 개도 안 봤다 — 순회 범위를 확인할 것(0 이 «없다» 가 아니다)")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="삽화 세로 균형·라벨 간격 감사 (읽기 전용)")
-    parser.add_argument("chapter", help="chapter JSON path, relative to repository root")
+    parser.add_argument("chapter", nargs="?",
+                        help="chapter JSON path, relative to repository root")
+    parser.add_argument("--all", action="store_true",
+                        help="전 과목을 훑어 **세로 균형 이탈만** 낸다(무거운 절은 안 돈다)")
     parser.add_argument("--id", dest="ids", action="append", help="특정 삽화만 (반복 가능)")
     parser.add_argument("--fail-only", action="store_true",
                         help="위반을 세는 절만 낸다 — 참고용 5개 절(칸 안·라벨 순서·밀도·"
@@ -937,6 +973,10 @@ def main():
     global FAIL_ONLY
     args = parser.parse_args()
     FAIL_ONLY = args.fail_only
+    if args.all:
+        return sweep_all()
+    if not args.chapter:
+        parser.error("chapter 를 주거나 --all 을 줄 것")
     audit(ROOT / args.chapter, set(args.ids) if args.ids else None)
     return 0
 

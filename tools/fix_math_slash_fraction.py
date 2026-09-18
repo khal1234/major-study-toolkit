@@ -6,9 +6,7 @@ r"""수식 안의 슬래시 분수를 `\frac{…}{…}` 로 바꾼다 — **확�
     python tools/fix_math_slash_fraction.py --chapter=ch05.json --apply
 
 왜 도구인가 (신설 2026-08-12) — 공학수학 세션 보고:
-*"수식 안 슬래시 분수에는 fix 도구가 없습니다. `math_slash_fraction_issues` 는 error 인데
-고치는 쪽이 없어 과목마다 손으로 고치게 됩니다(`fix_cdot` 이 닫은 것과 같은 부류 —
-'자는 신고하는데 처방이 없다')."*
+*[발화 생략]*
 
 ★ **자와 처방은 한 함수를 쓴다.** 찾는 일은 `checks_content.slash_fraction_spans` 하나가 하고
   (단위 면제·지수 안 슬래시 판정이 전부 거기 있다), 이 파일은 **어디까지 기계가 고쳐도 되는가**
@@ -39,12 +37,16 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import audit_content                                              # noqa: E402
-from buildlib.checks_content import (MATH_ONLY_KEYS,              # noqa: E402
-                                     _MATH_SPAN_RE, slash_fraction_spans)
+from buildlib.checks_content import (_MATH_SPAN_RE,               # noqa: E402
+                                     is_unit_only_blank_answer, is_whole_math_field,
+                                     slash_fraction_spans)
 from buildlib.jsontext import write_chapter                       # noqa: E402
 
 # 낱개 원자 — 글자·숫자에 첨자가 붙은 것까지. 백슬래시·중첩 중괄호가 보이면 사람이 본다.
-_ATOM = re.compile(r"^[A-Za-z0-9∂∆]+(?:[_^]\{[^{}\\]*\}|[_^][A-Za-z0-9])*$")
+# 2026-09-12 — 자(`_SLASH_ATOM`)가 받는 «중괄호 인자 매크로»(`\sqrt{2}`)와 «노름»(`\|v\|`)도 낱개
+# 원자로 본다. 인자 없는 매크로(`\sigma / \sqrt{n}` 의 분자)는 여전히 사람 몫이다.
+_ATOM = re.compile(r"^(?:[A-Za-z0-9∂∆]+(?:[_^]\{[^{}\\]*\}|[_^][A-Za-z0-9])*"
+                   r"|\\[A-Za-z]+\{[^{}]*\}|\\\|[^|]*\\\|)$")
 
 
 def rewrite(span):
@@ -55,7 +57,14 @@ def rewrite(span):
         num_text = span[at:slash].rstrip()
         den_text = span[slash + 1:end].lstrip()
         before = span[at - 1] if at else ""
-        if before in ("\\", "{") or not _ATOM.match(num_text) or not _ATOM.match(den_text):
+        # ★ `end` 뒤에 첨자가 곧바로 이어지면 손대지 않는다 (2026-09-06, ch14 실사고).
+        #   `slash_fraction_spans`는 첨자 안 슬래시를 오판하지 않으려고 `_{...}` 를 같은
+        #   길이 공백으로 지운 사본(probe)에서 원자를 재는데, `p_{ref}` 처럼 **원자 자신에게
+        #   붙은 첨자**까지 공백이 되면 그 공백 앞에서 원자가 끊긴다 — `end`가 `p` 뒤에서
+        #   멈추고 `_{ref}`는 안 지워진 채 밖에 남는다. 그대로 감싸면
+        #   `\frac{p}{p}_{ref}` 처럼 첨자가 분수 밖으로 새 나간다 — 화면이 깨진다.
+        after = span[end:end + 2]
+        if before in ("\\", "{") or after[:1] in ("_", "^") or not _ATOM.match(num_text) or not _ATOM.match(den_text):
             manual.append(num_text + "/" + den_text)
             continue
         out = out[:at] + "\\frac{" + num_text + "}{" + den_text + "}" + out[end:]
@@ -97,7 +106,9 @@ def walk(node, trail, log, manual, key=None):
         return node
     if key == "svg":
         return node          # 삽화는 `svg_fraction.py` 의 몫 — 여기서 LaTeX 를 넣으면 안 된다
-    new, n, left = convert(node, key in MATH_ONLY_KEYS)
+    if is_unit_only_blank_answer(trail, node):
+        return node          # 「수치 + 단위」 답 — 단위 슬래시는 분수가 아니다(자와 같은 판정)
+    new, n, left = convert(node, is_whole_math_field(key, trail))
     if n:
         log.append((trail, node[:60], n))
     manual.extend((trail, w) for w in left)

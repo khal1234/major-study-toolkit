@@ -6,7 +6,7 @@
 
 왜 있나 — 「close 의 정의」에 한 칸이 비어 있었다
 ------------------------------------------------
-이 리포는 *"방지장치가 없으면 고친 게 아니다"* 를 규율로 갖고 있고
+이 리포는 *[발화 생략]* 를 규율로 갖고 있고
 (`AGENTS.md` 「close 의 정의」), `test_checks.py` 가 **검사가 결함을 잡는지**를 잠근다.
 그런데 **그 검사가 실제로 호출되는지**는 아무도 안 봤다.
 
@@ -17,7 +17,7 @@ buildlib 에 `def ..._issues()` 를 써 놓고 `lint_chapter` 나 `build_site` �
 훑지 않기 때문이다 — 그래서 **이미 있는 도구를 안 읽고 새로 만드는** 낭비가 반복됐다.
 
 **발상의 출처는 XSanity 개조 프로젝트다**(`_modding/scripts/check_orphan_checks.py`, 2026-08-08).
-거기서 열린 지적 — 시스템을 만들어 두기만 하고 실제로 잘 작동하는지는 아무도 확인하지 않았다는 것.
+거기서 열린 지적: *[발화 생략]*
 
 ★ **원본의 구멍은 고쳐서 가져왔다.** 원본은 등록처 텍스트에 **검사 자신의 파일**을 넣고
 `count >= 2` 로 판정해서, 독스트링에 사용법을 두 줄 적은 검사가 **자기 이름만으로 통과**했다
@@ -59,9 +59,9 @@ def _pick(*names):
 
 
 # ★★ **자리를 박아 두었더니 아무것도 안 훑고 「OK: 0 problems」 를 냈다** (2026-08-16).
-#   `TOOLS = ROOT/"tools"` 는 전공정리 배치이고 나루는 `도구/` 다. 나루에서 이 자는
+#   `TOOLS = ROOT/"tools"` 는 전공정리 배치이고 공용 폴더는 `도구/` 다. 공용 폴더에서 이 자는
 #   **도구 0개·검사 0개를 훑고 초록**이었다 — 「빈손인데 초록」은 이 계통이 가장 경계하는
-#   모양이다(*"범위를 확인하지 않은 0건은 '없다'가 아니다"*, 규칙 11).
+#   모양이다(*[발화 생략]*, 규칙 11).
 #   ★ 오늘 같은 부류 **네 번째**다: `check_narration`(ROOT.parent) · `feedback_lookup`
 #     (ROOT/기록) · `commit.py`(.claude/hooks·tools) · 그리고 이것.
 TOOLS = _pick("도구", "tools")
@@ -106,7 +106,7 @@ def python_sources() -> list[tuple[Path, str]]:
 def doc_sources() -> list[tuple[Path, str]]:
     """등록처가 될 수 있는 문서 — 규칙 문서 + 과목의 선언 파일."""
     # ★ 등록처의 **이름도 프로젝트마다 다르다** (2026-08-16). 전공정리는 `AGENTS.md` +
-    #   `docs/` 이고 나루는 `README.md` + `규칙/` 이다. 자리만 고치고 이 목록을 안 고쳤더니
+    #   `docs/` 이고 공용 폴더는 `README.md` + `규칙/` 이다. 자리만 고치고 이 목록을 안 고쳤더니
     #   **README 에 두 줄로 등록돼 있는 `audit_path_names.py` 가 고아로 신고됐다** —
     #   빈손 초록의 반대편, 즉 **거짓 빨강**이다. 둘 다 「범위를 안 보고 낸 판정」이다.
     paths = [ROOT / "AGENTS.md", ROOT / "CLAUDE.md", ROOT / "README.md"]
@@ -115,6 +115,11 @@ def doc_sources() -> list[tuple[Path, str]]:
         d = ROOT / extra
         if d.is_dir() and d != DOCS:
             paths += sorted(d.rglob("*.md"))
+    # 경로 규칙·스킬도 등록처다(2026-09-11 AGENTS 이관) — 안 훑으면 옮긴 절이 가리키던 도구가 거짓 고아가 된다
+    claude = ROOT / ".claude"
+    for sub, pat in (("rules", "*.md"), ("skills", "SKILL.md")):
+        if (claude / sub).is_dir():
+            paths += sorted((claude / sub).rglob(pat))
     # 과목 이름을 박지 않는다 — 폴더를 훑어 그 과목이 스스로 선언한 것을 읽는다
     paths += sorted(DATA.glob("*/index.json")) if DATA.is_dir() else []
     return [(p, read(p)) for p in paths if p.is_file()]

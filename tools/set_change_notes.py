@@ -1,6 +1,6 @@
 r"""변경점 하이라이트의 **사유**(`changeNote`)를 항목에 적는다.
 
-열린 날 2026-08-13. 빌드가 *"하이라이트 N건에 changeNote 가 없다"* 를 신고하기 시작한 뒤
+열린 날 2026-08-13. 빌드가 *[발화 생략]* 를 신고하기 시작한 뒤
 (같은 지적 4회 — `buildlib/review.py` 주석이 정본), **사유를 채우는 쪽에 도구가 없었다.**
 그래서 채우려면 절·카드마다 `Edit` 를 부르게 되고, 한 배치가 수십 건이라 그 자체가
 승인 피로가 된다(AGENTS 실행 규율 4 「파일 편집도 배치로」). 이 도구가 그 자리다.
@@ -19,8 +19,8 @@ r"""변경점 하이라이트의 **사유**(`changeNote`)를 항목에 적는다
   **앞 3건만** 보여 준다(`reviewNoteKey`). 그래서 같은 부류에는 **머리를 글자 그대로 같게**
   적어야 한다 — 조치 문장만 카드마다 다르게 쓴다. 머리가 갈리면 부류 12곳이 12개 부류가 된다.
 
-    python tools/set_change_notes.py --chapter=ch01.json --from=notes.json [--apply]
-    python tools/set_change_notes.py --chapter=ch01.json --list
+    python tools/set_change_notes.py --chapter=data/<과목>/ch01.json --from=notes.json [--apply]
+    python tools/set_change_notes.py --chapter=data/<과목>/ch01.json --list
 
 `--from` 파일은 `{"<항목 id>": "<사유>"}` 꼴의 JSON 이다(줄바꿈은 `\n`).
 """
@@ -47,6 +47,7 @@ COLLECTIONS = (
     ("derivation", lambda d: ((d.get("derivation") or {}).get("formulas") or [])),
     ("practice", lambda d: (d.get("practice") or [])),
     ("problems", lambda d: (d.get("problems") or [])),
+    ("textbookProblems", lambda d: ((d.get("textbookProblems") or {}).get("items") or [])),
 )
 
 
@@ -86,13 +87,13 @@ def apply_text(original, notes):
 
 def main():
     ap = argparse.ArgumentParser(description="변경점 하이라이트의 사유를 적는다")
-    ap.add_argument("--chapter", required=True, help="chNN.json")
+    ap.add_argument("--chapter", required=True, help="data/<과목>/chNN.json (이름뿐이면 SUBJECT 필요)")
     ap.add_argument("--from", dest="src", default="", help='{"id": "사유"} JSON 파일')
     ap.add_argument("--list", action="store_true", help="지금 사유 상태만 본다")
     ap.add_argument("--apply", action="store_true", help="실제로 파일을 고친다")
     args = ap.parse_args()
 
-    path = os.path.join(audit_content.DATA, args.chapter)
+    path = audit_content.chapter_file(args.chapter)
     if not os.path.isfile(path):
         sys.exit("없는 챕터다: " + path)
     with open(path, encoding="utf-8", newline="") as fh:

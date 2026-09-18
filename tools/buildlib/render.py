@@ -9,15 +9,41 @@ import subprocess
 from urllib.parse import quote
 
 from .checks_content import lint_chapter, resolve_review_prerequisites
-from .review import add_review_changes, viewer_changes_for
+from .review import add_review_changes, review_note_gate, viewer_changes_for
 from .textutil import BAD_CHARS
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+def review_set_from_map(ch_path):
+    """대응표(`chNN.objective-map.json`)가 `reviewSet` 이름을 선언하면 목표별 문항 번호를 묶어 낸다.
+    분모가 문제 묶음일 때만 뜻이 있다 — 교재 학습목표 목록이 분모인 대응표는 선언하지 않는다.
+    번호는 ref 의 앞 글자(R)를 뗀 것. 못 보는 것: 번호가 교재 번호와 실제로 맞는가(대응표를 쓸 때 사람이 본다).
+    """
+    from .checks_content import objective_map_path
+    mp = objective_map_path(ch_path)
+    if not os.path.exists(mp):
+        return None
+    with open(mp, encoding="utf-8") as f:
+        m = json.load(f)
+    label = m.get("reviewSet")
+    if not label:
+        return None
+    items = m.get("items") or []
+    by_lo, excluded = {}, []
+    for it in items:
+        num = re.sub(r"^[A-Za-z]+", "", it.get("ref", ""))
+        if it.get("excluded"):
+            excluded.append({"num": num, "why": it["excluded"]})
+            continue
+        for lo in it.get("objectives") or []:
+            by_lo.setdefault(lo, []).append(num)
+    return {"label": label, "total": len(items), "byObjective": by_lo, "excluded": excluded}
+
+
 def _shared_site_root():
     """main 워크트리의 경로를 찾는다 — **템플릿은 여기서 산다** (2026-09-02, 사용자 요청:
-    [사용자 발화 인용 생략]). `site/template/**`는 과목마다 사실이 다르지 않은 순수 공통이라, main 에서
+    *[발화 생략]*). `site/template/**`는 과목마다 사실이 다르지 않은 순수 공통이라, main 에서
     고치면 **머지 없이** 모든 과목이 다음 빌드부터 그 내용을 그대로 쓴다.
     `tools/**` 는 여기 대상이 아니다 — 그건 실행되는 코드 자체라 각 워크트리가 실제로
     갖고 있어야 돈다(그래서 스크립트 로직을 고칠 때는 여전히 머지가 필요하다).
@@ -167,7 +193,7 @@ def out_root():
       `build_site --all` 을 **검수 표시 꺼짐**으로 돌리는데, 그 빌드가 **그 워크트리의
       `site/` 를 그대로 덮어썼다.** 즉 **배포 한 번이 다른 과목 세션의 화면에서 변경점 표시를
       지운다** — 그 세션은 자기가 안 건드린 화면이 바뀐 줄 모른다. AGENTS 「기준선」 절이
-      [사용자 발화 인용 생략] 며 막아 온 바로 그 부류를, 배포 도구가 뒷문으로 하고 있었다.
+      *[발화 생략]* 며 막아 온 바로 그 부류를, 배포 도구가 뒷문으로 하고 있었다.
     ★ 그래서 이 세션은 번들 확인을 **일부러 안 돌리고** 회귀로 대신했다(2026-08-15) —
       «확인하려고 돌렸더니 남의 화면이 바뀌는» 자를 쓸 수는 없다.
     → 번들 빌드는 `BUILD_OUT_ROOT` 로 **딴 데다 쓴다.** 안 주면 지금까지와 똑같다.
@@ -218,8 +244,8 @@ def viewer_rev(template):
 def prepare_viewer(template):
     """뷰어 템플릿 → `(껍데기, {파일명: 본문})`. 자산 파일을 `site/_assets/` 에 쓴다.
 
-    한 프로세스에서 한 번만 쓴다(장마다 54번 쓸 이유가 없다). **낡은 자산은 지운다** —
-    안 지우면 워크트리마다 옛 해시가 쌓이고, 그 더미가 `deploy_all` 을 타고 번들로 간다.
+    한 프로세스에서 한 번만 쓴다. 이전 해시 자산은 유지한다. 빌드 도중 아직 갱신되지
+    않은 HTML과 열려 있는 독자 탭이 참조할 수 있으므로 여기서 지우면 CSS/JS가 404가 된다.
     """
     key = hashlib.sha256(template.encode("utf-8")).hexdigest()
     hit = _VIEWER_CACHE.get(key)
@@ -246,9 +272,6 @@ def prepare_viewer(template):
         if not os.path.exists(path):
             with open(path, "w", encoding="utf-8", newline="\n") as fh:
                 fh.write(body)
-    for name in os.listdir(asset_dir):
-        if _ASSET_RE.match(name) and name not in assets:
-            os.remove(os.path.join(asset_dir, name))
 
     _VIEWER_CACHE[key] = (shell, assets)
     return shell, assets
@@ -289,7 +312,14 @@ def note_keys(node):
 # ★ 목록에 아무거나 넣으면 화면이 죽으므로, 회귀가 **«뷰어가 이 키를 정말 안 읽는가»** 를 함께
 #   본다(`test_author_only_fields_never_ship`). `changeNote`·`reviewNote` 는 변경점 사유를
 #   화면에 띄우는 데 쓰이므로 **여기 넣으면 안 된다.**
-AUTHOR_ONLY_KEYS = ("rationale",)
+# ★ 2026-09-09 재발 — `noTheoryDiagramReason`(2026-09-09 신설)이 같은 길로 새어 나갔다.
+#   *[발화 생략]* 를 적는 판정 필드라 사용자 발화 인용이 그대로 들어 있고,
+#   뷰어는 이 키를 한 번도 안 읽는다(템플릿 조회 0건). 문항 층의 `noDiagramReason` 도 같다.
+#   **부류가 같으므로 낱말이 아니라 목록을 고친다** — 새 판정 필드를 만들 때 여기에 올린다.
+# ★ 2026-09-10 — `lintWaivers` 도 같은 부류다. 「이 경고를 왜 닫았나」를 적는 **판정 필드**이고
+#   뷰어는 이 키를 한 번도 안 읽는다(템플릿 조회 0건). 사유에 사용자 발화가 들어가는 것도 같다.
+#   검사·감사는 발행본이 아니라 **원본**을 읽으므로 여기 올려도 면제는 그대로 돈다.
+AUTHOR_ONLY_KEYS = ("rationale", "noTheoryDiagramReason", "noDiagramReason", "lintWaivers")
 
 
 def strip_author_only(node):
@@ -309,6 +339,12 @@ def build_chapter(template, subject, cfg, ch_path, chapter_nav, review_enabled, 
     num = ch["chapterNumber"]
     title = ch["chapterTitle"]
     ch = add_review_changes(ch, ch_path, review_enabled)
+    note_block = review_note_gate(ch, ch_path)
+    if note_block:
+        raise ValueError(ch_path + ": " + note_block)
+    review_set = review_set_from_map(ch_path)
+    if review_set:
+        ch = dict(ch, reviewSet=review_set)
     ch_json = json.dumps(strip_author_only(ch), ensure_ascii=False)
     if "</script" in ch_json.lower():
         raise ValueError(ch_path + ": data contains '</script' — cannot inject safely")
@@ -321,7 +357,7 @@ def build_chapter(template, subject, cfg, ch_path, chapter_nav, review_enabled, 
     html = html.replace("{{COVER_SUB}}", cfg.get("coverSub", ""))
     # ★ 과목 전용 UI 는 과목 플래그로만 붙인다 (2026-07-28).
     # 공통 템플릿에 `수증기 표` 링크가 **조건 없이** 박혀 있어 공학수학 화면에도 떴다
-    # (사용자 지적: "로컬호스트이고 공수인데 수증기 표 아직도 보이네").
+    # (사용자 지적: [발화 생략]).
     # SUBJECT_CONFIG 에 steamTables 플래그가 **이미 있었는데** tables.html 을 만들지 말지에만
     # 쓰였고 링크는 그 밖에 있었다 — 플래그가 없어서가 아니라 **한 곳에만 적용**해서 난 결함이다.
     # 템플릿에 과목 이름을 하드코딩하지 않는다: 공통 파일은 과목을 몰라야 한다
@@ -329,6 +365,14 @@ def build_chapter(template, subject, cfg, ch_path, chapter_nav, review_enabled, 
     steam_link = ('<a class="steam-table-link" href="tables.html" target="_blank"'
                   ' rel="noopener">수증기 표</a>') if cfg.get("steamTables") else ""
     html = html.replace("{{STEAM_LINK}}", steam_link)
+    # 실험 페이지 단추 — `index.json` 의 그 장 항목 `labs: [{href, title}]` 가 정본이다
+    # (2026-09-12, 사용자 *[발화 생략]*).
+    # 과목 이름은 여기 없다 — 장 항목이 선언한 것만 붙는다.
+    mine_nav = next((c for c in (chapter_nav or []) if c.get("number") == num), {})
+    lab_links = "".join(
+        '<a class="steam-table-link lab-link" href="' + lab["href"] + '">' + lab["title"] + '</a>'
+        for lab in (mine_nav.get("labs") or []))
+    html = html.replace("{{LAB_LINKS}}", lab_links)
     html = html.replace("{{CHAPTER_NAV_JSON}}", json.dumps(chapter_nav, ensure_ascii=False))
     # ★★ **사이드바는 이 과목만 싣는다** (2026-08-15, 사용자 지시). 예전에는 전 과목 트리를
     #   장마다 넣고 뷰어가 «이 과목만» 설정으로 접었는데, 설정이면 **데이터는 어차피 다 실린다.**
@@ -345,7 +389,7 @@ def build_chapter(template, subject, cfg, ch_path, chapter_nav, review_enabled, 
     html = html.replace("{{LOCAL_PORTS_JSON}}", json.dumps(local_ports or {}, ensure_ascii=False))
     # ★★ 앞 장들에서 **이미 보여 준** 같은 부류의 건수. 전 장 공통 수정을 장마다 3개씩
     #   보여 주면 7장에서 21번이고, 그건 «한 번 이해하면 나머지는 정보 0» 인 것을 21번 보는 것이다
-    #   (사용자 2026-08-13: [사용자 발화 인용 생략]). 화면에는 전역 상태가 없으므로
+    #   (사용자 2026-08-13: *[발화 생략]*). 화면에는 전역 상태가 없으므로
     #   **빌드가** 세어 넣는다 — 챕터 HTML 은 서로 독립이다.
     html = html.replace("{{REVIEW_NOTE_SEEN_JSON}}",
                         json.dumps(dict(note_seen or {}), ensure_ascii=False))
@@ -420,6 +464,7 @@ def build_tables_page(subject):
             raise ValueError(tut_path + ": data contains '</script' — cannot inject safely")
 
     html = (strip_dev_comments(include_parts(template))
+            .replace("{{SUBJECT}}", subject)
             .replace("{{STEAM_JSON}}", steam_json)
             .replace("{{TUTORIAL_JSON}}", tut_json))
     if "{{" in html:
@@ -437,6 +482,41 @@ def build_tables_page(subject):
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(html)
     return out_path
+
+
+LAB_DIRNAME = "lab"
+
+
+def lab_pages(subject):
+    """`data/<과목>/lab/*.html` — 손으로 쓴 실험 페이지의 원본 목록(정렬, 없으면 빈 목록).
+
+    잰다: 그 폴더의 `.html` 만. 못 본다: 페이지가 참조하는 상대 경로가 실제로 있는지.
+    """
+    src_dir = os.path.join(ROOT, "data", subject, LAB_DIRNAME)
+    if not os.path.isdir(src_dir):
+        return []
+    return sorted(os.path.join(src_dir, n) for n in os.listdir(src_dir) if n.endswith(".html"))
+
+
+def copy_lab_pages(subject):
+    """실험 페이지를 `site/<과목>/lab/` 로 복사한다. 원본은 `data/` 쪽 하나뿐이다(절대 규칙 1).
+
+    돌려주는 것: 쓴 산출물 경로 목록. 문턱 없음 — 있는 만큼 복사한다.
+    """
+    pages = lab_pages(subject)
+    if not pages:
+        return []
+    out_dir = os.path.join(out_root(), "site", subject, LAB_DIRNAME)
+    os.makedirs(out_dir, exist_ok=True)
+    written = []
+    for src in pages:
+        with open(src, encoding="utf-8") as fh:
+            html = fh.read()
+        out_path = os.path.join(out_dir, os.path.basename(src))
+        with open(out_path, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(html)
+        written.append(out_path)
+    return written
 
 
 HOME_TEMPLATE = """<!doctype html>
@@ -477,7 +557,7 @@ HOME_TEMPLATE = """<!doctype html>
 body{margin:0; background:var(--paper); color:var(--ink);
   font-family:"Jeongri Sans","Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   font-size:var(--fs-body); line-height:1.7; -webkit-font-smoothing:antialiased;}
-/* ★★ 과목이 늘면 **스크롤이 일이 된다** (사용자 지적 2026-08-15: [사용자 발화 인용 생략]). 실측(접힌 카드 87px + 여백 14px):
+/* ★★ 과목이 늘면 **스크롤이 일이 된다** (사용자 지적 2026-08-15: *[발화 생략]*). 실측(접힌 카드 87px + 여백 14px):
    12과목 ≈ 1.4k px(2화면) · **30과목 ≈ 3.2k px(4.5화면)**.
    처방 둘 — ⑴ **학기로 묶어** 찾는 범위를 줄이고 ⑵ **격자**로 세로 길이를 1/2~1/3로 만든다.
    글줄이 읽히는 폭(≈760px)은 머리말·면책만 지키면 된다 — 카드는 제목 한 줄이라 넓어도 된다. */
@@ -544,8 +624,8 @@ body{margin:0; background:var(--paper); color:var(--ink);
 </div>
 <script>
 // ★★ **로컬에서는 과목마다 포트가 다르다 — 주소를 런타임에 고른다** (2026-08-15).
-//   사용자: [사용자 발화 인용 생략] ·
-//   [사용자 발화 인용 생략].
+//   사용자: *[발화 생략]* ·
+//   *[발화 생략]*.
 //   ★ **빌드 시점에 박지 않는 이유:** 같은 `index.html` 이 로컬(포트별)과 배포 번들(한 사이트)
 //     양쪽에서 맞아야 한다. 빌드가 절대 주소를 박으면 배포본이 로컬을 가리키게 된다.
 //   ★ 예전에는 이 판정이 **장마다**(300장) 실렸다. 사이드바를 «이 과목만» 으로 좁히면서
@@ -575,7 +655,8 @@ var LOCAL_PORTS = {{LOCAL_PORTS_JSON}};
 def build_home(subjects, ports=None):
     """과목 랜딩 페이지(site/index.html) 생성 — 빌드된 챕터만 링크, 나머지는 회색 표시.
 
-    subjects: [{"name": 과목명, "coverSub": 부제, "chapters": [{number,title,status}]}]
+    subjects: [{"name": 과목명, "coverSub": 부제, "chapters": [{number,title,status}],
+                "labs": [{href,title,chapterNumber,chapterTitle}]}]
     """
     def esc(s):
         return _htmlmod.escape(str(s))
@@ -585,7 +666,7 @@ def build_home(subjects, ports=None):
     #   이 파일만 옛 세상을 말한다(AGENTS 「공통 도구에 과목별 사실을 박지 않는다」).
     #   ★ 선언이 없는 과목은 **「학기 미정」으로 맨 뒤**에 둔다. 조용히 섞으면 «아직 안 적었다»가
     #     화면에서 안 보이고, 그러면 영영 안 적힌다(2-2 일곱 과목이 지금 그 상태다).
-    # ★★ **교양은 학기가 아니라 분류로 뺀다** (2026-08-15, 사용자 지시: [사용자 발화 인용 생략]). 학기 축에 섞으면 «2-2 전공 여섯 + 교양 하나» 가 한 덩이가
+    # ★★ **교양은 학기가 아니라 분류로 뺀다** (2026-08-15, 사용자 지시: *[발화 생략]*). 학기 축에 섞으면 [발화 생략] 가 한 덩이가
     #   되는데, 찾는 사람 머릿속에서 그 둘은 다른 서랍이다. 그래서 **묶는 축을 하나 더** 둔다.
     #   교양은 학기와 무관하게 **맨 뒤**다 — 전공을 찾으러 오는 자리이기 때문이다.
     groups = {}
@@ -619,6 +700,16 @@ def build_home(subjects, ports=None):
                 rows += '<a class="hc-row" href="' + href + '">' + inner + '</a>'
             else:
                 rows += '<div class="hc-row disabled" title="작성 예정">' + inner + '</div>'
+        lab_rows = ""
+        for lab in s.get("labs", []):
+            href = quote(s["name"] + "/" + lab["href"], safe="/")
+            title = lab.get("title") or "실험실"
+            lab_rows += ('<a class="hc-row hc-lab" href="' + href + '">'
+                         '<span class="hc-no">LAB</span>'
+                         '<span class="hc-title">' + esc(title) + '</span>'
+                         '<span class="hc-badge done">실험실</span></a>')
+        if lab_rows:
+            rows += '<div class="hc-labs" aria-label="실험실">' + lab_rows + '</div>'
         return ('<details class="subject" data-subject="' + esc(s["name"]) + '">'
                 '<summary class="sc-head">'
                 '<span class="sc-headtext">'
@@ -657,7 +748,7 @@ def lint_viewer_css_comments(template):
 
     **무엇이 새어나갔나.** 주석 블록 끝의 `*/` 를 남겨 둔 채 그 아래에 설명을 덧붙였더니
     `… 않는다 */` + 산문 + `*/` 가 되어 **CSS 가 그 자리에서 깨졌다.** 브라우저는 조용히
-    회복하면서 뒤따르는 규칙(`.imath .frac` 등)을 통째로 버렸고, 화면은 [사용자 발화 인용 생략]
+    회복하면서 뒤따르는 규칙(`.imath .frac` 등)을 통째로 버렸고, 화면은 *[발화 생략]*
     상태가 됐다. **빌드는 전부 통과했다** — HTML 로서는 아무 문제가 없기 때문이다.
 
     ★ 이 부류가 위험한 이유: 실패가 **화면에만** 나타나고 도구는 전부 초록이다. DOM 을 재

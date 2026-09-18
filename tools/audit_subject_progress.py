@@ -5,7 +5,7 @@
     python tools/audit_subject_progress.py --cards    # 이론·유도·문풀·연습 개수까지
     python tools/audit_subject_progress.py --only=thermo,math
 
-열린 날 2026-08-15. 사용자 질문 *"다른 과목은 어떻게 하고 있지?"* 에 답할 자가 없었다.
+열린 날 2026-08-15. 사용자 질문 *[발화 생략]* 에 답할 자가 없었다.
 `inspect_data.py` 는 **자기 워크트리 하나**만 보고, `verify_all.py` 는 «아직 서는가»(건강)를
 보지 «얼마나 왔나»(진도)를 안 본다. 그래서 물을 때마다 갈래마다 손으로 뒤지게 된다.
 
@@ -47,24 +47,23 @@ def git(*args):
     return (r.stdout or "") if r.returncode == 0 else ""
 
 
-def branches():
-    """워크트리가 딸린 갈래 이름. `.bare` 와 `main` 은 뺀다 — 과목 콘텐츠가 없는 자리다."""
+def subjects(rev="HEAD"):
+    """`data/<과목>/` **전부**. 이름을 코드에 박지 않고 트리에서 찾는다.
+
+    ★★ **2026-09-07 — 이 자는 죽어 있었다.** 옛 판은 `git worktree list` 로 갈래를 세고
+      갈래마다 **첫 과목 하나**만 봤다(«과목 = 브랜치 = 워크트리» 전제). 21과목을 한 트리로
+      합친 뒤 갈래가 `main` 하나뿐이라 목록이 비었고, 도구는 **죽지 않고 빈 표를 냈다** —
+      인계 문서가 잡은 셋(`discover_data_dir`·`audit_convention_drift`·`backup_bundle`)과
+      **같은 부류의 넷째**다. 회귀는 그때 `subject_dir()`(첫 과목 하나)만 재고 있어서 초록이었다.
+      → 이제 전 과목을 돌려주고, **훑은 과목 수를 화면에 찍으며 0이면 exit 1** 이다.
+    ★ 숨김 폴더(`.textbook-fingerprint` 등)는 과목이 아니다.
+    """
     out = []
-    for line in git("worktree", "list", "--porcelain").splitlines():
-        if line.startswith("branch "):
-            name = line.split("/")[-1].strip()
-            if name and name != "main":
-                out.append(name)
-    return out
-
-
-def subject_dir(branch):
-    """그 갈래의 `data/<과목>/` — 이름을 코드에 박지 않고 트리에서 찾는다."""
-    for line in git("ls-tree", "--name-only", branch, "data/").splitlines():
+    for line in git("ls-tree", "--name-only", rev, "data/").splitlines():
         name = line.strip().rstrip("/")
-        if name and name != "data":
-            return name
-    return None
+        if name and name != "data" and not name.split("/")[-1].startswith("."):
+            out.append(name)
+    return sorted(out)
 
 
 def blob(branch, path):
@@ -98,16 +97,14 @@ def main():
             only = {s.strip() for s in flag.split("=", 1)[1].split(",") if s.strip()}
 
     rows = []
-    for branch in branches():
-        if only and branch not in only:
+    folders = subjects()
+    for folder in folders:
+        name = folder.split("/")[-1]
+        if only and name not in only:
             continue
-        folder = subject_dir(branch)
-        if not folder:
-            rows.append((branch, "—", None, "데이터 폴더 없음"))
-            continue
-        index = blob(branch, folder + "/index.json")
+        index = blob("HEAD", folder + "/index.json")
         if index is None:
-            rows.append((branch, folder.split("/")[-1], None, "index.json 없음·못 읽음"))
+            rows.append((name, None, "index.json 없음·못 읽음"))
             continue
         chapters = index.get("chapters") or []
         status = {}
@@ -116,34 +113,41 @@ def main():
         cards = None
         if want_cards:
             names = [n.split("/")[-1] for n in
-                     git("ls-tree", "--name-only", branch, folder + "/").splitlines()
+                     git("ls-tree", "--name-only", "HEAD", folder + "/").splitlines()
                      if n.strip().endswith(".json") and "/ch" in n]
-            cards = count_cards(branch, folder, sorted(names))
-        rows.append((branch, folder.split("/")[-1], (len(chapters), status), cards))
+            cards = count_cards("HEAD", folder, sorted(names))
+        rows.append((name, (len(chapters), status), cards))
 
     head = git("rev-parse", "--abbrev-ref", "HEAD").strip()
-    print("과목 진도 — **마지막 커밋 기준**이다 (git show 로 읽는다 · 남의 워크트리는 안 본다)")
-    print("          지금 갈래: %s · 워크트리의 미커밋 변경은 이 표에 안 보인다\n" % head)
-    cols = "%-11s %-9s %5s %5s %5s" % ("갈래", "과목", "챕터", "done", "그 외")
+    print("과목 진도 — **마지막 커밋 기준**이다 (`git show HEAD:` 로 읽는다)")
+    print("          지금 갈래: %s · 미커밋 변경은 이 표에 안 보인다" % head)
+    print("          훑은 과목 %d개%s\n"
+          % (len(folders), (" · 표시 %d개" % len(rows)) if only else ""))
+    cols = "%-22s %5s %5s %5s" % ("과목", "챕터", "done", "그 외")
     if want_cards:
         cols += " %6s %5s %5s %5s" % ("이론", "유도", "문풀", "연습")
     print(cols)
     print("-" * (len(cols) + 8))
 
-    for branch, subject, chap, cards in rows:
+    for subject, chap, cards in rows:
         if chap is None:
-            print("%-11s %-9s   —  (%s)" % (branch, subject, cards))
+            print("%-22s   —  (%s)" % (subject, cards))
             continue
         total, status = chap
         done = status.get("done", 0)
-        line = "%-11s %-9s %5d %5d %5d" % (branch, subject, total, done, total - done)
+        line = "%-22s %5d %5d %5d" % (subject, total, done, total - done)
         if want_cards and isinstance(cards, list):
             line += " %6d %5d %5d %5d" % tuple(cards)
         print(line)
 
     if not want_cards:
-        print("\n(`--cards` 를 붙이면 이론·유도·문풀·연습 개수까지 센다 — 갈래마다 챕터를 다 읽어 느리다)")
+        print("\n(`--cards` 를 붙이면 이론·유도·문풀·연습 개수까지 센다 — 챕터를 다 읽어 느리다)")
     print("※ 이 도구는 **판정하지 않는다.** 다음에 무엇을 할지는 위 수를 보고 사람이 정한다.")
+    # ★ 「범위를 안 밝힌 0건」을 막는다 — 한 과목도 못 읽었으면 그건 진도가 아니라 고장이다.
+    if not folders:
+        print("\n[고장] data/ 아래 과목을 하나도 못 읽었다 — 빈 표를 진도로 읽지 말 것.",
+              file=sys.stderr)
+        return 1
     return 0
 
 

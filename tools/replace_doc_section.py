@@ -45,14 +45,24 @@ def _heading_level(line):
     return hashes
 
 
-def section_span(lines, heading):
+def section_span(lines, heading, prefix=False):
     """`heading` 줄부터 **같거나 더 높은 층의 다음 제목 직전**까지의 [시작, 끝) 을 돌려준다.
 
     제목이 없거나 둘 이상이면 예외다 — 어느 쪽이든 사람이 봐야 하는 상태이지,
     도구가 «첫 번째 것» 을 골라도 되는 자리가 아니다.
+    `prefix=True` 면 제목 줄의 **앞부분**으로 찾는다 — 백틱 든 제목을 명령줄에 안 쓰려고.
+    유일성 판정은 같다(펜스 밖의 제목 줄만 센다).
     """
     want = heading.rstrip()
-    hits = [i for i, ln in enumerate(lines) if ln.rstrip() == want]
+    if prefix:
+        in_fence, hits = False, []
+        for i, ln in enumerate(lines):
+            if ln.lstrip().startswith("```"):
+                in_fence = not in_fence
+            elif not in_fence and _heading_level(ln) and ln.startswith(want):
+                hits.append(i)
+    else:
+        hits = [i for i, ln in enumerate(lines) if ln.rstrip() == want]
     if not hits:
         raise LookupError(f"절 제목을 못 찾았다: {want!r}")
     if len(hits) > 1:
@@ -87,20 +97,29 @@ def section_span(lines, heading):
     return start, end
 
 
-def replace_section(text, heading, body):
+def replace_section(text, heading, body, prefix=False):
     lines = text.splitlines(keepends=True)
-    start, end = section_span(lines, heading)
+    start, end = section_span(lines, heading, prefix)
     body_lines = body.splitlines(keepends=True)
     if body_lines and not body_lines[-1].endswith("\n"):
         body_lines[-1] += "\n"
     return "".join(lines[:start] + body_lines + lines[end:]), end - start, len(body_lines)
 
 
+def section_text(text, heading, prefix=False):
+    """갈아끼우기 전의 그 절 본문(제목 줄 포함) — `--move-to` 가 옮겨 적는 것."""
+    lines = text.splitlines(keepends=True)
+    start, end = section_span(lines, heading, prefix)
+    return "".join(lines[start:end])
+
+
 def main():
     ap = argparse.ArgumentParser(description="문서의 절 하나를 파일 내용으로 갈아끼운다")
     ap.add_argument("--file", required=True, help="고칠 문서(예: AGENTS.md)")
-    ap.add_argument("--heading", required=True, help="갈아끼울 절의 제목 줄 전체")
+    ap.add_argument("--heading", required=True, help="갈아끼울 절의 제목 줄 전체(--heading-prefix 면 앞부분)")
+    ap.add_argument("--heading-prefix", action="store_true", help="제목 줄의 앞부분으로 찾는다")
     ap.add_argument("--from", dest="src", required=True, help="새 본문 파일(제목 줄 포함)")
+    ap.add_argument("--move-to", help="원래 절을 이 파일 끝에 덧붙인다(경로 규칙·스킬로 옮길 때)")
     ap.add_argument("--apply", action="store_true", help="실제로 쓴다(없으면 세기만 한다)")
     args = ap.parse_args()
 
@@ -110,9 +129,17 @@ def main():
     body = src.read_text(encoding="utf-8")
 
     try:
-        new_text, old_n, new_n = replace_section(text, args.heading, body)
+        new_text, old_n, new_n = replace_section(text, args.heading, body, args.heading_prefix)
+        moved = section_text(text, args.heading, args.heading_prefix)
     except LookupError as exc:
         sys.exit(f"[절 교체] {exc}")
+    if args.move_to:
+        print(f"  옮길 곳 {args.move_to} (+{moved.count(chr(10))}줄)")
+        if args.apply:
+            dest = Path(args.move_to)
+            prev = dest.read_text(encoding="utf-8") if dest.is_file() else ""
+            sep = "" if not prev or prev.endswith("\n\n") else ("\n" if prev.endswith("\n") else "\n\n")
+            dest.write_text(prev + sep + moved.rstrip("\n") + "\n", encoding="utf-8", newline="\n")
 
     before = text.count("\n")
     after = new_text.count("\n")

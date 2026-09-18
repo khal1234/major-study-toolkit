@@ -28,7 +28,7 @@ REQUIRED_AGENTS_MARKERS = (
 #   한 순간 그 과목 빌드가 통째로 멈췄다(열역학 exit 1 — 데이터는 멀쩡한데 preflight 에서 죽는다).
 #   즉 「이관」과 「그 절을 읽는 자」가 따로 놀았다. 내린 자리도 함께 보게 한다 —
 #   절을 또 내리면 여기 한 줄을 더한다.
-CONTRACT_FILES = ("AGENTS.md", "docs/삽화-규격.md")
+CONTRACT_FILES = ("CLAUDE.md", "docs/삽화-규격.md")
 
 
 def read_contract_text(root=ROOT):

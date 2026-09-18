@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-"""**세션 시작에 실리는 지침의 총량**을 잰다 — 래칫 (신설 2026-08-16).
+"""**이 리포가 세션 시작에 싣는 지침의 총량**을 잰다 — 래칫 (신설 2026-08-16).
+
+★ 범위를 이름에 박아 둔다(2026-09-12, Codex 검토 F07): 소계는 **프로젝트 정적 지침**뿐이다.
+  사용자 층(`~/.claude/rules`)도 매 세션 실리지만 리포 밖이라 래칫에 안 넣고 참고로만 찍는다
+  (`user_layer_files`). 「실제로 로드된 문맥」은 또 다른 수이고 이 자는 그것을 못 잰다.
 
     python 도구/audit_guide_size.py [프로젝트]      # 지금 크기와 기준선 대비 증감
     python 도구/audit_guide_size.py . --accept       # 지금 크기를 기준선으로 받는다
 
-**왜 이 자인가** (사용자 물음 2026-08-16): [사용자 발화 인용 생략]
+**왜 이 자인가** (사용자 물음 2026-08-16): *[발화 생략]*
 
 ★★ **재 보니 확 늘어난 순간이 없었다.** 전공정리 `AGENTS.md` 실측 —
    하루 130~260줄씩 **매일** 자라 143KB(8/12) → 214KB(8/16)가 됐고, 총 2,228줄 중
@@ -16,11 +20,11 @@
     있고(실사고가 규칙이 된다), 상한을 근거 없이 박으면 그게 15항이 금지한 그것이다.
   - **래칫이다** — 기준선보다 늘면 신고하고 줄면 조용하다. `audit_magic_numbers` 와 같은 형태.
   - ★ **문서 안에 손으로 적은 크기는 반드시 낡는다.** 실제로 `AGENTS.md` 는 자기를
-    [사용자 발화 인용 생략] 라고 적은 채 214KB 가 돼 있었다(8/12에 재고 아무도 다시 안 쟀다).
+    *[발화 생략]* 라고 적은 채 214KB 가 돼 있었다(8/12에 재고 아무도 다시 안 쟀다).
     **그 줄을 지우고 이 자를 가리키는 것**이 이 도구가 있는 두 번째 이유다.
 
 ★ **한 파일이 아니라 「실리는 것 전부」를 잰다.** `CLAUDE.md` 가 `@AGENTS.md` 처럼
-  import 하는 것까지 따라가 합을 낸다 — 물음이 [사용자 발화 인용 생략] 이기 때문이다.
+  import 하는 것까지 따라가 합을 낸다 — 물음이 *[발화 생략]* 이기 때문이다.
   import 없이 `docs/` 에 둔 것은 **안 실리므로 안 센다**(그게 「올릴 자격」이 시키는 배치다).
 
 ★ **토큰은 이 자가 못 잰다.** 줄·글자·바이트는 잰 값이고, 토큰은 `messages.count_tokens`
@@ -72,6 +76,43 @@ def loaded_files(root):
     return out
 
 
+def scoped_files(root):
+    """`.claude/rules/**/*.md` 와 `.claude/skills/*/SKILL.md` → [(이름, 경로, 종류)].
+
+    종류: `상시`(규칙인데 `paths:` 없음 — 세션 시작에 실린다) · `경로`(그 파일을 Read 할 때) ·
+    `스킬`(부를 때 본문이 실린다). 이름은 `.claude/` 아래 상대경로라 `SKILL.md` 끼리 안 겹친다.
+    못 보는 것: 스킬 description 은 매 세션 실리는데 이 자는 파일 전체를 한 줄로 센다.
+    """
+    base = root / ".claude"
+    out = []
+    if (base / "rules").is_dir():
+        for p in sorted((base / "rules").rglob("*.md")):
+            head = p.read_text(encoding="utf-8", errors="replace")
+            front = head.split("\n---", 1)[0] if head.startswith("---") else ""
+            kind = "경로" if re.search(r"(?m)^paths\s*:", front) else "상시"
+            out.append((p.relative_to(base).as_posix(), p, kind))
+    if (base / "skills").is_dir():
+        for p in sorted((base / "skills").glob("*/SKILL.md")):
+            out.append((p.relative_to(base).as_posix(), p, "스킬"))
+    return out
+
+
+def user_layer_files():
+    """사용자 층(`~/.claude/rules/*.md`) → [(이름, 크기)]. 없으면 빈 목록.
+
+    ★ **소계에도 래칫에도 안 넣는다 — 보이기만 한다**(2026-09-12, Codex 검토 F07).
+      이 파일들은 매 세션 실리는데 이 자는 프로젝트 것만 세면서 출력 머리에
+      *[발화 생략]* 이라고 적어, 읽는 사람이 그 수를 전체로 읽었다.
+      **기준선에 넣지 않는 이유**: 리포가 고칠 수 없는 남의 파일이라(규칙 5) 래칫에 넣으면
+      우리가 안 건드린 변경으로 기준선이 깨진다. 읽기만 한다 — 쓰지 않는다.
+    못 보는 것: 메모리 색인 · 스킬 description · 하네스가 붙이는 문맥.
+    """
+    base = Path.home() / ".claude" / "rules"
+    if not base.is_dir():
+        return []
+    return [("~/.claude/rules/" + p.name, measure(p)) for p in sorted(base.glob("*.md"))]
+
+
 def measure(path):
     text = path.read_text(encoding="utf-8", errors="replace")
     return {
@@ -103,7 +144,7 @@ HEADER_MARKS = ("세션에 실리는 지침의 크기 기준선", "형식: <파�
 def kept_notes(path):
     """기준선 파일에서 **사람이 손으로 적은 주석**만 돌려준다 — 세 줄짜리 머리말은 뺀다.
 
-    `--accept` 는 파일을 통째로 다시 쓴다. 그래서 [사용자 발화 인용 생략] 같은
+    `--accept` 는 파일을 통째로 다시 쓴다. 그래서 *[발화 생략]* 같은
     판정을 적어 두면 다음 `--accept` 가 말없이 지웠다(2026-08-23). 사유가 사라지면
     같은 줄이 다시 들어오는 것을 아무도 못 막는다.
     """
@@ -137,25 +178,40 @@ def main():
     total = {"lines": 0, "chars": 0, "bytes": 0}
     rows, grown = [], []
 
-    for f in files:
+    entries = [(f.name, f, "시작") for f in files] + scoped_files(root)
+    kinds = {}
+    for name, f, kind in entries:
         m = measure(f)
-        for k in total:
-            total[k] += m[k]
-        name = f.name
+        kinds[name] = kind
+        if kind in ("시작", "상시"):
+            for k in total:
+                total[k] += m[k]
         was = base.get(name)
         delta = "" if was is None else ("  기준선 %d → **+%d**" % (was, m["lines"] - was)
-                                        if m["lines"] > was else "  기준선 %d (줄었다)" % was)
+                                        if m["lines"] > was else
+                                        "  기준선 %d (그대로)" % was if m["lines"] == was else
+                                        "  기준선 %d → %d (줄었다)" % (was, m["lines"]))
         if was is not None and m["lines"] > was:
             grown.append((name, was, m["lines"]))
         rows.append((name, m, delta if was is not None else "  (기준선 없음)"))
 
-    print("[지침 크기] %s — 세션 시작에 실리는 것 %d개" % (root.name, len(files)))
-    for name, m, delta in rows:
+    always = [r for r in rows if kinds[r[0]] in ("시작", "상시")]
+    print("[지침 크기] %s — **프로젝트** 정적 지침 %d개" % (root.name, len(always)))
+    for name, m, delta in always:
         print("  %-22s %6d줄 · %7d글자 · %4dKB%s"
               % (name, m["lines"], m["chars"], m["bytes"] // 1024, delta))
     print("  %-22s %6d줄 · %7d글자 · %4dKB"
-          % ("합계", total["lines"], total["chars"], total["bytes"] // 1024))
-    print("  ※ 토큰은 이 자가 못 잰다 — `messages.count_tokens` 가 정본이다")
+          % ("소계(프로젝트)", total["lines"], total["chars"], total["bytes"] // 1024))
+    scoped = [r for r in rows if kinds[r[0]] not in ("시작", "상시")]
+    if scoped:
+        print("  조건부로 실리는 것 %d개 (소계에 안 넣는다)" % len(scoped))
+        for name, m, delta in scoped:
+            print("  %-32s %s %5d줄%s" % (name, kinds[name], m["lines"], delta))
+    for name, m in user_layer_files():
+        print("  %-32s %s %5d줄 · %6d글자" % (name, "사용자층", m["lines"], m["chars"]))
+    print("  ※ 위 소계는 **이 리포가 고칠 수 있는 것**만이다 — 사용자 층(`~/.claude/rules`)도")
+    print("     매 세션 실리지만 리포 밖이라 래칫에 넣지 않는다(규칙 5). 못 세는 것: 메모리 색인 ·")
+    print("     스킬 description · 하네스 문맥. 토큰은 `messages.count_tokens` 가 정본이다")
 
     if a.accept:
         # ★★ **파일 집합이 바뀌면 덮기 전에 보여 준다** (2026-08-16, 전공정리 되먹임).

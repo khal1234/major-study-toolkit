@@ -2,8 +2,7 @@
 
 왜 또 만드나 (같은 지적 4회차, 2026-08-15)
 -------------------------------------------
-*"이거 아직도 나오네. 저건 나한테 결과가 아니라 과정이라 「나 밥먹었어요. 화장실
-갔어요.」로밖에 안 보인다고 고치라 했는데 … **so what 이 없잖아**"*
+*[발화 생략]*
 
 이번 세션에서 실제로 있던 일:
 
@@ -14,11 +13,11 @@
   ⑷ 세션 끝 실측: **진행 중계 198회 · 19,834자.**
 
 즉 **규칙도 있었고 계측도 있었는데 둘 다 안 막았다.** 둘 다 「읽는 것」이라서다.
-이 저장소의 규율 그대로다 — *"적어두는 것은 방지장치가 아니다. 돌리는 것이 방지장치다."*
+이 저장소의 규율 그대로다 — *[발화 생략]*
 
 왜 판단형 규칙이 안 먹히나
 --------------------------
-6b-3 은 문장마다 *"이건 누구에게 하는 말인가"* 를 묻게 한다. 그런데 **그 순간에는
+6b-3 은 문장마다 *[발화 생략]* 를 묻게 한다. 그런데 **그 순간에는
 언제나 「사용자에게」로 답이 나온다** — 방금 내가 알아낸 것이라서 값있어 보인다.
 판단이 필요한 선은 매번 통과된다. 그래서 **판단이 필요 없는 선**으로 바꾼다:
 
@@ -49,11 +48,11 @@
     settings.json 의 Stop 훅:
         python "$CLAUDE_PROJECT_DIR/도구/check_narration.py" --last-turn
 
-  *"구구절절이 아직도 보이네"* — **조항이 실려 있는데도** 재발했다(전공정리 ee 세션).
+  *[발화 생략]* — **조항이 실려 있는데도** 재발했다(전공정리 ee 세션).
   실측하니 판정은 멀쩡한데 **받는 문이 없었다:** `commit.py` 는 `check=False` 로 부르고
   종료코드를 버리며(«커밋 결과를 뒤집지 않는다» 는 계약), `close_report` 는 세기만 하고,
-  훅 여덟 중 이 자를 부르는 것이 **0개**였다. 나루 `.claude/settings.json` 이 이미 2026-08-16 에
-  *"그마저 FAIL 인 채로 커밋·푸시가 다 나갔다"* 고 적어 뒀는데 그 줄이 여태 그대로였다.
+  훅 여덟 중 이 자를 부르는 것이 **0개**였다. 공용 폴더 `.claude/settings.json` 이 이미 2026-08-16 에
+  *[발화 생략]* 고 적어 뒀는데 그 줄이 여태 그대로였다.
 
   **왜 커밋·닫기로는 원리적으로 못 막나.** 중계는 **턴 안에서** 생기고 사용자가 그 자리에서
   읽는다 — 커밋 시점엔 이미 읽힌 뒤다. 「방지장치의 트리거는 반드시 하는 일에 건다」가 꼽은
@@ -78,7 +77,7 @@ force_utf8()
 ROOT = Path(__file__).resolve().parent.parent
 SESSIONS = Path.home() / ".claude" / "projects"
 
-# 사용자 발화 1회당 허용 중계 줄 수. 위 「하한을 어디에 두나」 참조 —
+# 사용자 발화 1회당 허용 중계 줄 수. 위 [발화 생략] 참조 —
 # 그 한 줄이 곧 그 발화에 대한 최종 보고다.
 MAX_PER_USER_TURN = 1.0
 # 발화가 이보다 적으면 비율이 요동쳐 판정이 소음이 된다(`cost_brief` 와 같은 규율).
@@ -86,10 +85,10 @@ MIN_TURNS = 3
 
 # ── 두 번째 잣대: **굵은 제목으로 시작하는가** (사용자 제안 2026-08-15) ──────
 #
-# *"굵은 글자로 좀 크게 주제로 나올만한 것부터 나에게 적어서 보여주게 하면 안돼?"*
+# *[발화 생략]*
 #
 # ★ 이게 **판단형 규칙을 셀 수 있게 만든다.** 「값어치 있나」는 매번 통과되지만
-#   *"이 문장을 제목으로 쓸 수 있나"* 는 안 그렇다 — **행위 보고는 제목이 못 된다.**
+#   *[발화 생략]* 는 안 그렇다 — **행위 보고는 제목이 못 된다.**
 #   「현재 판을 먼저 보존합니다」·「나머지를 봅니다」는 제목으로 쓸 수 없고,
 #   「등록부가 오늘 할 것을 손으로 쓴 페이지로 적어 뒀다」는 제목이 된다.
 #   즉 **제목을 못 붙이겠으면 그건 안 써도 되는 말**이다.
@@ -112,6 +111,8 @@ MIN_HEAD_RATIO = 0.60
 #   ⑴ 그 줄에 알파벳 글자가 있고 한글 글자보다 많으면 위반(영어로 새는 것)
 #   ⑵ 한글로 끝나는 문장인데 존댓말 종결어미가 아니라 평어 종결어미로 끝나면 위반
 # 코드 조각(백틱 안)·파일 경로·명령어 줄은 먼저 걷어내고 남은 산문만 잰다.
+# 재는 범위: 중계 + 최종 보고(공용 폴더 2026-09-11 이식). 최종 보고는 코드블록이 잦아 fenced 블록도 걷는다.
+_FENCE = re.compile(r"```.*?```", re.S)
 _CODE_SPAN = re.compile(r"`[^`]*`")
 _HANGUL = re.compile(r"[가-힣]")
 _ASCII_LETTER = re.compile(r"[A-Za-z]")
@@ -119,7 +120,7 @@ _POLITE_END = re.compile(r"(니다|세요|에요|나요|ㅂ시다|죠|가요|까
 _CASUAL_END = re.compile(r"(다|야|어|음|봄|함|줌|짐)[.!?～]*\s*$")
 # ── 네 번째 잣대: 「겠습니다」류 예고 종결 (2026-09-02, 사용자 재지적) ──────────
 #
-# *"넣겠습니다로 끝내지말라고 그래놓고 또 새 세션가면 또 안할거잖아"* — CLAUDE.md 6b-3은
+# *[발화 생략]* — CLAUDE.md 6b-3은
 # 「…합니다·…겠습니다·…봅니다」로 끝나는 예고를 **통째로 금지**라고 적어 뒀는데, 이 파일의
 # 말투 검사(`_POLITE_END`)는 "겠습니다"를 존댓말로만 보고 **통과**시켰다 — 예고인지 아닌지는
 # 안 본다. 존댓말 여부와 예고 여부는 다른 축인데 한 축(말투)만 있고 다른 축(예고)이 없었다.
@@ -134,11 +135,12 @@ _POSSIBILITY = re.compile(r"수\s*있")
 
 
 def _prose_lines(text):
-    """중계 텍스트에서 코드·경로를 걷어낸 산문 줄만 낸다. 빈 줄은 뺀다."""
+    """중계·최종 보고에서 코드블록·코드·경로를 걷어낸 산문 줄만 낸다. 빈 줄은 뺀다."""
+    text = _FENCE.sub(" ", text)
     out = []
     for line in text.splitlines():
         line = _CODE_SPAN.sub(" ", line)
-        line = line.strip(" -*>#·")
+        line = line.strip(" -*>#·|")
         if line:
             out.append(line)
     return out
@@ -154,8 +156,6 @@ def tone_bad_count(text):
             continue
         total += 1
         if ascii_letters > hangul:
-            bad += 1
-        elif _CASUAL_END.search(line) and not _POLITE_END.search(line):
             bad += 1
         elif _FORECAST_END.search(line) and not _POSSIBILITY.search(line):
             bad += 1
@@ -195,7 +195,7 @@ def is_ours(cwd, root):
       그건 이 자가 태어난 곳(`_modding/scripts/`)의 배치에서만 맞는 값이다.
       여기서는 `도구/` 가 뿌리 바로 아래라 **뿌리의 부모**(`Documents`)를 찾고 있었고,
       거기서 열린 세션은 없으니 **언제나 SKIP** 이었다. 막는 자가 조용히 꺼져 있던 것이다 —
-      *"자가 못 보면 자료가 없는 것처럼 보인다"*(바로 아래 `CWD_SCAN` 이 겪은 일과 같은 부류).
+      *[발화 생략]*(바로 아래 `CWD_SCAN` 이 겪은 일과 같은 부류).
     ★ **워크트리를 담은 컨테이너 폴더에서 세션이 열리는 리포**는 뿌리가 한 칸 아래라 이
       규칙에 안 걸린다. 그건 그 리포가 **자기 사본에서** 넓힌다(전공정리가 그렇게 했다) —
       여기서 넓히면 남의 프로젝트 세션까지 끌어온다.
@@ -291,15 +291,22 @@ class Tally:
 
     def result(self):
         """`users` 사용자 발화 · `n`·`chars` 중계 · `final` 최종 보고 글자 ·
-        `msgs`·`headed` 굵은 제목 비율의 분모·분자."""
+        `msgs`·`headed` 굵은 제목 비율의 분모·분자 · `tone_*` 는 중계+최종 보고 합,
+        `relay_tone_*`·`final_tone_*` 는 가른 값."""
         relay = [v for k, v in self._said.items() if k in self._hastool]
         final = [v for k, v in self._said.items() if k not in self._hastool]
         allsaid = [v.strip() for v in self._said.values() if v.strip()]
-        tone_total = tone_bad = 0
-        for v in relay:
-            t, b = tone_bad_count(v)
-            tone_total += t
-            tone_bad += b
+
+        def tally_tone(vs):
+            t = b = 0
+            for v in vs:
+                tt, bb = tone_bad_count(v)
+                t += tt
+                b += bb
+            return t, b
+
+        relay_tone_total, relay_tone_bad = tally_tone(relay)
+        final_tone_total, final_tone_bad = tally_tone(final)
         return {
             "users": self.users,
             "n": len(relay),
@@ -307,8 +314,12 @@ class Tally:
             "final": sum(len(v) for v in final),
             "msgs": len(allsaid),
             "headed": sum(1 for v in allsaid if HEAD.match(v)),
-            "tone_total": tone_total,
-            "tone_bad": tone_bad,
+            "tone_total": relay_tone_total + final_tone_total,
+            "tone_bad": relay_tone_bad + final_tone_bad,
+            "relay_tone_total": relay_tone_total,
+            "relay_tone_bad": relay_tone_bad,
+            "final_tone_total": final_tone_total,
+            "final_tone_bad": final_tone_bad,
         }
 
 
@@ -354,7 +365,7 @@ def count_last_turn(path, completed=False):
 
     누적이 아니라 턴인 것이 요점이다. 누적값은 close 시점에 이미 확정이라
     «고치고 다시 돌리면 초록» 이 불가능하고, 못 지우는 빨간불은 게이트가 아니라 벽이다
-    (2026-08-15 사용자 판정). **턴 단위면 「아직 고칠 수 있는 시점」이 매 턴 새로 온다.**
+    (2026-08-15 사용자 판정). **턴 단위면 [발화 생략]이 매 턴 새로 온다.**
     """
     recs = list(records(path))
     s, e = turn_window(recs, completed)
@@ -370,7 +381,7 @@ def last_turn_verdict(path, completed=False, prefix=""):
 
     왜 이 자리가 열렸나 (2026-08-24, 같은 지적 3회차)
     ------------------------------------------------
-    *"구구절절이 아직도 보이네"* — 조항이 **실려 있는데도** 재발했다(전공정리 ee 세션).
+    *[발화 생략]* — 조항이 **실려 있는데도** 재발했다(전공정리 ee 세션).
     실측하니 이 자는 판정을 제대로 하는데 **아무 문에도 안 걸려 있었다**:
     `commit.py` 는 `check=False` 로 부르고 종료코드를 버리며(계약상 그렇다),
     `close_report` 는 세기만 하고, 훅 여덟 중 부르는 것이 **0개**였다.
@@ -405,8 +416,11 @@ def last_turn_verdict(path, completed=False, prefix=""):
         print("  「…합니다 · …겠습니다 · …봅니다」 예고와 「확인했습니다」 행위 보고는")
         print("  도구 호출 줄이 이미 보여 준다 — **이번 턴은 도구 호출 앞에 문장을 쓰지 않는다(0회).**")
     if tone_bad:
-        print("[말투] %s중계 %d줄 중 %d줄이 영어·평어·예고체로 샜다 — **채팅은 존댓말, 예고는 금지다.**"
-              % (prefix or "방금 ", tone_total, tone_bad))
+        print("[말투] %s중계+최종 보고 %d줄 중 %d줄이 영어·평어·예고체로 샜다 (중계 %d/%d · 최종 %d/%d)"
+              " — **채팅은 존댓말, 예고는 금지다.**"
+              % (prefix or "방금 ", tone_total, tone_bad,
+                 r["relay_tone_bad"], r["relay_tone_total"],
+                 r["final_tone_bad"], r["final_tone_total"]))
         print("  (규칙/말투.md · CLAUDE.md 「말투」·6b-3 절 — 「…겠습니다」로 끝나면 그 자리에서")
         print("  이미 위반이다(나중에 지켜져도 소용없다) — 도구 호출 사이 문장을 없애면 이 줄도 같이 없어진다)")
     return 0
@@ -458,16 +472,25 @@ def selftest():
     chk("영어 문장은 말투 위반", tt2 == 1 and tb2 == 1, "total=%d bad=%d" % (tt2, tb2))
     tt3, tb3 = tone_bad_count("확인했습니다.")
     chk("존댓말 종결은 통과", tt3 == 1 and tb3 == 0, "total=%d bad=%d" % (tt3, tb3))
-    tt4, tb4 = tone_bad_count("이제 재생성하고 검증한다.")
-    chk("평어 종결은 말투 위반", tt4 == 1 and tb4 == 1, "total=%d bad=%d" % (tt4, tb4))
+    tt4, tb4 = tone_bad_count("이제 재생성하고 검증할게.")
+    chk("친근한 존중체는 통과", tt4 == 1 and tb4 == 0, "total=%d bad=%d" % (tt4, tb4))
     tt5, tb5 = tone_bad_count("실행됨 명령 3개, `make_zone_map.py` +44 -10")
     chk("코드 걷어낸 뒤 남은 산문은 위반 아니면 통과", tb5 == 0, "total=%d bad=%d" % (tt5, tb5))
     tt6, tb6 = tone_bad_count("`check_narration.py`")
     chk("백틱 안 내용만 있는 줄은 안 잰다", tt6 == 0, "total=%d" % tt6)
-    tt7, tb7 = tone_bad_count("다음 방지장치를 나루 원장에 넣겠습니다.")
+    tt7, tb7 = tone_bad_count("다음 방지장치를 공용 폴더 원장에 넣겠습니다.")
     chk("「겠습니다」 예고 종결은 존댓말이어도 위반", tt7 == 1 and tb7 == 1, "total=%d bad=%d" % (tt7, tb7))
     tt8, tb8 = tone_bad_count("시간이 있으면 오늘 안에 끝낼 수 있습니다.")
     chk("「수 있습니다」는 가능성이지 예고가 아니다 — 통과", tt8 == 1 and tb8 == 0, "total=%d bad=%d" % (tt8, tb8))
+    tt9, tb9 = tone_bad_count("한 줄입니다.\n```\ndef f():\n    return 1이다\n```\n또 한 줄입니다.")
+    chk("fenced 코드블록 안 내용은 안 잰다", tt9 == 2 and tb9 == 0, "total=%d bad=%d" % (tt9, tb9))
+    t2 = Tally()
+    for r in [_rec_user(), _rec_asst("f1", "Final result is ready.", tool=False)]:
+        t2.feed(r)
+    res2 = t2.result()
+    chk("최종 보고(도구 없는 응답)의 영어도 tone_bad 로 잡는다",
+        res2["final_tone_bad"] == 1 and res2["relay_tone_bad"] == 0 and res2["tone_bad"] == 1,
+        "final_bad=%d relay_bad=%d" % (res2["final_tone_bad"], res2["relay_tone_bad"]))
 
     recs = [_rec_user(), _rec_asst("a", "가"), _rec_toolresult(),
             _rec_asst("b", "나"), _rec_toolresult(), _rec_user("새 발화")]
@@ -535,14 +558,16 @@ def main(argv=None):
     if hr < MIN_HEAD_RATIO:
         bad.append("제목 없이 시작한 말이 %.0f%%" % (100 * (1 - hr)))
     if tone_bad:
-        bad.append("영어·평어·예고체로 샌 중계 %d/%d줄 (%.0f%%)" % (tone_bad, tone_total, 100 * tone_rate))
+        bad.append("영어·평어·예고체로 샌 중계+최종 보고 %d/%d줄 (%.0f%%)" % (tone_bad, tone_total, 100 * tone_rate))
     if not (a.quiet and not bad):
         print("진행 중계 %d회 · %d자 / 사용자 발화 %d회  ->  발화당 %.1f (상한 %.1f)"
               % (n, chars, users, ratio, MAX_PER_USER_TURN))
         print("굵은 제목으로 시작 %d / %d (%.0f%%, 하한 %.0f%%)"
               % (headed, msgs, 100 * hr, 100 * MIN_HEAD_RATIO))
-        print("존댓말로 끝난 중계 %d / %d (%.0f%% 위반)"
-              % (tone_total - tone_bad, tone_total, 100 * tone_rate))
+        print("존댓말로 끝난 중계+최종 보고 %d / %d (%.0f%% 위반, 중계 %d/%d · 최종 %d/%d)"
+              % (tone_total - tone_bad, tone_total, 100 * tone_rate,
+                 r["relay_tone_bad"], r["relay_tone_total"],
+                 r["final_tone_bad"], r["final_tone_total"]))
     if not bad:
         if not a.quiet:
             print("OK   0 problem(s).")

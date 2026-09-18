@@ -7,13 +7,13 @@
 
 **왜 이 자인가** (2026-08-15 사용자 지적):
 
-    *"이거 근데 Claude랑 상호작용은 닫기 점검에 안들어가나?"*
+    *[발화 생략]*
 
   재 보니 안 들어갔다. `close_report` 가 재는 여덟 가지는 **전부 리포 산출물**이다 —
   빌드·경고·회귀·등록·침식·개인정보·승격·미커밋. 그런데 이 리포 규칙의 절반은
   **상호작용**에 관한 것이다(판정을 파일에 남길 것 · 예고한 것을 조용히 안 하지 말 것 ·
   미검증을 검증된 것처럼 쓰지 말 것 · 지적은 원장에 먼저). AGENTS 도 그 자리를
-  *"이 조항에는 기계 게이트가 없다 — 채팅 보고는 검사가 못 읽는다"* 고 적어 두었다.
+  *[발화 생략]* 고 적어 두었다.
   **세션 기록(JSONL)이 있으니 이제는 읽을 수 있다** — `audit_session_cost` 가 이미 그 파일을 읽는다.
 
 ★ **판정이 아니라 셈이다.** 사람이 볼 목록을 내고 **고치지도 막지도 않는다**(언제나 exit 0) —
@@ -26,13 +26,18 @@
 
 **무엇을 재나 — 셋.**
 
-  ⑴ **예고하고 안 한 것.** *"뒤에 판정하겠습니다"* 처럼 적어 놓고 그 뒤 아무 도구 호출에도
+  ⑴ **예고하고 안 한 것.** *[발화 생략]* 처럼 적어 놓고 그 뒤 아무 도구 호출에도
      그 대상이 안 나온 것. 대상은 예고 문장에서 **파일명·도구명**으로 잡는다 — 그런 낱말이
      없는 예고는 기계가 이행을 못 재므로 **[사람]** 으로만 낸다(억지로 판정하지 않는다).
   ⑵ **`미검증` 이라 적고 그대로 둔 것.** 규칙 11 은 «명령을 댈 수 없으면 미검증이라 밝혀라»
      인데, 밝힌 뒤 그대로 세션이 끝나면 그 항목은 **열린 채로 잊힌다.**
   ⑶ **지적을 받고 원장·기억이 안 움직인 세션.** 사용자 발화가 여럿인데
      `docs/feedback-ledger.md`·기억 폴더를 한 번도 안 건드렸으면 신고한다.
+  ⑷ **완료 선언 → 사용자가 재차 캐물음 → 원인·방지 없는 시인** (2026-09-05 신설).
+     사용자가 원하는 것은 재확인 자체가 필요 없는 것이지, 재확인 뒤 답을 잘 하는 게
+     아니다 — 그건 이 자로 못 잡는다(«완료 선언이 맞았나»는 판단형, 프로젝트마다
+     다른 실물 검사가 있어야 한다). 이 자가 잡는 것은 그보다 좁다: **일단 재확인을
+     당했는데도** 다음 답에 원인·방지가 둘 다 없는 것.
 
 **안 재는 것(밝혀 둔다).** «사용자 판정을 커밋 메시지에 인용했는가» 는 재지 않는다 —
 인용 여부를 문자열로 판정하려 하면 *따옴표를 넣기만 하면 통과하는* 도장이 된다.
@@ -49,6 +54,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import audit_session_cost as cost                                        # noqa: E402
+from check_narration import is_user_text                                 # noqa: E402
 
 # 예고로 읽는 말 — «앞으로 하겠다»는 뜻이 분명한 것만. 넓히면 평서문이 전부 걸린다.
 # ★ 동사를 열거하지 않는다 — 처음엔 `하겠|판정하겠|보겠` 를 나열했는데 **`고치겠습니다` 가
@@ -60,7 +66,9 @@ TARGET_RE = re.compile(r"[\w가-힣./-]+\.(?:py|md|json|txt|html|vbs|ps1)")
 # ★ 「미검증」은 **낱말이 아니라 자리**로 잡는다 (첫 실행에서 8건 중 다수가 오탐이었다).
 #   그 낱말을 *설명하는* 문장(«미검증으로 남겼는지», «미검증이라 적고»)과 실제 **판정 표시**를
 #   가르지 않으면, 이 자는 자기 규칙을 설명한 문서까지 신고한다 — 소음이 된 신고는 안 읽힌다.
-UNVERIFIED_RE = re.compile(r"미검증(?!(을|를|이라|으로|이라고|\s*여부))")
+# ★ 2026-09-11 (XSanity 신고) — 따옴표 안의 「미검증」은 판정이 아니라 **그 낱말의 언급**이다.
+#   결함을 설명하는 줄까지 잡혀 1건이 3건으로 늘었다 — 여는/닫는 따옴표·백틱이 붙으면 뺀다.
+UNVERIFIED_RE = re.compile(r"(?<![「『\"'`])미검증(?![」』\"'`]|을|를|이라|으로|이라고|\s*여부)")
 # 판정이 적히는 자리 — 표 셀이거나 항목 줄. 산문 한복판의 언급은 세지 않는다.
 # ★ `*` 는 자리 표시가 아니라 **굵게**다 — 넣었더니 굵은 문장이 전부 판정으로 잡혔다(2차 오탐).
 VERDICT_SLOT_RE = re.compile(r"^\s*([|·]|-\s)|\s\|\s")
@@ -70,7 +78,7 @@ LEDGER_HINTS = ("feedback-ledger", "memory", "MEMORY.md", "인박스", "review-i
 # ── 규칙 문서가 자랐는데 원장이 안 움직였다 (2026-08-16 신설) ──────────────────
 #
 # 실측이 이 항목을 열었다: **`AGENTS.md` 안의 사용자 인용 114건 중 원장에도 있는 것은
-# 18건(하한 16%)뿐**이었다. 원장은 *"지적을 받으면 **고치기 전에** 여기 한 줄"* 이라고
+# 18건(하한 16%)뿐**이었다. 원장은 *[발화 생략]* 이라고
 # 규정하는데, 실제로는 **지적이 대기열을 건너뛰고 규칙 문서로 직행**했다.
 # 그래서 어느 쪽도 완전하지 않다 — 원장만 보면 96건을 못 보고, 규칙 문서만 보면
 # 원장의 나머지를 못 본다.
@@ -90,20 +98,19 @@ RULE_HINTS = ("AGENTS.md", "CLAUDE.md", "규칙/")
 EDIT_MARKS = ("old_string", "new_string", '"content"')
 # ── 빈손으로 묻기 (2026-08-15 신설 · `규칙/물어야-할-때.md`) ────────────────────
 #
-# 사용자 지적: *"몇 가지 중에 하나를 나한테 정해야 한다, 또는 뭔가 안 돼서 더 진행을
-# 못 한대. 그러고 채팅 한 번이 끝나. 적어도 **자기는 어떤 게 좋아 보인다**가 나와야 한다."*
+# 사용자 지적: *[발화 생략]*
 #
 # ★ **판정선을 형식으로 내렸다.** 「좋은 물음인가」는 판단형이라 매번 통과되지만
 #   (`방지장치-설계.md` 16항) *«이 응답에 `제안:` 이 있나»* 는 기계가 센다.
 #   그래서 규약이 표지를 글자로 못 박고, 이 자는 그 글자만 본다.
 # ★ **물음으로 «끝나는» 응답만 센다.** 산문 한복판의 물음(«왜 이 규칙이 필요한가?»)까지
 #   세면 자기 문서를 설명한 보고가 전부 걸린다 — 위 `UNVERIFIED_RE` 가 겪은 오탐과 같은 부류.
-#   사용자가 말한 실패는 **«그러고 채팅 한 번이 끝나»** 라, 끝자리가 곧 그 자리다.
+#   사용자가 말한 실패는 **[발화 생략]** 라, 끝자리가 곧 그 자리다.
 ASK_END_RE = re.compile(r"[?？]\s*$")
 PROPOSAL_RE = re.compile(r"\*\*제안[:：]")
 # ── 자기부정 어구를 쓰고도 안 묻는다 (2026-08-31 신설 · Skill ②의 훅 확장) ────────
 #
-# 원장 2026-08-27: *"근거가 있어서가 아니라 다른 자리가 없어서다"* 라고 자기 출력에
+# 원장 2026-08-27: *[발화 생략]* 라고 자기 출력에
 # 써 놓고도 그대로 진행해 잘못된 배정을 했다. **자기 문장 안의 확신 부족 신호가 곧
 # 물어야 한다는 신호**인데, 그 신호를 스스로 못 읽었다. 위 `barehanded_asks` 와 자리는
 # 같지만(응답 하나를 보는 결정적 판정) 조건이 다르다 — 저건 "물음표로 안 끝났나",
@@ -113,6 +120,24 @@ PROPOSAL_RE = re.compile(r"\*\*제안[:：]")
 #   까지 걸린다. 그래서 **근거 부재를 직접 자백하는 좁은 표현**만 잡는다.
 HEDGE_RE = re.compile(r"근거가\s*없|확신(이|을)?\s*못|확실하지\s*않|확실치\s*않|"
                        r"판단이\s*안\s*서|다른\s*자리가\s*없어서|잘\s*모르겠")
+# ── 완료 선언 → 재차 캐물음 → 원인·방지 없는 시인 (2026-09-05 신설) ────────────
+#
+# 실사고(다른 프로젝트 세션, 사용자가 그대로 옮겨 보여줌): [발화 생략] 를 사용자가 반복해서 물어야만 세션이 그제서야 "아 아니네요" 를 인정했고,
+# 인정한 뒤에도 **왜 놓쳤고 다음에 뭘 바꿀지**는 안 냈다 — `규칙/위반은-원인부터-
+# 밝히고-고친다.md`(오늘 신설)가 정확히 겨눈 그 자리다. 그 규칙 자체는 "판단형이라
+# 세는 자 없음"으로 만들었는데, **"판단형이라 못 잰다"가 "아무것도 못 잰다"와 같지
+# 않다** — "잘 설명했는가"는 판단형이지만 "①완료를 선언했다②사용자가 의심해서
+# 재차 물었다③그런데도 원인·방지 표지가 다음 응답에 없다"는 문자열로 센다.
+# ★ **③까지 걸려야 신고한다.** ①②만으로는 "사용자가 다시 확인한 것" 자체를 나무라는
+#   꼴이 된다(그건 사용자의 정당한 권리다) — 신고 대상은 어디까지나 **그 다음 응답이
+#   원인·방지 없이 시인만 하는 것**이다.
+COMPLETION_RE = re.compile(r"끝났습니다|완료(됐|되었|입니다)|다\s*됐|더\s*할\s*일\s*없|"
+                            r"남은\s*(것|일)[은는:]?\s*없|작업\s*끝")
+# ★ 2026-09-11 — 「맞아」는 물음표가 있어야 캐물음이다. 「판독맞아」(확인해 준 말)가 이틀 내내 누적으로 떴다.
+REASK_RE = re.compile(r"진짜|정말|확실|더\s*없|맞아\?|다\s*한\s*거|다한거|"
+                       r"더\s*남은")
+CAUSE_RE = re.compile(r"왜|원인|이유")
+PREVENT_RE = re.compile(r"방지|안\s*그러|다음부터|재발|막을|고칩니다|고치겠")
 
 
 def texts_and_tools(records):
@@ -161,14 +186,58 @@ def promises(said, used):
     return open_, human
 
 
+# ★ 2026-09-11 (XSanity 신고) — 누적 「미검증」이 **해소를 몰랐다.** 뒤에서 확인을 끝내고 보고해도
+#   그 줄이 매 턴 「반드시 옮길 것」으로 떠 이미 참이 아닌 말을 되풀이하게 했다(경보 피로).
+#   해소 = ⑴ 뒤 조각에 `(검증됨: …)` 표식 ⑵ 뒤 조각이 그 줄의 대상 낱말(2자 이상 · 흔한 낱말 제외)
+#   하나 이상과 해소 낱말을 **같은 줄에** 담았다. 넘어지는 쪽: 대상 낱말이 우연히 겹치면 해소로 친다
+#   — 그래도 「이미 끝난 것을 매 턴 되풀이」보다 싸다고 봤다.
+RESOLVED_MARK_RE = re.compile(r"\(검증됨\s*:")
+RESOLVE_WORD_RE = re.compile(r"확인했|확인 완료|검증됨|검증했|떴습니다|떠 있|통과했|재 보니|실측")
+_COMMON = {"미검증", "확인", "검증", "것은", "것을", "있습니다", "없습니다", "합니다", "했습니다", "지금", "이번"}
+
+
+def _targets(line):
+    return {w for w in re.findall(r"[가-힣A-Za-z0-9_.\-]{2,}", line) if w not in _COMMON}
+
+
 def unverified(said):
-    """`미검증` 이라 적힌 줄. 순수 함수."""
+    """`미검증` 이라 적힌 줄 중 **뒤에서 해소되지 않은 것.** 순수 함수."""
     out = []
-    for chunk in said:
+    for i, chunk in enumerate(said):
         for line in chunk.splitlines():
-            if UNVERIFIED_RE.search(line) and VERDICT_SLOT_RE.search(line):
-                out.append(line.strip()[:90])
+            if not (UNVERIFIED_RE.search(line) and VERDICT_SLOT_RE.search(line)):
+                continue
+            tg = _targets(UNVERIFIED_RE.sub("", line))
+            later = [l for c in said[i + 1:] for l in c.splitlines()]
+            if any(RESOLVED_MARK_RE.search(l) for l in later) or any(
+                    RESOLVE_WORD_RE.search(l) and not UNVERIFIED_RE.search(l) and tg & _targets(l)
+                    for l in later):
+                continue
+            out.append(line.strip()[:90])
     return out
+
+
+# ── 「남은 일」 표지 (XSanity 2026-08-30 신설 → 2026-09-07 공용으로 올림) ──────
+# 규칙 「남은-일은-물으며-끝낸다」는 있었는데 **「잘 지켰나」가 판단형이라 매번 통과**됐다.
+# `**제안:**` 과 같은 부류로 형식을 내린다 — 「`남은 일` 이라는 글자가 있나」는 기계가 센다.
+LEFTOVER_RE = re.compile(r"남은\s*일")
+
+
+def leftover_missing(said, used):
+    """도구를 실제로 쓴 턴인데, 마지막 글 조각에 「남은 일」 표지가 없다. 순수 함수.
+
+    ★ **도구를 안 쓴 턴은 안 잰다** — 순수 대화(질문에 바로 답하는 등)까지
+      「남은 일」을 요구하면 매 답변이 걸려 소음이 된다. 이 표지는 **일을 한 뒤**
+      마무리하는 자리에서만 뜻이 있다.
+    ★ **마지막 글 조각만 본다** — 중간 글은 아직 마무리하는 자리가 아니다.
+    """
+    if not used or not said:
+        return None
+    last = said[-1].strip()
+    if not last or LEFTOVER_RE.search(last):
+        return None
+    lines = [ln for ln in last.splitlines() if ln.strip()]
+    return lines[-1].strip()[:90] if lines else None
 
 
 def barehanded_asks(said):
@@ -208,6 +277,90 @@ def self_hedge_unasked(said):
     return out
 
 
+def turns(records):
+    """`(사용자 발화, 그 다음 assistant 가 낸 글 이어붙임)` 목록 — 순서대로. 순수 함수.
+
+    `texts_and_tools` 와 다르다 — 그 자는 창 전체를 뭉쳐 세서 **턴 경계를 지운다.**
+    이 자는 «몇 턴 전에 뭐라 했고 몇 턴 뒤에 뭐라 했나» 를 봐야 하는 판정
+    (`completion_reask_cycle`) 을 위해 경계를 **보존한다.**
+    """
+    out = []
+    cur_user, buf = None, []
+    for rec in records:
+        if is_user_text(rec):
+            if cur_user is not None:
+                out.append((cur_user, "\n".join(buf)))
+            c = (rec.get("message") or {}).get("content")
+            cur_user = c if isinstance(c, str) else "\n".join(
+                b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
+            buf = []
+            continue
+        if rec.get("type") != "assistant":
+            continue
+        for b in ((rec.get("message") or {}).get("content") or []):
+            if isinstance(b, dict) and b.get("type") == "text" and b.get("text", "").strip():
+                buf.append(b["text"])
+    if cur_user is not None:
+        out.append((cur_user, "\n".join(buf)))
+    return out
+
+
+def completion_reask_cycle(turn_list):
+    """**완료를 선언했는데 사용자가 재차 캐물었고, 그런데도 다음 답이 원인·방지 없이
+    시인만 한다.** 순수 함수 — `turns()` 의 출력을 받는다.
+
+    ①②만으로는 안 잡는다 — 사용자가 재확인하는 것 자체는 나무랄 일이 아니다.
+    **③(다음 응답에 원인·방지 표지가 둘 다 없다)까지 있어야** 신고한다.
+    """
+    out = []
+    for i in range(len(turn_list) - 1):
+        _, reply_i = turn_list[i]
+        user_next, reply_next = turn_list[i + 1]
+        if not COMPLETION_RE.search(reply_i):
+            continue
+        if not REASK_RE.search(user_next):
+            continue
+        if CAUSE_RE.search(reply_next) and PREVENT_RE.search(reply_next):
+            continue                       # 원인·방지 둘 다 있다 — 안 걸림
+        out.append(user_next.strip().splitlines()[0][:90] if user_next.strip() else "")
+    return out
+
+
+# ── (이 리포 전용) 완료 선언 전에 산출물을 재생성했나 (2026-09-06 신설) ──────
+#
+# `/insights` 리포트 실측(2026-09-06): 이 프로젝트의 가장 큰 마찰이 "완료를
+# 선언했는데 사용자가 보는 site/ HTML은 실제로 안 바뀌어 있었다[발화 생략]이 세션이 실제로 무엇을 불렀나"를 본다** — 세션
+#   밖에서(다른 터미널 등) 미리 빌드해 둔 경우까지는 이 자가 못 본다. 그런
+#   자리까지 잡으려면 파일 mtime을 실제로 재야 하는데, 그건 이 리포의 다중
+#   워크트리 구조상 어느 site/ 산출물이 어느 data/ 조각과 짝인지 일반화해
+#   말하기 어려워 **세션 행동 관찰**로 좁혔다(세는 자이지 판정자가 아니다).
+DATA_EDIT_RE = re.compile(r'(?<![A-Za-z])data[/\\]')
+BUILD_CMD_RE = re.compile(r"build_site\.py|close_report\.py")
+
+
+def unbuilt_completion(records):
+    """`data/**` 편집 뒤 재빌드 없이 완료를 선언한 자리. 순수 함수 — 테스트 대상."""
+    out = []
+    dirty = False
+    for rec in records:
+        if rec.get("type") != "assistant":
+            continue
+        for b in ((rec.get("message") or {}).get("content") or []):
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "tool_use":
+                inp = json.dumps(b.get("input") or {}, ensure_ascii=False)
+                if BUILD_CMD_RE.search(inp):
+                    dirty = False
+                elif DATA_EDIT_RE.search(inp):
+                    dirty = True
+            elif b.get("type") == "text" and b.get("text", "").strip():
+                if dirty and COMPLETION_RE.search(b["text"]):
+                    out.append(b["text"].strip().splitlines()[0][:90])
+                    dirty = False           # 한 번 신고했으면 래치 — 같은 더러움 재신고 안 함
+    return out
+
+
 def ledger_touched(used):
     """원장·기억을 한 번이라도 건드렸나. 순수 함수."""
     blob = "\n".join(used)
@@ -238,6 +391,7 @@ def rules_touched(used):
 
 def audit(records):
     """세션 하나의 판정 묶음. 순수 함수 — 파일 I/O 없이 테스트가 직접 부른다."""
+    records = list(records)
     said, used, users = texts_and_tools(records)
     open_, human = promises(said, used)
     return {
@@ -247,8 +401,11 @@ def audit(records):
         "unverified": unverified(said),
         "barehanded": barehanded_asks(said),
         "self_hedge": self_hedge_unasked(said),
+        "completion_cycles": completion_reask_cycle(turns(records)),
+        "unbuilt_completion": unbuilt_completion(records),
         "ledger_touched": ledger_touched(used),
         "rules_touched": rules_touched(used),
+        "leftover_missing": leftover_missing(said, used),
     }
 
 
@@ -318,8 +475,78 @@ def selftest():
     #   썼다가 틀렸는데, **틀린 것은 자가 아니라 내 시료였다** — `PROPOSAL_RE` 는
     #   `**제안:**` 처럼 **굵은** 형식을 요구한다(규칙 18 이 정한 형식이다).
     #   대조군이 없었으면 «자가 이상하다» 로 넘어갔을 자리다.
+    chk("양성 — 도구를 썼는데 「남은 일」 표지가 없으면 잡는다",
+        leftover_missing(["커밋했습니다."], [{}]) is not None)
+    chk("음성 — 도구를 안 썼으면 안 잡는다(순수 대화)",
+        leftover_missing(["커밋했습니다."], []) is None)
+    chk("음성 — 「남은 일」 표지가 있으면 안 잡는다",
+        leftover_missing(["**남은 일:** 없음."], [{}]) is None)
+
     chk("음성 — `**제안:**` 이 있으면 빈손이 아니다",
         not barehanded_asks(["**제안:** A 로 갑니다\n이렇게 할까요?"]))
+
+    def u(text):
+        return {"type": "user", "message": {"role": "user", "content": text}}
+
+    cyc_hit = turns([
+        u("작업해줘"), _asst("작업 끝났습니다."),
+        u("진짜? 더 없어?"), _asst("맞습니다, 놓쳤습니다. 다시 보겠습니다."),
+    ])
+    chk("★★ 양성 — 완료 선언→재차 캐물음→원인·방지 없는 시인을 잡는다 (실사고 2026-09-05, PIU)",
+        len(completion_reask_cycle(cyc_hit)) == 1, str(completion_reask_cycle(cyc_hit)))
+
+    cyc_ok = turns([
+        u("작업해줘"), _asst("작업 끝났습니다."),
+        u("진짜? 더 없어?"),
+        _asst("맞습니다, 놓쳤습니다 — 훅이 0회라고 했는데 확인 없이 넘긴 게 원인입니다. "
+              "다음부터는 훅 메시지를 먼저 확인하고 안 그러기로 합니다."),
+    ])
+    chk("음성 — 원인·방지가 둘 다 있으면 안 걸린다", not completion_reask_cycle(cyc_ok))
+
+    cyc_noreask = turns([
+        u("작업해줘"), _asst("작업 끝났습니다."),
+        u("고마워"), _asst("네."),
+    ])
+    chk("음성 — 완료 선언 뒤에도 재차 캐묻지 않으면 안 걸린다(사용자를 나무라지 않는다)",
+        not completion_reask_cycle(cyc_noreask))
+
+    def _edit(path):
+        return {"type": "assistant", "message": {"role": "assistant",
+                "content": [{"type": "tool_use", "name": "Edit",
+                             "input": {"file_path": path}}]}}
+
+    def _bash(cmd):
+        return {"type": "assistant", "message": {"role": "assistant",
+                "content": [{"type": "tool_use", "name": "Bash",
+                             "input": {"command": cmd}}]}}
+
+    ub_hit = [_edit("data/thermo/ch01.json"), _asst("ch01 수정 끝났습니다.")]
+    chk("★★ 양성(전공정리 전용) — data/ 편집 뒤 재빌드 없이 완료를 선언하면 잡는다"
+        " (/insights 2026-09-06 최다 마찰 재현)",
+        len(unbuilt_completion(ub_hit)) == 1, str(unbuilt_completion(ub_hit)))
+
+    ub_ok = [_edit("data/thermo/ch01.json"),
+             _bash("python tools/build_site.py --all"),
+             _asst("ch01 수정하고 빌드까지 끝났습니다.")]
+    chk("음성 — data/ 편집 뒤 build_site.py 를 불렀으면 안 걸린다",
+        not unbuilt_completion(ub_ok))
+
+    ub_noedit = [_bash("python tools/check_narration.py"), _asst("확인 끝났습니다.")]
+    chk("음성 — data/ 를 안 건드렸으면 완료 선언만으로는 안 걸린다",
+        not unbuilt_completion(ub_noedit))
+
+    ub_norecomplete = [_edit("tools/build_site.py"), _asst("도구 코드 수정 끝났습니다.")]
+    chk("음성 — data/ 가 아니라 도구 코드를 고친 것은 대상이 아니다",
+        not unbuilt_completion(ub_norecomplete))
+
+    ub_metadata = [_edit("site/metadata/index.json"), _asst("메타데이터 수정 끝났습니다.")]
+    chk("음성 — 「metadata/」처럼 data 를 낱말 일부로 포함한 경로는 오탐 아니다",
+        not unbuilt_completion(ub_metadata))
+    uv_open = ["- 새 스킬 4개가 목록에 뜨는지: 미검증"]
+    chk("미검증 — 뒤에서 해소 안 되면 남는다", len(unverified(uv_open + ["다른 이야기입니다."])) == 1)
+    chk("미검증 — 뒤에서 같은 대상 + 「떴습니다」면 해소", not unverified(uv_open + ["스킬 4개가 목록에 떴습니다."]))
+    chk("미검증 — `(검증됨: …)` 표식이면 해소", not unverified(uv_open + ["(검증됨: 목록 확인)"]))
+    chk("미검증 — 따옴표 안의 언급은 판정이 아니다", not unverified(["- 「미검증」 경보가 풀리지 않던 문제: 고쳤다"]))
 
     chk("★ 양성 — 확신 부족 어구를 쓰고 안 물으면 잡는다 (실사고 2026-08-27)",
         len(self_hedge_unasked(["근거가 있어서가 아니라 다른 자리가 없어서다."])) == 1)
@@ -388,7 +615,7 @@ def last_turn_verdict(files):
     recs = list(records(p))
     s, e = turn_window(recs, completed=True)
     r = audit(recs[s:e])
-    # ★★ **누적 판정을 여기서도 낸다** (2026-09-02, 사용자 지적 — 매번 "다음에 하겠다"고만 하고 실제로는 다음 세션에서도 반복해 안 하는 것을 공용 기록으로 잡아야 한다는 취지).
+    # ★★ **누적 판정을 여기서도 낸다** (2026-09-02, 사용자: *[발화 생략]*).
     #   `open_promises`·`unverified`·「지적 있는데 원장 안 움직임」은 위 주석(2026-08-31)이
     #   "통계적 판정이라 표본이 쌓여야 소음 없다"는 이유로 commit 시점(quiet 모드)에만
     #   재고 있었다. 그런데 이 세션에서 실제로 일어난 일은 **커밋이 여러 번 있었고 그때마다
@@ -404,6 +631,16 @@ def last_turn_verdict(files):
         cum_hits.append(("누적 — 예고하고 안 한 것", full["open_promises"]))
     if full["unverified"]:
         cum_hits.append(("누적 — 미검증이라 적고 둔 것", full["unverified"]))
+    if full["completion_cycles"]:
+        cum_hits.append(("누적 — 완료 선언 뒤 재차 캐물려서야 시인, 원인·방지 없음",
+                         full["completion_cycles"]))
+    # ★ 2026-09-11 — 이 판정은 docstring 대로 **전공정리 전용**(`data/` → `build_site.py`)인데 어디서나 돌아,
+    #   빌드가 없는 공용 폴더에서 `data/` 낱말만 스쳐도 매 턴 「반드시 옮길 것」을 냈다. 빌드 도구가 있는 곳만.
+    root = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    has_build = os.path.isfile(os.path.join(root, "tools", "build_site.py"))
+    if full["unbuilt_completion"] and has_build:
+        cum_hits.append(("누적 — data/ 고친 뒤 재빌드 없이 완료를 선언했다",
+                         full["unbuilt_completion"]))
     if full["users"] >= 5 and not full["ledger_touched"]:
         cum_hits.append(("누적 — 지적을 받았는데 원장·기억이 안 움직였다",
                          ["사용자 발화 %d회 · feedback-ledger·기억 편집 0회" % full["users"]]))
@@ -426,6 +663,10 @@ def last_turn_verdict(files):
         print("[상호작용] 지난 턴에 확신 부족 어구를 쓰고도 안 물었다 — 그 자체가 물어야 한다는 신호다:")
         for line in r["self_hedge"][:2]:
             print("    " + line)
+    if r["leftover_missing"]:
+        print("[상호작용] 도구를 쓴 턴이 「남은 일」 표지 없이 끝났다: %r"
+              % r["leftover_missing"])
+        print("  덩어리가 끝나면 남은 일 유무를 `**남은 일:**` 로 적는다.")
     return 0
 
 

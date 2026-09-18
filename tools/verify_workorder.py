@@ -26,7 +26,7 @@
 (pascal-hydraulic-lift 2회, 축일 화살촉 1회), 매번 사람이 파일을 열어봐야만 발견됐다.
 
 7번은 **XSanity 개조 프로젝트에서 역이식**했다(`_modding/scripts/verify_workorder.py`, 2026-08-06).
-AGENTS.md 는 *"완료 기준은 산문이 아니라 exit 0 이어야 하는 명령으로 적는다"* 를 요구해 왔는데,
+AGENTS.md 는 *[발화 생략]* 를 요구해 왔는데,
 ⑴ 그 절이 있는지 ⑵ 명령이 들어 있는지 ⑶ 그 명령이 실제로 통과하는지를 **아무도 안 봤다.**
 즉 게이트가 *자기가 요구한 것* 을 검사하지 않았다. 산문으로만 적힌 완료 기준은 누구도 판정할 수
 없으므로 `NO_CRITERIA` 는 경고가 아니라 **실패**다(경고로 열어 두면 경고 더미에 묻힌다).
@@ -37,6 +37,7 @@ import os
 import re
 import subprocess
 import sys
+from figure_proof import proof_matches
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -305,7 +306,7 @@ def main():
         # 열린 날: 2026-07-26 / 무엇이 새어나갔는지: 규칙 8은 "배치 끝에 결함·설계판단·반박을
         # 세어 보고하고, 설계 판단이 있는데 반박 0이면 경고 신호"라고 요구하는데, 그 카운트를
         # 내지 않아도 아무것도 막지 않았다. 실제로 여러 배치에서 카운트가 통째로 생략됐고
-        # 판정이 전부 '수용'으로 흘렀다(사용자 지적: "반박에 대한 힘이 많이 줄은 것 같다").
+        # 판정이 전부 '수용'으로 흘렀다(사용자 지적: [발화 생략]).
         # 문서에만 있고 기계가 안 보는 규칙은 잊으면 그대로 통과한다 — 그래서 여기서 센다.
         # 굵게(**조건부**)로 적는 것이 이 리포의 실제 관례다 — 별표를 건너뛰지 않으면
         # 전부 0으로 세어 게이트가 조용히 무력해진다(2026-07-26 첫 실행에서 실측).
@@ -377,18 +378,8 @@ def main():
         errors.append(f"미신고 SVG 변경 — {chapter}:{figure_id} "
                       "(진행 기록에 챕터 JSON을 신고하고 렌더 증거를 남길 것)")
     for chapter, figure_id, svg_hash in svg_figures:
-        stem = os.path.splitext(os.path.basename(chapter))[0]
-        proof_json = os.path.join(ROOT, "review-artifacts", "figure-review", stem,
-                                  figure_id + ".json")
-        proof_ok = False
-        try:
-            proof = json.load(open(proof_json, encoding="utf-8"))
-            png_path = os.path.join(os.path.dirname(proof_json), proof.get("png", ""))
-            proof_ok = (proof.get("figure_id") == figure_id
-                        and proof.get("svg_sha256") == svg_hash
-                        and os.path.isfile(png_path))
-        except (OSError, json.JSONDecodeError, TypeError):
-            pass
+        proof_ok = proof_matches(chapter, figure_id, svg_hash, ROOT,
+                                 os.path.join(ROOT, "review-artifacts", "figure-review"))
         declared = render_review_declared(progress, figure_id)
         if not proof_ok:
             errors.append(f"SVG 래스터 증거 없음/현재 SVG와 불일치 — {chapter}:{figure_id} "
@@ -439,26 +430,21 @@ def main():
     # ---- 6. 회귀 테스트 ----
     # 빌드 통과는 '오늘 데이터가 깨끗하다'는 뜻일 뿐, 검사가 과거 결함을 여전히 잡는지는
     # 말해주지 않는다. 같은 겹침 결함이 3회 열린 원인이 정확히 이것이었다(2026-07-22).
-    _tc = os.path.join(ROOT, "tools", "test_checks.py")
-    if not os.path.isfile(_tc):
-        print("6. 회귀 테스트: [skip] test_checks.py는 이 공개판에 포함되지 않음(원 프로젝트 전용 회귀 이력)")
-    else:
-        r = subprocess.run([sys.executable, "tools/test_checks.py"],
-                           cwd=ROOT, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace")
-        ok = r.returncode == 0
-        print(f"6. 회귀 테스트: {'통과' if ok else '실패'}")
-        if not ok:
-            errors.append("회귀 테스트 실패 — 검사가 과거 결함을 더 이상 잡지 못한다: "
-                          + (r.stdout or r.stderr).strip().splitlines()[-1][:120])
+    r = subprocess.run([sys.executable, "tools/test_checks.py"],
+                       cwd=ROOT, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+    ok = r.returncode == 0
+    print(f"6. 회귀 테스트: {'통과' if ok else '실패'}")
+    if not ok:
+        errors.append("회귀 테스트 실패 — 검사가 과거 결함을 더 이상 잡지 못한다: "
+                      + (r.stdout or r.stderr).strip().splitlines()[-1][:120])
 
     # ---- 7. 완료 기준을 실제로 돌린다 ----
     # ★ `> 상태: 종결` 로 이 항목을 건너뛰던 길을 **같은 날 되돌렸다** (2026-08-08).
     #   넣은 이유는 *끝난 워크오더를 다시 돌릴 때 완료 기준이 무의미하다* 였는데, 그 전제가
     #   사라졌다 — **끝난 워크오더는 다시 돌리지 않는다**(AGENTS 「워크오더 수용 게이트」).
     #   전제가 사라진 뒤에도 남으면 그건 **완료 직전에 한 줄 적어 게이트를 끄는 길**이다.
-    #   ★ 경고로 남기는 안(동역학 제안)보다 **제거**가 낫다 — 이 리포는 *"경고는 close 를 막지
-    #   않고 경고 더미에 묻힌다"* 를 여러 번 적었고, strict 승격 체계가 생긴 이유가 그것이다.
+    #   ★ 경고로 남기는 안(동역학 제안)보다 **제거**가 낫다 — 이 리포는 *[발화 생략]* 를 여러 번 적었고, strict 승격 체계가 생긴 이유가 그것이다.
     #   선언 자체는 사람이 읽는 표시로 남겨도 된다. 다만 **게이트에는 아무 힘이 없다.**
     cmds = criteria_commands(text)
     if cmds is None:

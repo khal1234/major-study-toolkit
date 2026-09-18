@@ -33,5 +33,5 @@ description: Use when a figure (SVG) "passes" build lint/checks_svg with zero fi
 
 이건 `verifier-isolation`(독립 검증자에게 무엇을 주는가)이 아니라 **이 리포 특정 검사기
 아키텍처의 구조적 사각지대**를 아는 것이다 — 렌더 PNG 육안 검수(`render_figure_review.py`)를
-병행해야 진짜로 닫힌다. AGENTS.md 삽화 규격 절의 "기계가 안 막는다" 목록과 짝이지만, 이건
+병행해야 진짜로 닫힌다. 경로 규칙 figures.md 의 "기계가 안 막는다" 목록과 짝이지만, 이건
 그중에서도 "기계가 막는다고 선언했는데 실제로는 안 보는" 더 위험한 하위 부류다.

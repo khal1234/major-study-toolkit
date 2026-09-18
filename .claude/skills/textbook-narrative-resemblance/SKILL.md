@@ -27,4 +27,4 @@ description: Use when writing or reviewing theory prose for any subject chapter,
 
 이 판단은 `completion-evidence-first`가 아니다 — "완료됐다는 증거"의 문제가 아니라, **애초에
 기계가 잴 수 없는 축(서술의 닮음)을 사람이 대신 재는 도메인 작업**이다. 예시 소재 자체 발굴,
-삽화 재현 금지도 같은 축의 다른 얼굴이다(AGENTS.md 규칙 12).
+삽화 재현 금지도 같은 축의 다른 얼굴이다(CLAUDE.md 규칙 12).

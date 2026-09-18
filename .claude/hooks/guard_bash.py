@@ -20,7 +20,6 @@ import re
 import shlex
 import subprocess
 import sys
-import time
 
 
 def _decide(decision, reason):
@@ -40,7 +39,7 @@ def _decide(decision, reason):
 SAFE_GIT = {"status", "diff", "log", "show", "ls-files", "ls-tree", "rev-parse",
             "rev-list", "merge-base", "cat-file", "for-each-ref", "ls-remote",
             "name-rev", "show-ref", "describe", "blame", "shortlog", "check-ignore",
-            # 2026-07-27 추가 (사용자 3회째 지적 "이거 항상 허용 왜 뜨지").
+            # 2026-07-27 추가 (사용자 3회째 지적 [발화 생략]).
             # fetch: 원격 추적 ref만 갱신한다 — 워킹트리를 건드리지 않고 **게시도 하지 않는다**.
             #        (`git pull`은 여기 없다. 그건 merge를 품어 워킹트리를 바꾼다.)
             # grep:  워킹트리·이력 검색. 순수 읽기.
@@ -71,7 +70,7 @@ def read_only_git_config(command):
     positional = [t for t in rest.split() if not t.startswith("-")]
     return len(positional) == 1
 
-# ★ `git branch` 의 조회 형태 (열린 날 2026-08-01, 사용자 지적 "이거 모두 허용 왜 나오지").
+# ★ `git branch` 의 조회 형태 (열린 날 2026-08-01, 사용자 지적 [발화 생략]).
 #
 # 아래 SAFE_GIT_PAIRS 에 `("branch","--show-current")`·`("branch","--list")` **둘만** 있어
 # **`git branch -a`** — 가장 흔한 조회 — 가 판정 보류로 빠졌다. 그러면 통과 여부가 settings
@@ -96,7 +95,7 @@ _RESET_MODE_FLAGS = re.compile(r"--(hard|soft|mixed|merge|keep)\b")
 def read_only_git_reset(command):
     """`git reset -- <경로...>`(인덱스만 되돌림)인가. 순수 함수 — 테스트 대상.
 
-    열린 날 2026-09-02 — 사용자 지적: [사용자 발화 인용 생략] `git reset -- <path>`는
+    열린 날 2026-09-02 — 사용자 지적: *[발화 생략]* `git reset -- <path>`는
     **인덱스(스테이징)만** 되돌리고 작업 트리·HEAD는 그대로다 — `git add`로 바로
     되돌아가는, git 명령 중 가장 무해한 축에 든다.
 
@@ -115,37 +114,43 @@ def read_only_git_reset(command):
         return False
     after = rest.split("--", 1)[1].strip()
     return bool(after)
+    
 
 
-def read_only_git_checkout_ours(command):
-    """`git checkout --ours -- <경로...>`(병합 충돌 해결)인가. 순수 함수 — 테스트 대상.
+def read_only_git_checkout_ours_or_theirs(command):
+    """`git checkout --ours|--theirs -- <경로...>`(병합 충돌 해결)인가. 순수 함수 — 테스트 대상.
 
-    열린 날 2026-09-02 — 사용자 지적: [사용자 발화 인용 생략] 버려지는 "theirs" 쪽
-    내용은 사라지지 않는다 — 병합 대상 브랜치/커밋에 그대로 남아 있어
-    `git show <sha>:<경로>`로 되찾을 수 있다. `git push --force`처럼 원격 이력 자체를
-    지우는 것과는 다른 위험도라 여기서만 좁게 뺀다.
+    열린 날 2026-09-02(`--ours`만) — 사용자 지적: *[발화 생략]* 버려지는 쪽 내용은
+    사라지지 않는다 — 병합 대상 브랜치/커밋에 그대로 남아 있어 `git show <sha>:<경로>`로
+    되찾을 수 있다. `git push --force`처럼 원격 이력 자체를 지우는 것과는 다른 위험도라
+    여기서만 좁게 뺀다.
+
+    ★★ **2026-09-06 — `--theirs`까지 넓혔다.** 그때 독스트링이 스스로 *[발화 생략]*고 적어 뒀는데, 실사고로 그 자리가 왔다(사용자: *[발화 생략]* — 폰트 바이너리 충돌을 `checkout --theirs`로 푸는 자리에서
+    매번 ask가 떴다). 근거는 대칭이다 — `--theirs`로 버려지는 "ours"(현재 브랜치) 쪽도
+    그 브랜치 자신의 마지막 커밋에 그대로 남아 있어 똑같이 되찾을 수 있다. `--ours`만
+    빼고 `--theirs`를 안 뺄 이유가 없었다.
 
     브랜치 전환(`git checkout <branch>`)이나 일반 파일 복구(`git checkout -- <file>`,
-    작업 트리 변경을 버림)는 `--ours` 플래그가 없으므로 여기 안 걸리고 GATED_GIT ask로
-    남는다. `--theirs`는 이번에 합의한 범위 밖이라 포함하지 않는다 — 필요해지면 그때 넓힌다.
+    작업 트리 변경을 버림)는 `--ours`/`--theirs` 플래그가 없으므로 여기 안 걸리고
+    GATED_GIT ask로 남는다.
     """
     m = re.match(r"\s*git\s+(?:-C\s+(?:\"[^\"]*\"|'[^']*'|\S+)\s+)?checkout\b(.*)$", command)
     if not m:
         return False
-    return bool(re.search(r"(^|\s)--ours\b", m.group(1)))
+    return bool(re.search(r"(^|\s)--(ours|theirs)\b", m.group(1)))
 
 
 def read_only_git_checkout_from_ref(command):
     """`git checkout <참조> -- <경로...>`(특정 커밋에서 경로만 복원)인가. 순수 함수 — 테스트 대상.
 
-    열린 날 2026-09-03 — 사용자 지적: [사용자 발화 인용 생략]
+    열린 날 2026-09-03 — 사용자 지적: *[발화 생략]*
     (main의 실수로 덮인 파일 하나를 특정 커밋에서 되돌리는 명령이 매번 ask를 띄운 자리).
     이 형태는 **참조가 git 역사에 그대로 남아 있어 언제나 되돌릴 수 있다** — HEAD도
     브랜치도 안 옮기고, 지정한 경로만 그 커밋 시점 내용으로 바뀐다.
 
     판정선은 **`--` 앞에 실제 참조 토큰이 있는가**다. `git checkout -- <file>`처럼
     참조 없이 경로만 있으면(현재 **미커밋** 변경을 버리는 형태) 여기 안 걸리고 GATED_GIT
-    ask로 남는다 — 그건 되돌릴 데가 없어 위험도가 다르다(위 `read_only_git_checkout_ours`
+    ask로 남는다 — 그건 되돌릴 데가 없어 위험도가 다르다(위 `read_only_git_checkout_ours_or_theirs`
     독스트링과 같은 구분). 브랜치 전환(`git checkout <branch>`, `--`가 아예 없는 형태)도
     안 걸린다 — 미커밋 변경을 잃을 수 있다.
     """
@@ -248,7 +253,7 @@ def inline_powershell(command):
 
     열린 날 2026-08-02 (원장 22번). 에이전트가 포트 확인을 하려고
     `powershell -NoProfile -Command "(Test-NetConnection -ComputerName localhost -Port 8802 …)"`
-    를 돌렸고 사용자에게 '모두 허용'이 떴다 — [사용자 발화 인용 생략].
+    를 돌렸고 사용자에게 '모두 허용'이 떴다 — *[발화 생략]*.
 
     **`inline_python` 과 완전히 같은 부류다.** 일회성 조회를 인라인 코드로 짜면
     ⑴ 매번 승인을 요구하고 ⑵ 다음 세션이 같은 조회를 또 짠다. 파이썬 쪽만 막아 두고
@@ -332,7 +337,7 @@ SUBJECT_ROOTS = ("data/", "site/")
 # 처럼 **앞에 `claude/`, 뒤에 작업명·해시**가 붙는다. 앵커된 정규식은 이걸 못 받았고,
 # 그러면 `subject_of_branch()` 가 None 을 돌려주므로 **과목 경계까지 통째로 꺼졌다**
 # (`foreign_subject_paths` 가 `mine is None` 에서 빈 목록을 준다).
-# ch02 세션이 보고한 실제 증상: [사용자 발화 인용 생략]
+# ch02 세션이 보고한 실제 증상: *[발화 생략]*
 # **가드가 사람의 성실성으로 대체된 것 — 그건 가드가 아니다**(AGENTS 규칙 7 ⑷).
 #
 # 그래서 경계(`^` 또는 `/`)와 구분자(`-`·`/`·끝)만 요구하고 나머지는 흘린다.
@@ -472,7 +477,7 @@ def _norm(path):
 def home_claude_path(command):
     """홈의 Claude 전용 디렉터리(`~/.claude/**`)를 가리키는 셸 명령인가. 순수 함수.
 
-    열린 날 2026-08-02 (원장 21번). 사용자: [사용자 발화 인용 생략] —
+    열린 날 2026-08-02 (원장 21번). 사용자: *[발화 생략]* —
     `ls "…/.claude/projects/…/memory/"` 가 승인창을 띄웠다.
 
     ★ **명령이 아니라 경로가 원인이었다.** `Bash(ls *)` 는 allow 에 이미 있었고, guard 도 중립이었다.
@@ -480,7 +485,7 @@ def home_claude_path(command):
       물은 것이다(원장 14번과 같은 부류).
 
     ★ **14번과 조치가 반대다 — 여기는 열지 않는다.** 14번은 *교재 폴더*라 읽어야 해서 범위를
-      넓혔지만, 홈 `.claude/**` 는 AGENTS **규칙 5** 가 [사용자 발화 인용 생략] 으로
+      넓혔지만, 홈 `.claude/**` 는 AGENTS **규칙 5** 가 *[발화 생략]* 으로
       못 박은 곳이고 규칙 9 의 읽기 허용 목록(프로젝트 루트·교재 폴더·스크래치패드)에도 없다.
       **프롬프트는 경계가 제대로 돈 증거**였고, 고쳐야 할 것은 설정이 아니라 내 행동이었다.
 
@@ -513,7 +518,7 @@ def home_claude_path(command):
 def redundant_git_c(command, session_root_hint=None):
     """`git -C <이 프로젝트 루트>` 인가 — Bash 도구의 cwd가 이미 그 루트라 `-C`는 순수 잡음이다.
 
-    열린 날 2026-07-27 (사용자: [사용자 발화 인용 생략]).
+    열린 날 2026-07-27 (사용자: *[발화 생략]*).
 
     **왜 반복됐나:** 지금까지 이건 문서·메모리에만 있던 습관 지침이었다. 실행 직전에
     아무것도 검사하지 않으므로 새 세션의 나는 그냥 또 쓴다 — `cd` 접두사가 3회 재발했던 것과
@@ -648,7 +653,7 @@ def subject_content_paths(command):
 #
 # ★ 여기서 «남의 과목» 이라는 말이 성립하지 않는 것이 핵심이다. 컨테이너 루트에서는
 #   `git -C <아무 워크트리>` 로 **모든 과목**에 닿을 수 있고, 그때 `repo_from_command` 가
-#   그 워크트리의 브랜치를 읽으므로 옛 판정은 [사용자 발화 인용 생략] 로 통과시킨다.
+#   그 워크트리의 브랜치를 읽으므로 옛 판정은 *[발화 생략]* 로 통과시킨다.
 #   → 그래서 판정을 뒤집는다: **과목이 없는 세션은 과목 콘텐츠를 커밋하지 않는다.**
 #
 # ★★ **읽기는 막지 않는다.** `git show <갈래>:data/<과목>/…` 은 AGENTS 가 정한 정식
@@ -657,23 +662,16 @@ def subject_content_paths(command):
 WRITE_GIT_SUBCOMMANDS = ("add", "commit", "rm", "mv")
 
 
-# ── 과목 «선언» — 컨테이너 루트 세션이 자기 정체를 말하는 자리 (신설 2026-08-15) ─────────
+# ── 과목 «선언» 은 은퇴했다 (2026-08-15 ~ 2026-09-07) ──────────────────────────────
 #
-# ★ 위 판정(«과목이 없는 세션은 과목 콘텐츠를 커밋하지 않는다»)은 옳지만, 갈래가 13개라
-#   **«한 줄 고치러 세션을 새로 여는» 일이 계속 생긴다.** 사용자: [사용자 발화 인용 생략].
-# ★★ **「허락」은 이 가드의 입력이 아니다** — 이 계통은 [사용자 발화 인용 생략] 를 이미 판정했다. 그래서 채팅이 아니라 **파일로 선언**하고 여기서 읽는다.
-# ★★★ **완화가 아니다.** 위 판정이 막던 진짜 이유는 «허락이 없어서» 가 아니라 **«이 세션에
-#   과목 정체가 없어 어느 파일이 정당한지 기계가 못 가려서»** 다(바로 위 주석이 그렇게 적혀
-#   있다). 선언은 그 **빠진 입력**을 주고, 선언 뒤에도 나머지 과목은 그대로 foreign 이다.
-# ★ **선언 중에는 공통을 커밋하지 못한다 — 배타다.** 안 그러면 「한 세션이 전 과목 규격을
-#   소유」로 되돌아가는데, 이 배선이 없애려던 것이 정확히 그 형태다. 동시에 가질 수 없게
-#   두면 그 회귀가 **구조적으로** 불가능하다.
-SUBJECT_DECL =os.path.join(os.path.dirname(os.path.abspath(__file__)), ".session-subject.json")
-# 선언이 살아 있는 시간. ★ **고른 값** — `tools/wakeup_guard.py` 의 루프 깃발(12시간)과 견줘
-# 같은 값으로 골랐다. 둘 다 목적이 «잊고 남겨 둬도 하루를 안 넘긴다» 로 같다. 1차 방어는
-# 세션 id 이고 이건 그 id 를 못 읽는 환경의 2차 방어라 더 짧게 잡을 이유가 없다.
-SUBJECT_DECL_TTL_SEC = 12 * 3600
-# 공통 표면 — 선언 중에 커밋을 막을 자리. `sync_common.SYNC_PATHS` 와 같은 것을 가리키지만
+# 걷은 것: `SUBJECT_DECL`·`SUBJECT_DECL_TTL_SEC`·`read_declaration`·`declaration_is_live`·
+# `declared_subject` 와 `tools/session_subject.py`, 그리고 `guard_write` 의 `declared` 경로.
+# **함께 걷었다** — 반쯤 걷으면 「선언은 되는데 아무도 안 보는」 상태가 된다.
+# 경위·되살리려는 사람이 먼저 잴 전제는 `docs/폐기된-규약.md` 「컨테이너 루트 세션 배선」.
+# ★ `container_root_violation`·`deny_reason` 의 `declared` 인자는 **이름으로 남겨 둔다** —
+#   회귀가 «선언을 줘도 판정이 안 바뀐다» 를 그 인자로 잰다.
+#
+# 공통 표면 — `sync_common.SYNC_PATHS` 와 같은 것을 가리키지만
 # **훅은 tools/ 를 import 하지 않는다**(훅이 리포 코드에 매달리면 그쪽이 깨질 때 함께 죽는다).
 COMMON_PREFIXES = ("tools/", "docs/", ".claude/", "site/template/", "site/fonts/")
 COMMON_FILES = ("AGENTS.md", "CLAUDE.md")
@@ -695,56 +693,15 @@ SUBJECT_OWNED_TOOL_BASENAMES = {"gen_steam_tables.py", "verify_steam_tables.py"}
 _SUBJECT_ANSWER_VERIFIER_RE = re.compile(r"^verify_[a-z0-9]+_answer\.py$")
 
 
+_SCRATCH_TOOL_RE = re.compile(r"^_tmp_[a-z0-9_]+\.py$")
+
 def is_subject_owned_tool_path(norm):
-    """`tools/<file>` 형태이고 file 이 과목 소유 자산으로 알려진 이름인가. 순수 함수."""
     if not norm.startswith("tools/") or "/" in norm[len("tools/"):]:
         return False
     base = norm[len("tools/"):]
-    return base in SUBJECT_OWNED_TOOL_BASENAMES or bool(_SUBJECT_ANSWER_VERIFIER_RE.match(base))
-
-
-def read_declaration(path=None):
-    """선언 파일 → dict. 없거나 못 읽으면 None. **기본값은 «선언 없음» 이다.**"""
-    try:
-        with open(path or SUBJECT_DECL, encoding="utf-8") as fh:
-            got = json.load(fh)
-    except (OSError, ValueError):
-        return None
-    return got if isinstance(got, dict) and got.get("branch") else None
-
-
-def declaration_is_live(decl, session_id=None, now=None):
-    """그 선언이 **지금 이 세션에서** 유효한가. 순수 함수 — 테스트 대상.
-
-    ★ 세션이 다르면 무시한다. 잊고 남겨 둔 선언을 다음 세션이 물려받으면 그 세션은
-      **자기가 선언한 적 없는 경계**로 돌아간다 — 경계를 여는 표식에서 가장 나쁜 실패다.
-    ★ 세션 id 를 못 읽는 환경에서는 **시간**으로 만료시킨다(2차 방어).
-    """
-    if not decl or not decl.get("branch"):
-        return False
-    bound = decl.get("session")
-    if bound and session_id and bound != session_id:
-        return False
-    at = decl.get("at")
-    if isinstance(at, (int, float)) and (now if now is not None else time.time()) - at > SUBJECT_DECL_TTL_SEC:
-        return False
-    return True
-
-
-def declared_subject(payload=None, path=None, now=None):
-    """이 세션이 선언한 갈래 — 없으면 None. **처음 읽을 때 세션 id 를 박는다.**"""
-    decl = read_declaration(path)
-    session_id = (payload or {}).get("session_id")
-    if not declaration_is_live(decl, session_id, now):
-        return None
-    if session_id and not decl.get("session"):
-        decl["session"] = session_id
-        try:
-            with open(path or SUBJECT_DECL, "w", encoding="utf-8", newline="\n") as fh:
-                json.dump(decl, fh, ensure_ascii=False, indent=1)
-        except OSError:
-            pass                               # 못 박아도 TTL 이 2차로 막는다
-    return decl["branch"]
+    return (base in SUBJECT_OWNED_TOOL_BASENAMES
+            or bool(_SUBJECT_ANSWER_VERIFIER_RE.match(base))
+            or bool(_SCRATCH_TOOL_RE.match(base)))
 
 
 def command_arguments(command):
@@ -794,60 +751,42 @@ def common_paths_in_command(command):
 
 
 def container_root_violation(command, container_root, declared=None):
-    """과목이 없는 세션이 과목 콘텐츠를 커밋하려 하면 사유. 순수 함수 — 테스트 대상.
+    """**폐기된 판정 — 언제나 `None`** (2026-09-06 구조 이전, 사용자 승인).
 
-    `declared` 가 있으면 «과목이 없는 세션» 이 아니라 **«그 갈래 세션»** 으로 잰다.
+    옛 뜻: 「과목이 없는 세션(컨테이너 루트)이 과목 콘텐츠를 커밋하면 막는다」. 그 판정은
+    **과목마다 워크트리가 따로 있어서** 성립했다 — 컨테이너 루트에는 `data/` 가 아예 없었고,
+    거기서 과목 경로가 나오면 남의 워크트리를 건드리는 것이었다.
+
+    지금은 21개 브랜치를 main 하나로 합쳐 **모든 과목의 `data/` 가 이 트리에 함께 있다.**
+    그래서 이 판정은 지킬 것이 없고 정상 커밋만 막는다(합친 직후 실측). 호출부를 지우지 않고
+    함수를 남겨 둔 이유는 회귀 테스트가 이 이름으로 «이제는 안 막는다» 를 잠그기 때문이다 —
+    이름이 사라지면 그 잠금도 같이 사라진다.
     """
-    if not container_root:
-        return None
-    sub = git_subcommand(command)
-    commits = bool(re.search(r"tools[/\\]commit\.py", command.replace("\\", "/")))
-    if sub not in WRITE_GIT_SUBCOMMANDS and not commits:
-        return None
-    hits = subject_content_paths(command)
-    if declared:
-        foreign = foreign_subject_paths(declared, hits)
-        if foreign:
-            return ("선언된 갈래는 **" + declared + "** 다 — 다른 과목 콘텐츠는 그 과목 "
-                    "세션의 몫이다: " + ", ".join(foreign) + "\n"
-                    "  둘을 동시에 가지면 「한 세션이 전 과목 규격을 소유」로 되돌아간다 —\n"
-                    "  컨테이너 루트 배선이 없애려던 바로 그 형태다.\n"
-                    "  -> 공통을 고치려면 `python tools/session_subject.py --off` 로 선언을 먼저 끌 것.")
-        return None
-    if not hits:
-        return None
-    return ("이 세션은 **컨테이너 루트**라 과목이 없다 — 과목 콘텐츠는 그 과목 세션에서 "
-            "커밋한다: " + ", ".join(hits) + "\n"
-            "  여기서 할 것은 공통뿐이다(tools/ · AGENTS.md · site/template · site/fonts · "
-            ".claude/ · docs/).\n"
-            "  읽기는 막지 않는다 — `git show <갈래>:<경로>` 를 쓸 것.\n"
-            "  이 세션에서 그 과목을 만져야 하면 **선언**할 것: "
-            "`python main/tools/session_subject.py <갈래> --why \"<사유>\"` "
-            "(선언 중에는 공통 커밋이 막힌다).")
+    return None
 
 
 def runnable_script(target, session_root=None):
     """`python <target>` 을 허용할 자리인가. 순수 함수 — 테스트 대상.
 
-    ★ **컨테이너 루트 세션에서는 도구가 `<워크트리>/tools/…` 로 불린다** — 그 세션에는
-      워크트리가 없어서 `tools/x.py` 라는 상대 경로가 아예 성립하지 않는다. 그것을 «리포 밖»
-      으로 읽으면 **공통을 고칠 수단 자체가 사라진다**(실측 2026-08-15: 훅을 켠 바로 그 명령이
-      `sync_common.py` 거부였다 — 배선을 깔자마자 배선 도구가 막혔다).
-    ★★ 그렇다고 아무 `*/tools/*` 나 열면 이 규칙이 없어지는 것과 같다. 그래서 **세션 루트
-      바로 아래 한 칸**(= 워크트리 폴더)의 `tools/`·`.claude/hooks/` 만 인정한다.
-      두 칸 아래나 루트 밖은 여전히 거부다.
+    ★★ **「한 칸 아래」 인정은 은퇴했다 (2026-09-07, 사용자: «은퇴시키자»).**
+      2026-08-15 에 열린 예외였다 — 컨테이너 루트 세션에는 워크트리가 없어 `tools/x.py` 라는
+      상대 경로가 성립하지 않았고, 그것을 «리포 밖» 으로 읽으면 공통을 고칠 수단 자체가
+      사라졌다(그날 훅을 켠 바로 그 명령이 `sync_common.py` 거부였다). 그래서 **세션 루트
+      바로 아래 한 칸**의 `tools/`·`.claude/hooks/` 를 인정했다.
+      → 평탄화로 **컨테이너가 없어졌다.** 리포가 곧 세션 자리라 `tools/x.py` 가 그냥 성립하고,
+      남겨 두면 «한 칸 아래 아무 폴더의 tools/» 를 여는 창만 남는다. 예외는 그 전제가
+      사라지면 함께 걷는다. 경위 전문은 `docs/폐기된-규약.md`.
     """
     t = (target or "").replace("\\", "/")
-    if t.startswith(RUNNABLE_PREFIXES):
-        return True
-    if not session_root:
-        return False
-    root = os.path.normpath(str(session_root)).replace("\\", "/").rstrip("/")
-    full = t if re.match(r"^(?:[A-Za-z]:)?/", t) else root + "/" + t
-    full = os.path.normpath(full).replace("\\", "/")
-    if not full.lower().startswith(root.lower() + "/"):
-        return False
-    return bool(re.match(r"^[^/]+/(?:tools|\.claude/hooks)/", full[len(root) + 1:]))
+    if t.startswith("./"):
+        t = t[2:]
+    return t.startswith(RUNNABLE_PREFIXES) or bool(SUBJECT_FIGURE_SCRIPT.fullmatch(t))
+
+
+# 과목 삽화 생성기 `data/<과목>/chNN-figures.py` — 사용자 허용 2026-09-17([발화 생략]).
+# 삽화 좌표를 손으로 옮기던 사고(응용고체 ch13)를 막는다. 한 폴더 깊이·이 이름 꼴만 연다.
+# 못 보는 것: 파일 내용 — 신뢰는 `trusted_repo_script` 의 HEAD blob 대조가 맡는다.
+SUBJECT_FIGURE_SCRIPT = re.compile(r"data/[^/]+/ch\d{2}-figures\.py")
 
 
 def trusted_repo_script(target, session_root=None):
@@ -907,7 +846,7 @@ def deny_reason(command, container_root=False, session_root=None, declared=None)
         return hit
 
     if re.match(r"^\s*cd\s", command):
-        return ("`cd`로 시작하는 명령은 차단됨(AGENTS.md 실행 규율 4 / 메모리 no-cd-prefix). "
+        return ("`cd`로 시작하는 명령은 차단됨(CLAUDE.md 실행 규율 4 / 메모리 no-cd-prefix). "
                 "Bash 도구의 작업 디렉터리는 이미 프로젝트 루트이고, `cd` 접두사는 "
                 "settings.json allow 규칙을 무력화해 불필요한 승인 프롬프트를 만든다. "
                 "명령을 실행 파일 이름(python, git, ...)으로 시작할 것.")
@@ -959,9 +898,9 @@ def deny_reason(command, container_root=False, session_root=None, declared=None)
                 "**불필요한 승인 프롬프트**를 만든다(사용자 반복 지적). "
                 "다른 워크트리를 가리키는 `-C`는 막지 않는다.")
 
-    # ★ `2>&1` 등 리디렉션 금지 (2026-07-27, 사용자 지적 "이거 분명 안 나오게 한다 예전 세션에서 했는데").
+    # ★ `2>&1` 등 리디렉션 금지 (2026-07-27, 사용자 지적 [발화 생략]).
     #
-    # AGENTS 실행 규율 4가 이미 [사용자 발화 인용 생략]
+    # AGENTS 실행 규율 4가 이미 *[발화 생략]*
     # 이라고 적고 있는데 **한 세션에 20회 넘게 반복**됐다. 문서에만 있어서다 — echo·`cd`와 같은 구조.
     #
     # 실제 피해: `python tools/test_checks.py` 는 allow에 있는데 `> 파일 2>&1` 이 붙는 순간
@@ -981,7 +920,7 @@ def deny_reason(command, container_root=False, session_root=None, declared=None)
 
     # ★ grep/rg 패턴에 꺾쇠(`<`·`>`)가 들어가면 거부 (2026-07-30, 원장 19번).
     #
-    # 사용자: [사용자 발화 인용 생략] — `grep -n -o "이해도[^<]\{0,40\}" …` 에 승인창이 떴다.
+    # 사용자: *[발화 생략]* — `grep -n -o [발화 생략] …` 에 승인창이 떴다.
     # settings 에 `Bash(grep *)` 가 **있는데도** 떴고, 같은 세션의 꺾쇠 없는 grep 은 안 떴다.
     # 하네스의 권한 매처가 따옴표 안의 `<` 를 **리디렉션으로 읽는 것**으로 보인다(미검증).
     #
@@ -989,17 +928,17 @@ def deny_reason(command, container_root=False, session_root=None, declared=None)
     # 파일 링크까지 붙는다 — SVG·빌드 출력을 뒤지는 일은 전부 그쪽이 낫다.
     # AGENTS 실행 규율 4에 이미 적혀 있었는데 문서에만 있어서 매번 Bash grep 으로 돌아갔다.
     # ★ 2026-07-31 확장 — 방아쇠는 꺾쇠가 아니라 **쉘 특수문자 전체**였다(원장 20번).
-    #   사용자: [사용자 발화 인용 생략] — `grep -o "[^\"]\{0,60\}frac[^\"]\{0,60\}" …`.
+    #   사용자: *[발화 생략]* — `grep -o [발화 생략]]\{0,60\}frac[^\"]\{0,60\}" …`.
     #   꺾쇠가 하나도 없는데 떴다. 공통점은 *따옴표 안에 있어도 쉘 렉서가 특별히 읽는 문자*다
     #   (`<`·`>` = 리디렉션, `\"` = 따옴표 이스케이프). 즉 부류는 "꺾쇠"가 아니라
     #   **매처가 명령을 우리와 다르게 쪼개게 만드는 문자**다 — 좁게 잡았더니 그 밖으로 새로 들어왔다.
     #
     # ★★★ **2026-08-24 — 세 번째다. 문자 목록을 버리고 명령을 통째로 막는다**(원장 29번).
-    #   사용자: [사용자 발화 인용 생략] — `grep -c "" "…/naru/변경일지.md"`.
+    #   사용자: *[발화 생략]* — `grep -c "" "…/naru/변경일지.md"`.
     #   이번 방아쇠는 **빈 따옴표 `""`** 였다. 꺾쇠도 이스케이프 따옴표도 없다.
     #   ★ **앞의 두 판이 틀린 방식이었다는 것이 요점이다.** 방아쇠 문자를 하나씩 추가하는 한
     #     «아직 안 만난 문자» 가 남아 있고, 그건 사용자가 승인창으로 알려 줄 때까지 안 보인다 —
-    #     즉 **이 규칙은 구조상 항상 한 발 늦는다.** 2026-07-31 판이 [사용자 발화 인용 생략] 며 좁게 남겼는데, 그때 걱정한 「우회」는 실체가 없었다: 막힌 자리의 대체 수단이
+    #     즉 **이 규칙은 구조상 항상 한 발 늦는다.** 2026-07-31 판이 *[발화 생략]* 며 좁게 남겼는데, 그때 걱정한 「우회」는 실체가 없었다: 막힌 자리의 대체 수단이
     #     **Grep 도구 하나로 완전**하기 때문이다(내용 검색·글롭·문맥·개수 전부 된다).
     #   → 그래서 `grep`·`rg` 를 **조건 없이** 막는다. 이 부류는 여기서 끝난다.
     #   ※ 줄 수만 세는 것이라면 `wc` 가 열려 있고, 파일을 보는 것이라면 Read 가 있다.
@@ -1012,14 +951,14 @@ def deny_reason(command, container_root=False, session_root=None, declared=None)
                 "`-C` 로 개수·문맥까지 다 된다. 줄 수만 세려면 `wc`, 파일을 보려면 Read.")
 
     if "<<" in command:
-        return ("힙독(`<<`)은 차단됨(AGENTS.md 실행 규율 2). 일회성 감사를 쪼개 반복 실행하지 말 것. "
+        return ("힙독(`<<`)은 차단됨(CLAUDE.md 실행 규율 2). 일회성 감사를 쪼개 반복 실행하지 말 것. "
                 "필요한 감사를 한 스크립트로 설계해 파일로 저장한 뒤 "
                 "`python <경로>`로 한 번만 실행하고, 재사용할 것 같으면 tools/ 로 승격할 것.")
 
     # `python -`(표준입력)과 `python -c`(인라인 코드)는 같은 결함이다 — 쪼갠 일회성 감사.
     # 2026-07-24: `-`만 막혀 있어 `python -c`가 3~4세션 동안 계속 새어나갔다(사용자 실측).
     if inline_python(command):
-        return ("`python -c`/`python -`(인라인·표준입력 실행)은 차단됨(AGENTS.md 실행 규율 2). "
+        return ("`python -c`/`python -`(인라인·표준입력 실행)은 차단됨(CLAUDE.md 실행 규율 2). "
                 "한 줄짜리 조회라도 예외가 아니다 — 같은 조회를 다음 세션이 또 하게 된다. "
                 "**데이터를 들여다보려는 것이라면 `python tools/inspect_data.py`를 쓸 것** — "
                 "챕터 요약·연습문제 표·문풀 표·항목 JSON·삽화 목록·증기표 조회가 다 있고 "
@@ -1029,7 +968,7 @@ def deny_reason(command, container_root=False, session_root=None, declared=None)
     # ★ `powershell -Command "..."` 도 같은 부류다 (2026-08-02, 원장 22번).
     #   파이썬만 막아 두었더니 셸 쪽으로 새어나갔다 — 차단 목록을 **언어로** 적은 탓이다.
     if inline_powershell(command):
-        return ("`powershell -Command`(인라인 코드 실행)은 차단됨(AGENTS.md 실행 규율 2). "
+        return ("`powershell -Command`(인라인 코드 실행)은 차단됨(CLAUDE.md 실행 규율 2). "
                 "`python -c` 와 같은 부류다 — 일회성 스니펫은 매번 승인을 요구하고 "
                 "다음 세션이 같은 조회를 또 짠다. "
                 "**서버가 떠 있는지 보려는 것이라면 그냥 `preview_start` 로 열어 볼 것** "
@@ -1041,39 +980,24 @@ def deny_reason(command, container_root=False, session_root=None, declared=None)
     bare = re.sub(r"'[^']*'|\"[^\"]*\"", "", command)
     chain = re.search(r"(\|\||&&|[|;])", bare)
     if chain:
-        return ("명령 이어붙이기(`" + chain.group(1) + "`)는 차단됨(AGENTS.md 실행 규율 4). "
+        return ("명령 이어붙이기(`" + chain.group(1) + "`)는 차단됨(CLAUDE.md 실행 규율 4). "
                 "복합 명령은 조각마다 독립 매칭돼 승인 프롬프트를 만든다. "
                 "Bash 한 번에 명령 하나. 여러 단계가 필요하면 tools/ 의 도구 하나로 합칠 것. "
                 "파일을 읽으려면 파이프 대신 Read·Grep 도구를 쓸 것.")
 
-    # 과목 경계 — 현재 브랜치와 다른 과목 콘텐츠를 add/commit하려 하면 막는다.
-    sub = git_subcommand(command)
-    if sub in ("add", "commit"):
-        branch = _current_branch(command)
-        targets = _commit_target_paths(command, sub)
-        bad = foreign_subject_paths(branch, targets)
-        if bad:
-            return ("과목 경계 위반 — 현재 브랜치 '" + branch + "'(" + str(subject_of_branch(branch))
-                    + ")에서 다른 과목 경로를 " + sub + "하려 함: " + ", ".join(bad[:4])
-                    + " (2026-07-25 과목=브랜치 정책). 이 세션은 자기 과목만 다룬다 — "
-                    + "다른 과목은 그 과목 worktree 폴더의 세션이 커밋한다. "
-                    + "스테이징에 섞였으면 `git reset <경로>`로 빼라.")
-        # 챕터 경계 — 챕터 브랜치는 자기 챕터 콘텐츠 밖을 커밋하지 않는다 (2026-07-29 병렬화).
-        outside = out_of_chapter_paths(branch, targets)
-        if outside:
-            scope = branch_chapter_scope(branch)
-            return ("챕터 경계 위반 — 브랜치 '" + branch + "'는 " + str(scope)
-                    + " 콘텐츠 전용인데 그 밖을 " + sub + "하려 함: " + ", ".join(outside[:4])
-                    + ". 챕터 세션은 `data/" + str(subject_of_branch(branch)) + "/" + str(scope)
-                    + "*` 만 커밋한다. 공통(tools/·AGENTS.md·site/template/)은 과목 본 브랜치 "
-                    + "세션 한 곳이 소유한다 — 규격을 고쳐야 하면 그 세션에 요청하고 "
-                    + "여기서는 `git merge`로 받아라. (2026-07-27 공통 클로버 사고가 "
-                    + "챕터 단위로 재현되는 것을 막는 경계다.)")
+    # ★★ **과목·챕터 경계는 없앴다 (2026-09-06 구조 이전, 사용자 승인).**
+    #   경계의 근거는 «과목 = 브랜치 = worktree» 였고, 그 전제는 «여러 과목을 각각 다른
+    #   채팅에서 동시에 작업한다» 였다. 지금은 컨테이너 세션 하나가 전 과목을 오가고,
+    #   21개 브랜치를 main 하나로 합쳤다 — 그래서 이 경계는 지키는 것이 없고 **정상 작업만
+    #   막는다**(실측: 합친 직후 `data/계측공학` 수정을 커밋하려다 «과목이 없다» 로 거부됐다).
+    #   여기서 지운 것은 «어느 과목을 만질 수 있나» 하나뿐이다 — `git add -A`·되돌릴 수 없는
+    #   조작·파이프·힙독 같은 나머지 규율은 그대로 살아 있고, 한 트리에 21과목이 함께 있게
+    #   되어 `add -A` 의 사고 범위는 오히려 커졌다(그 금지는 그대로 둔다).
 
     # 일회성 스크립트 금지 — 실행 규율 2의 '고정 도구로 승격'을 기계가 강제한다.
     target = script_target(command)
     if target and not target.startswith("-") and not runnable_script(target, session_root):
-        return ("리포 밖 스크립트 실행은 차단됨: " + target + " (AGENTS.md 실행 규율 2). "
+        return ("리포 밖 스크립트 실행은 차단됨: " + target + " (CLAUDE.md 실행 규율 2). "
                 "일회성 감사 스크립트를 새로 짜지 말 것 — 먼저 tools/ 의 기존 도구가 "
                 "이미 그 검사를 하는지 확인하고(build_site.py·audit_content.py 등), "
                 "없으면 tools/ 에 고정 도구로 추가해 실행할 것. "
@@ -1110,7 +1034,7 @@ def allow_reason(command, session_root=None):
             and trusted_repo_script(target, session_root)):
         return "리포 고정 도구(python tools/*.py) — guard 자동 허용"
     # ★ 훅 스크립트도 같은 부류다 (열린 날 2026-08-23 · 승인 원장 27번).
-    #   사용자: [사용자 발화 인용 생략] — `python .claude/hooks/shared_sync_check.py --list`.
+    #   사용자: *[발화 생략]* — `python .claude/hooks/shared_sync_check.py --list`.
     #   **AGENTS 가 손으로 부르라고 적어 둔 명령들**이다(`shared_sync_check.py --accept` ·
     #   `gate_rerun_guard.py --check-wiring .` · `session_brief.py`). 그런데 자동 허용은
     #   `tools/` 접두만 봐서 **어느 목록에도 없는 채 판정 보류로 빠졌다**(원장 21번과 같은 부류).
@@ -1124,7 +1048,7 @@ def allow_reason(command, session_root=None):
         return "로컬 미리보기 서버 — guard 자동 허용"
     if git_subcommand(command) in SAFE_GIT:
         return "읽기 전용 git — guard 자동 허용"
-    # 아래 둘은 2026-07-26에 thermo·math가 **같은 사용자 지적("이거 항상 허용 왜 뜨지")을
+    # 아래 둘은 2026-07-26에 thermo·math가 **같은 사용자 지적([발화 생략])을
     # 각자 고쳐** main에서 충돌한 것이다. 한쪽을 버리면 다른 과목이 고친 부류가 되살아나므로
     # 둘 다 남긴다 — 쌍 판정은 worktree·stash·branch·remote를, config는 읽기/쓰기가 같은
     # 서브커맨드라 전용 판정기가 맡는다(플래그 조합이 많아 쌍으로는 못 덮는다).
@@ -1140,8 +1064,9 @@ def allow_reason(command, session_root=None):
     #   허용으로 빼고, 그 외(--hard·일반 checkout·branch 전환·rebase 등)는 GATED_GIT에 그대로 둔다.
     if read_only_git_reset(command):
         return "git reset -- <경로>(인덱스만 되돌림, 작업 트리·HEAD 불변) — guard 자동 허용"
-    if read_only_git_checkout_ours(command):
-        return "git checkout --ours(병합 충돌 해결, 버려지는 쪽은 다른 브랜치에 남음) — guard 자동 허용"
+    if read_only_git_checkout_ours_or_theirs(command):
+        return ("git checkout --ours/--theirs(병합 충돌 해결, 버려지는 쪽은 "
+                "다른 브랜치에 남음) — guard 자동 허용")
     if read_only_git_checkout_from_ref(command):
         return "git checkout <참조> -- <경로>(그 커밋에서 경로만 복원, 참조가 역사에 남아 있어 되돌릴 수 있음) — guard 자동 허용"
     # ★ 일상 로컬 git 쓰기(add·commit·merge)는 과목 브랜치에서 guard가 자동 허용한다
@@ -1156,7 +1081,7 @@ def allow_reason(command, session_root=None):
         return "과목 브랜치의 로컬 git(add/commit/merge) — guard 자동 허용(foreign·챕터 경계 통과분)"
     # ★★ **루프 회차의 마지막 도구 호출은 재예약이다** (열린 날 2026-08-07 · 한 세션에서 2회 빠뜨림).
     #
-    #   사용자: [사용자 발화 인용 생략] — 실측하니 `/loop` 이 **한 회차 돌고 죽어** 있었다.
+    #   사용자: *[발화 생략]* — 실측하니 `/loop` 이 **한 회차 돌고 죽어** 있었다.
     #   원인은 도구가 아니라 **회차 마무리의 순서**다. 사용자가 정한 회차 끝 의식이
     #   `shutdown -a` + `shutdown -s -t <초>` 두 줄이라, 그 둘을 실행하고 요약을 쓰면
     #   *끝냈다* 는 느낌이 들어 **ScheduleWakeup 을 안 부른다.** 그런데 루프는 매 턴 다시
@@ -1181,7 +1106,7 @@ def allow_reason(command, session_root=None):
 
 # ★ 매번 물어야 하는 git 쓰기 — **영구 허용으로 넘어가면 안 되는** 부류 (2026-07-27 신설).
 #
-# 사용자 지적: [사용자 발화 인용 생략]
+# 사용자 지적: *[발화 생략]*
 #
 # blocking PreToolUse 훅은 permission allow보다 먼저 평가되고 deny가 우선한다. 이 게이트는
 # 설정의 넓은 allow와 무관하게 되돌리기 어려운 Git 쓰기를 매번 ask로 돌린다.
@@ -1285,7 +1210,6 @@ def _trace(command):
     except Exception:
         pass
 
-
 def main():
     try:
         payload = read_payload()
@@ -1299,8 +1223,7 @@ def main():
     _trace(command)
 
     _root = session_root(payload)
-    reason = deny_reason(command, session_has_no_subject(payload), _root,
-                         declared_subject(payload))
+    reason = deny_reason(command, session_has_no_subject(payload), _root)
     if reason:
         _decide("deny", reason)
     reason = allow_reason(command, _root)
@@ -1312,3 +1235,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

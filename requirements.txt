@@ -1,6 +1,22 @@
-# 표준 라이브러리 외에 실제로 import되는 서드파티 패키지만 적는다(전수 확인은 안 됨 — grep 기반).
-# 버전은 고정하지 않았다 — 필요하면 각자 환경에서 잠근다.
+# 전공정리프로젝트 — 파이썬 의존 매니페스트
+#
+# ★ 손으로 고치지 말 것 — `python tools/audit_deps.py --write` 가 만든다.
+#   서드파티 목록은 리포의 모든 `.py` 를 ast 로 훑어 뽑는다(그 도구 독스트링 참조).
+#
+# 열린 날 2026-09-08 — 공용 폴더 `변경일지.md` 「requirements.txt 를 각 리포가 세울 것」.
+#   여덟 프로젝트가 파이썬 하나를 공유하는데 어느 코드가 무엇을 요구하는지
+#   적힌 파일이 어디에도 없었다.
+#
+# 요구 인터프리터: python >=3.10
+#   이 PC 는 3.14 로 돌린다(`AppData/Local/Python/pythoncore-3.14-64`). 하한 3.10 은 **잰 값이다** — `sys.stdlib_module_names`(3.10 신설)를 `tools/audit_deps.py` 가 쓴다. `tomllib`(3.11)는 이 리포에 쓰는 자리가 없다.
+#
+# ☐ 이 파일이 안 적는 것: 외부 실행파일(브라우저 — `render_figure_review.py` 가
+#   Edge·Chrome 을 헤드리스로 부른다 · `vercel` CLI — 배포에만).
 
-PyMuPDF        # import fitz — PDF 렌더링(extract_textbook.py 등)
-pdfplumber     # 교재 PDF 텍스트 추출
-fonttools[woff]  # 웹폰트 서브셋 생성(font_subset.py)
+pdfplumber                   # tools/audit_coverage.py 외 3곳
+pymupdf                      # tools/extract_textbook.py 외 2곳
+pypdf                        # tools/split_textbook_pdf.py
+svgelements                  # tools/audit_svg_geometry_cross.py 외 1곳
+
+# --- import 스캔에 안 잡히는 것 (extra 의존) ---
+fonttools[woff]              # woff2 서브셋(`tools/font_subset.py`)이 brotli·zopfli 를 쓴다 — extra 라 import 에 안 보인다

@@ -1,8 +1,15 @@
 {
-  "//사용법": "이 파일은 원작자가 실제로 쓰던 폭넓은 자동 승인 설정의 예시다. 그대로 활성화되지 않는다 — 쓰려면 이 파일의 'permissions' 안 내용을 .claude/settings.json 의 'permissions' 키에 덮어써야 한다. defaultMode: auto 는 '1회 허용/모두 허용'류 승인창을 자동으로 넘긴다는 뜻이라, 되돌릴 수 없는 조작(push --force·reset --hard·배포 등)은 deny 에 남겨 뒀지만 그 밖의 모든 Bash·Edit·Write 호출이 확인 없이 실행된다. 자기 프로젝트·위험 감수 수준에 맞게 걸러서 가져갈 것 — 통째로 복붙하지 말 것을 권한다.",
+  "//": "원작자가 실제로 쓰던 폭넓은 자동 승인 설정의 예시다 — 그대로 켜지지 않는다. README 「권한 설정」 절을 읽고 필요한 줄만 settings.json 으로 옮긴다.",
   "permissions": {
     "defaultMode": "auto",
-    "ask": [],
+    "ask": [
+      "Edit(.claude/hooks/**)",
+      "Write(.claude/hooks/**)",
+      "Edit(.claude/rules/**)",
+      "Write(.claude/rules/**)",
+      "Edit(.claude/settings.json)",
+      "Write(.claude/settings.json)"
+    ],
     "allow": [
       "Workflow",
       "Glob",
@@ -84,6 +91,10 @@
       "Bash(python tools/audit_content.py *)",
       "Bash(python3 tools/audit_content.py)",
       "Bash(python3 tools/audit_content.py *)",
+      "Bash(python tools/test_checks.py)",
+      "Bash(python tools/test_checks.py *)",
+      "Bash(python3 tools/test_checks.py)",
+      "Bash(python3 tools/test_checks.py *)",
       "Bash(python tools/close_report.py)",
       "Bash(python tools/close_report.py *)",
       "Bash(python3 tools/close_report.py)",
@@ -96,13 +107,24 @@
       "Bash(python tools/audit_refs.py *)",
       "Bash(python3 tools/audit_refs.py)",
       "Bash(python3 tools/audit_refs.py *)",
+      "Bash(python tools/verify_workorder.py data/열역학/*.workorder.md)",
+      "Bash(python3 tools/verify_workorder.py data/열역학/*.workorder.md)",
       "Bash(python tools/preview_figures.py)",
       "Bash(python tools/preview_figures.py *)",
       "Bash(python3 tools/preview_figures.py)",
       "Bash(python3 tools/preview_figures.py *)",
+      "Bash(python tools/verify_steam_tables.py)",
+      "Bash(python3 tools/verify_steam_tables.py)",
+      "Bash(python tools/gen_steam_tables.py)",
+      "Bash(python3 tools/gen_steam_tables.py)",
       "Bash(pip list*)",
       "Bash(pip show *)",
       "Bash(pip --version*)",
+      "Bash(vercel whoami*)",
+      "Bash(vercel project ls*)",
+      "Bash(vercel project inspect*)",
+      "Bash(vercel ls*)",
+      "Bash(vercel list*)",
       "Skill(verify)",
       "Skill(verify:*)",
       "Skill(code-review)",
@@ -181,6 +203,8 @@
       "Read(**/.gnupg/**)",
       "Read(**/id_rsa*)",
       "Read(**/id_ed25519*)",
+      "Edit(<교재 폴더>/**)",
+      "Write(<교재 폴더>/**)",
       "Bash(git clean *-f*)",
       "Bash(git clean *-x*)",
       "Bash(git clean *-d*)",
@@ -206,6 +230,10 @@
       "Bash(netlify deploy*)",
       "Bash(*vercel deploy*)",
       "Bash(vercel deploy*)"
+    ],
+    "additionalDirectories": [
+      "<교재 폴더 절대경로>",
+      "<공용 시스템 폴더 경로(선택)>"
     ]
   }
 }

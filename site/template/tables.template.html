@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>열역학 · 수증기 표</title>
+<title>{{SUBJECT}} · 수증기 표</title>
 <style>
   :root{
     --paper:#f6f3ec; --paper-raised:#fffdf8; --ink:#20242b; --sub:#6b6558;
@@ -51,6 +51,9 @@
     flex:none; min-height:44px; padding:9px 14px; border:1px solid transparent; border-radius:8px;
     background:none; color:var(--sub); cursor:pointer; font-size:13px; font-weight:700;
   }
+  /* ★ 물질 줄은 **고정(sticky)하지 않는다** — 표 종류 줄이 이미 `top:0` 에 붙어 있어서
+     둘 다 붙이면 스크롤 중에 겹친다. 물질은 한 번 고르고 마는 것이라 따라다닐 이유도 없다. */
+  .tabs.substances{position:static; margin:22px 0 0; padding-bottom:0; border-bottom:0;}
   .tab-button:hover{color:var(--ink); background:var(--paper-raised);}
   .tab-button.active{color:var(--copper); background:var(--copper-soft); border-color:var(--copper);}
   .table-panel{min-width:0;}
@@ -68,7 +71,7 @@
   .data-table tbody tr{cursor:pointer;}
   .data-table tbody tr:hover td{background:var(--blue-soft);}
   .data-table tbody tr.selected td{background:var(--copper-soft); color:var(--ink);}
-  /* ★★ **세로(열)도 고를 수 있다** (신설 2026-08-19, 사용자: [사용자 발화 인용 생략]). 표를 읽는 동작이 실제로 둘이라서다 — 아는 값으로 **줄**을 찾고,
+  /* ★★ **세로(열)도 고를 수 있다** (신설 2026-08-19, 사용자: *[발화 생략]*). 표를 읽는 동작이 실제로 둘이라서다 — 아는 값으로 **줄**을 찾고,
      읽을 성질로 **칸**을 따라 내려간다. 가로만 고를 수 있으면 그 절반만 도와주는 셈이다.
      · 고르는 자리는 **머리글**이다 — 본문 셀 클릭은 이미 줄 선택이 쓰고 있고, 한 클릭에
        두 뜻을 얹으면 어느 쪽이 켜졌는지 사람이 못 가린다.
@@ -118,11 +121,18 @@
   <!-- `data-tut-host` — 「설명 다시 보기」 버튼이 붙을 자리를 **이 화면이 선언한다**
        (튜토리얼 층은 공유 조각이라 화면마다 다른 선택자를 알면 안 된다). -->
   <div class="topline" data-tut-host>
-    <div class="eyebrow">전공정리 · 열역학 부록</div>
+    <!-- ★ 과목 이름을 박지 않는다 (2026-09-08). 두 과목이 이 템플릿을 함께 쓰는데 제목과
+         눈썹글이 「열역학」으로 박혀 있어, 응용열역학 표를 열어도 **탭 제목이 열역학**이었다.
+         빌드가 채운다(`render.build_tables_page`). -->
+    <div class="eyebrow">전공정리 · {{SUBJECT}} 부록</div>
   </div>
-  <h1>수증기 표</h1>
+  <h1 id="pageTitle">수증기 표</h1>
   <div class="metadata" id="unitsLine"></div>
-  <div class="source">CoolProp 8.0.0 (IAPWS-95) 계산값 · 유효숫자 5자리</div>
+  <div class="source" id="sourceLine">CoolProp 8.0.0 (IAPWS-95) 계산값 · 유효숫자 5자리</div>
+
+  <!-- ★ 물질 선택기 — **데이터에 `substances` 가 있을 때만** 채운다 (2026-09-08).
+       열역학(Cengel)은 그 키가 없으므로 이 줄이 통째로 안 그려진다(선언이 곧 opt-in). -->
+  <nav class="tabs substances" id="substanceTabs" aria-label="물질" hidden></nav>
 
   <nav class="tabs" aria-label="수증기 표 종류">
     <button class="tab-button active" data-table="saturation_T">포화 (온도 기준)</button>
@@ -135,8 +145,25 @@
 
 <script>
 var STEAM = {{STEAM_JSON}};
+/* ★ 단위와 임계압력은 **데이터가 정한다** (2026-09-08). 열역학은 kPa(Cengel), 응용열역학은
+   bar(Moran)라 이 화면이 둘을 다 그려야 한다. 임계압력을 상수 `22064` 로 박아 두면 bar 판에서
+   압축액 블록이 전부 「초임계」로 읽힌다 — 포화압력표의 마지막 행이 곧 임계점이므로 거기서 읽는다. */
+var PRESSURE_UNIT = (STEAM.units && STEAM.units.P) || 'kPa';
 var activeTable = 'saturation_T';
 var activePressureIndex = 0;
+
+/* ★★ **물질을 고른다 — 물 + 냉매 넷** (2026-09-08). Moran 부표는 물(A-2~A-5) 말고도
+   R-134a·R-22·암모니아·프로판(A-7~A-18)을 싣는다. 단위·칸 배열이 물과 같아서 표를 그리는
+   코드는 하나면 되고, **바뀌는 것은 「어느 묶음을 읽는가」 하나뿐**이다 — 그래서 모든 참조가
+   `SRC()` 를 지난다. 전역 하나를 직접 읽는 자리가 남으면 물질을 바꿔도 그 표만 물로 남는다.
+   ★ 냉매에는 **압축액 표가 없다**(교재도 안 싣는다) — 그 탭은 물일 때만 보인다. */
+var SUBSTANCES = STEAM.substances || null;
+var activeSubstance = '';                       // '' = 물(최상위)
+function SRC(){ return activeSubstance ? SUBSTANCES[activeSubstance] : STEAM; }
+function CRITICAL_PRESSURE_OF(src){
+  var rows = src.saturation_P.rows;
+  return rows[rows.length - 1][0];
+}
 
 function esc(value){
   return String(value).replace(/[&<>]/g,function(character){
@@ -153,20 +180,39 @@ document.getElementById('unitsLine').textContent = unitLine();
 // ★ 열 번호를 **머리글에 박아 둔다**(`data-cols`). 클릭 때 표 구조(rowspan·colspan)를 거꾸로
 //   푸는 것보다 이쪽이 안전하다 — 머리를 만드는 자리에서는 어느 칸인지가 이미 정해져 있고,
 //   푸는 쪽에 두면 표 모양이 바뀔 때마다 그 계산이 조용히 어긋난다.
-function saturationHeader(firstLabel,secondLabel){
+/* ★ 머리를 **데이터에서 짓는다** (2026-09-08). 그전에는 13칸 Cengel 배열이 통째로 박혀
+   있었고, 응용열역학이 Moran 표기(증발 칸을 h 에만 두는 11칸)로 가면서 **머리와 몸이
+   어긋났다** — colspan 과 `data-cols` 가 전부 한 칸씩 밀린다. 과목마다 칸이 다른 것이
+   정상이므로 판정을 `columns` 하나에 맡긴다(AGENTS 「공통 도구에 과목별 사실을 박지 않는다」).
+   그룹은 이름의 밑줄 앞이 정한다 — `v_f`·`v_g` 가 한 그룹, `h_f`·`h_fg`·`h_g` 가 한 그룹. */
+var GROUP_LABEL = {
+  v: '비체적 m³/kg', u: '내부에너지 kJ/kg',
+  h: '엔탈피 kJ/kg', s: '엔트로피 kJ/(kg·K)'
+};
+function saturationHeader(columns,firstLabel,secondLabel){
+  var groups = [];
+  columns.slice(2).forEach(function(name,offset){
+    var index = offset + 2;
+    var cut = name.indexOf('_');
+    var key = cut < 0 ? name : name.slice(0,cut);
+    var sub = cut < 0 ? '' : name.slice(cut + 1);
+    var last = groups[groups.length - 1];
+    if(last && last.key === key){ last.cols.push(index); last.subs.push(sub); }
+    else { groups.push({key:key, cols:[index], subs:[sub]}); }
+  });
+  var top = groups.map(function(group){
+    return '<th colspan="' + group.cols.length + '" tabindex="0" data-cols="' + group.cols.join(' ') + '">' +
+      esc(GROUP_LABEL[group.key] || group.key) + '</th>';
+  }).join('');
+  var bottom = groups.map(function(group){
+    return group.cols.map(function(index,slot){
+      return '<th tabindex="0" data-cols="' + index + '">' + esc(group.subs[slot]) + '</th>';
+    }).join('');
+  }).join('');
   return '<thead><tr>' +
-    '<th class="sticky-first" rowspan="2" tabindex="0" data-cols="0">' + firstLabel + '</th>' +
-    '<th rowspan="2" tabindex="0" data-cols="1">' + secondLabel + '</th>' +
-    '<th colspan="2" tabindex="0" data-cols="2 3">비체적 m³/kg</th>' +
-    '<th colspan="3" tabindex="0" data-cols="4 5 6">내부에너지 kJ/kg</th>' +
-    '<th colspan="3" tabindex="0" data-cols="7 8 9">엔탈피 kJ/kg</th>' +
-    '<th colspan="3" tabindex="0" data-cols="10 11 12">엔트로피 kJ/(kg·K)</th>' +
-    '</tr><tr>' +
-    '<th tabindex="0" data-cols="2">f</th><th tabindex="0" data-cols="3">g</th>' +
-    '<th tabindex="0" data-cols="4">f</th><th tabindex="0" data-cols="5">fg</th><th tabindex="0" data-cols="6">g</th>' +
-    '<th tabindex="0" data-cols="7">f</th><th tabindex="0" data-cols="8">fg</th><th tabindex="0" data-cols="9">g</th>' +
-    '<th tabindex="0" data-cols="10">f</th><th tabindex="0" data-cols="11">fg</th><th tabindex="0" data-cols="12">g</th>' +
-    '</tr></thead>';
+    '<th class="sticky-first" rowspan="2" tabindex="0" data-cols="0">' + esc(firstLabel) + '</th>' +
+    '<th rowspan="2" tabindex="0" data-cols="1">' + esc(secondLabel) + '</th>' +
+    top + '</tr><tr>' + bottom + '</tr></thead>';
 }
 function simpleHeader(){
   return '<thead><tr><th class="sticky-first" tabindex="0" data-cols="0">T (°C)</th><th tabindex="0" data-cols="1">v (m³/kg)</th><th tabindex="0" data-cols="2">u (kJ/kg)</th><th tabindex="0" data-cols="3">h (kJ/kg)</th><th tabindex="0" data-cols="4">s (kJ/(kg·K))</th></tr></thead>';
@@ -178,29 +224,41 @@ function rowHtml(row,isSaturated){
   }).join('') + '</tr>';
 }
 function saturationTableHtml(kind){
-  var table = STEAM[kind];
+  var table = SRC()[kind];
   var temperatureBased = kind === 'saturation_T';
   var heading = temperatureBased ? '포화수 표 · 온도 기준' : '포화수 표 · 압력 기준';
-  var firstLabel = temperatureBased ? 'T (°C)' : 'P (kPa)';
-  var secondLabel = temperatureBased ? 'P_sat (kPa)' : 'T_sat (°C)';
+  var firstLabel = temperatureBased ? 'T (°C)' : 'P (' + PRESSURE_UNIT + ')';
+  var secondLabel = temperatureBased ? 'P_sat (' + PRESSURE_UNIT + ')' : 'T_sat (°C)';
   return '<div class="panel-heading"><h2>' + heading + '</h2><p class="panel-note">행을 탭하면 그 줄이, 열 머리를 탭하면 그 칸이 켜집니다 — 켜 둔 채로 훑으면 됩니다.</p></div>' +
-    '<div class="table-scroll"><table class="data-table">' + saturationHeader(firstLabel,secondLabel) +
+    '<div class="table-scroll"><table class="data-table">' + saturationHeader(table.columns,firstLabel,secondLabel) +
     '<tbody>' + table.rows.map(function(row){ return rowHtml(row,false); }).join('') + '</tbody></table></div>';
 }
 
-var saturationPressureByP = {};
-STEAM.saturation_P.rows.forEach(function(row){ saturationPressureByP[String(row[0])] = row[1]; });
+/* ★ 이 사전은 **물질마다 다시 만든다** (2026-09-08). 옛 판은 모듈이 뜰 때 물 표로 한 번만
+   만들었는데, 물질을 바꾸면 「P = 4 bar 블록의 포화온도」를 **물의 표에서** 찾아 와
+   냉매 화면에 물의 온도가 찍힌다. 조용히 틀리는 자리라 사전을 상태에 묶는다. */
 function saturationTemperatureForBlock(block){
-  var exact = saturationPressureByP[String(block.P)];
-  return exact === undefined ? block.rows[0][0] : exact;
+  var rows = SRC().saturation_P.rows;
+  for(var i = 0; i < rows.length; i++){
+    if(rows[i][0] === block.P) return rows[i][1];
+  }
+  return block.rows[0][0];
 }
-function pressureChipHtml(block,index,unit){
-  var label = unit === 'MPa' ? textNumber(block.P / 1000) + ' MPa' : textNumber(block.P) + ' kPa';
+/* ★ 압력 라벨도 데이터가 정한다 (2026-09-08). 옛 판은 호출부가 `'kPa'`·`'MPa'` 를 손으로
+   넘겼고, 압축액만 MPa 였던 이유는 **kPa 로 적으면 `50000 kPa` 처럼 길어져서**다.
+   그 축약은 kPa 일 때만 뜻이 있다 — bar 는 `300 bar` 로 이미 짧다. 그래서 판정을
+   「단위가 kPa 이고 1000 이상인가」로 좁히고, 나머지는 데이터의 단위를 그대로 쓴다. */
+function pressureLabelOf(block){
+  if(PRESSURE_UNIT === 'kPa' && block.P >= 1000) return textNumber(block.P / 1000) + ' MPa';
+  return textNumber(block.P) + ' ' + PRESSURE_UNIT;
+}
+function pressureChipHtml(block,index){
+  var label = pressureLabelOf(block);
   return '<button class="pressure-chip' + (index === activePressureIndex ? ' active' : '') + '" data-pressure-index="' + index + '">' + esc(label) + '</button>';
 }
-function pressureNavHtml(block,position,blocks,unit,stateLabel){
+function pressureNavHtml(block,position,blocks,stateLabel){
   var last = blocks.length - 1;
-  var pressureLabel = unit === 'MPa' ? textNumber(block.P / 1000) + ' MPa' : textNumber(block.P) + ' kPa';
+  var pressureLabel = pressureLabelOf(block);
   return '<div class="pressure-nav ' + position + '">' +
     '<button class="nav-button" data-pressure-step="-1"' + (activePressureIndex === 0 ? ' disabled' : '') + '>이전 압력</button>' +
     '<div class="block-heading">P = ' + esc(pressureLabel) + ' (' + esc(stateLabel || 'T_sat = ' + textNumber(saturationTemperatureForBlock(block)) + ' °C') + ')</div>' +
@@ -208,31 +266,94 @@ function pressureNavHtml(block,position,blocks,unit,stateLabel){
     '</div>';
 }
 function superheatedHtml(){
-  var blocks = STEAM.superheated.blocks;
+  var blocks = SRC().superheated.blocks;
   var block = blocks[activePressureIndex];
   return '<div class="panel-heading"><h2>과열증기 표</h2><p class="panel-note">압력 블록을 선택하고 이웃 블록과 직접 비교하세요.</p></div>' +
-    '<div class="pressure-chips" aria-label="압력 블록">' + blocks.map(function(item,index){ return pressureChipHtml(item,index,'kPa'); }).join('') + '</div>' +
-    pressureNavHtml(block,'top',blocks,'kPa') +
+    '<div class="pressure-chips" aria-label="압력 블록">' + blocks.map(function(item,index){ return pressureChipHtml(item,index); }).join('') + '</div>' +
+    pressureNavHtml(block,'top',blocks) +
     '<div class="table-scroll"><table class="data-table">' + simpleHeader() + '<tbody>' +
     block.rows.map(function(row,index){ return rowHtml(row,index === 0); }).join('') +
     '</tbody></table></div>';
 }
 function compressedLiquidHtml(){
-  var blocks = STEAM.compressed_liquid.blocks;
+  var blocks = SRC().compressed_liquid.blocks;
   var block = blocks[activePressureIndex];
-  var stateLabel = block.P < 22064 ? 'T < T_sat = ' + textNumber(saturationTemperatureForBlock(block)) + ' °C' : 'T ≤ 360 °C';
+  var stateLabel = block.P < CRITICAL_PRESSURE_OF(SRC()) ? 'T < T_sat = ' + textNumber(saturationTemperatureForBlock(block)) + ' °C' : 'T ≤ 360 °C';
   return '<div class="panel-heading"><h2>압축액 표</h2><p class="panel-note">같은 온도의 포화액 근사와 직접 비교하세요.</p></div>' +
-    '<div class="pressure-chips" aria-label="압력 블록">' + blocks.map(function(item,index){ return pressureChipHtml(item,index,'MPa'); }).join('') + '</div>' +
-    pressureNavHtml(block,'top',blocks,'MPa',stateLabel) +
+    '<div class="pressure-chips" aria-label="압력 블록">' + blocks.map(function(item,index){ return pressureChipHtml(item,index); }).join('') + '</div>' +
+    pressureNavHtml(block,'top',blocks,stateLabel) +
     '<div class="table-scroll"><table class="data-table">' + simpleHeader() + '<tbody>' +
     block.rows.map(function(row){ return rowHtml(row,false); }).join('') +
     '</tbody></table></div>';
 }
+/* ★ 이상기체 표(공기)는 **포화·과열이라는 갈래가 없다** — 온도 하나로 줄이 정해진다.
+   그래서 표 종류 탭을 통째로 숨기고 한 장만 그린다. 칸 이름은 데이터가 준다. */
+var PLAIN_LABEL = {
+  T: 'T (K)', h: 'h (kJ/kg)', u: 'u (kJ/kg)',
+  s0: 's° (kJ/(kg·K))', p_r: 'p_r', v_r: 'v_r'
+};
+/* ★ `기체_성질` 꼴(`공기_cp`)은 밑줄에서 갈라 「기체 성질」로 읽는다 — 비열표가 19칸이라
+   기체 이름을 칸마다 적어야 어느 열인지 안 헷갈린다. 아래첨자 숫자는 보기 좋게 내린다. */
+function plainLabel(name){
+  if(PLAIN_LABEL[name]) return PLAIN_LABEL[name];
+  var cut = name.indexOf('_');
+  if(cut < 0) return name;
+  var gas = name.slice(0, cut).replace(/([A-Za-z])(\d)/g, '$1<sub>$2</sub>');
+  return gas + ' ' + name.slice(cut + 1);
+}
+function plainHeader(columns){
+  return '<thead><tr>' + columns.map(function(name,index){
+    return '<th' + (index === 0 ? ' class="sticky-first"' : '') +
+      ' tabindex="0" data-cols="' + index + '">' + plainLabel(name) + '</th>';
+  }).join('') + '</tr></thead>';
+}
+function idealGasHtml(){
+  var table = SRC().ideal_gas;
+  return '<div class="panel-heading"><h2>이상기체 표</h2><p class="panel-note">온도만으로 줄이 정해집니다 — p_r 과 v_r 은 등엔트로피 과정에서 비로 씁니다.</p></div>' +
+    '<div class="table-scroll"><table class="data-table">' + plainHeader(table.columns) +
+    '<tbody>' + table.rows.map(function(row){ return rowHtml(row,false); }).join('') +
+    '</tbody></table></div>';
+}
 function renderTable(){
+  if(SRC().ideal_gas) { document.getElementById('tablePanel').innerHTML = idealGasHtml(); selectedColumns = {}; return; }
   var html = activeTable === 'superheated' ? superheatedHtml() : activeTable === 'compressed_liquid' ? compressedLiquidHtml() : saturationTableHtml(activeTable);
   document.getElementById('tablePanel').innerHTML = html;
   selectedColumns = {};        // 표가 바뀌면 비운다 — 표마다 몇 번째 칸이 무엇인지가 다르다
 }
+
+/* ★ 물질 선택기 — 데이터가 `substances` 를 선언했을 때만 그린다. */
+function renderSubstanceTabs(){
+  var host = document.getElementById('substanceTabs');
+  if(!SUBSTANCES){ return; }                      // 열역학 화면은 여기서 끝난다
+  var names = [''].concat(Object.keys(SUBSTANCES));
+  host.innerHTML = names.map(function(name){
+    return '<button class="tab-button' + (name === activeSubstance ? ' active' : '') +
+      '" data-substance="' + esc(name) + '">' + esc(name || '물') + '</button>';
+  }).join('');
+  host.hidden = false;
+}
+function applySubstance(){
+  var src = SRC();
+  // 이상기체 표는 갈래가 없다 — 표 종류 줄을 통째로 숨긴다.
+  var kindNav = document.querySelector('nav.tabs[aria-label="수증기 표 종류"]');
+  if(kindNav) kindNav.hidden = !!src.ideal_gas;
+  // 냉매에는 압축액 표가 없다 — 그 탭을 숨기고, 거기 서 있었으면 포화 온도표로 돌린다.
+  var hasCompressed = !!src.compressed_liquid;
+  var tab = document.querySelector('.tab-button[data-table="compressed_liquid"]');
+  if(tab) tab.hidden = !hasCompressed;
+  if(!hasCompressed && activeTable === 'compressed_liquid') activeTable = 'saturation_T';
+  document.querySelectorAll('.tab-button[data-table]').forEach(function(item){
+    item.classList.toggle('active', item.getAttribute('data-table') === activeTable);
+  });
+  document.getElementById('pageTitle').textContent =
+    src.ideal_gas ? activeSubstance + ' 표' : (activeSubstance || '수증기') + ' 표';
+  document.getElementById('sourceLine').textContent =
+    src.source || 'CoolProp 8.0.0 (IAPWS-95) 계산값 · 유효숫자 5자리';
+  activePressureIndex = 0;
+  renderSubstanceTabs();
+  renderTable();
+}
+renderSubstanceTabs();
 renderTable();
 
 // ★★ 세로(열) 고르기 — 켜진 칸을 표 전체에 다시 칠한다.
@@ -263,12 +384,18 @@ function toggleColumns(th){
   applySelectedColumns();
 }
 
-document.querySelector('.tabs').addEventListener('click',function(event){
+document.getElementById('substanceTabs').addEventListener('click',function(event){
+  var button = event.target.closest('.tab-button');
+  if(!button) return;
+  activeSubstance = button.getAttribute('data-substance');
+  applySubstance();
+});
+document.querySelector('nav.tabs[aria-label="수증기 표 종류"]').addEventListener('click',function(event){
   var button = event.target.closest('.tab-button');
   if(!button) return;
   activeTable = button.getAttribute('data-table');
   activePressureIndex = 0;
-  document.querySelectorAll('.tab-button').forEach(function(item){ item.classList.toggle('active',item === button); });
+  document.querySelectorAll('.tab-button[data-table]').forEach(function(item){ item.classList.toggle('active',item === button); });
   renderTable();
 });
 document.getElementById('tablePanel').addEventListener('click',function(event){
@@ -297,7 +424,7 @@ document.getElementById('tablePanel').addEventListener('keydown',function(event)
 });
 </script>
 
-<!-- ★★ 표 읽는 법 스포트라이트 (신설 2026-08-18) — 사용자: [사용자 발화 인용 생략]. 즉 설명이 붙을 자리는 챕터 본문이 아니라
+<!-- ★★ 표 읽는 법 스포트라이트 (신설 2026-08-18) — 사용자: *[발화 생략]*. 즉 설명이 붙을 자리는 챕터 본문이 아니라
      **이 화면**이다.
      ★ 무엇을 가리킬지는 `data/<과목>/tables/tutorial.json` 이 선언하고 빌드가 여기 넣는다 —
        선언이 없으면 `null` 이고 아래 조각은 **DOM 을 하나도 안 만든다.** -->

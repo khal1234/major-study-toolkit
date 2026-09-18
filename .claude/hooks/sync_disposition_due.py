@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Stop 훅 — 공용 시스템(나루) 변경 알림이 이번 세션에서 「가져왔다/안 가져왔다」로
+"""Stop 훅 — 공용 시스템(공용 폴더) 변경 알림이 이번 세션에서 「가져왔다/안 가져왔다」로
 처리됐다고 채팅에 남았는지 확인한다 (신설 2026-09-01).
 
     settings.json 의 Stop 훅으로 건다:
@@ -10,7 +10,7 @@
 
 `shared_sync_check.py`는 SessionStart에 「공용이 바뀌었다」를 한 줄만 알리고 끝이다.
 그 알림을 본 세션이 판정을 하고도 채팅에 남기지 않으면, 사용자는 **누락된 건지
-의도적으로 스킵한 건지 구별할 수 없다**(2026-09-01 사용자: [사용자 발화 인용 생략]).
+의도적으로 스킵한 건지 구별할 수 없다**(2026-09-01 사용자: *[발화 생략]*).
 
 ## 판정선
 
@@ -43,7 +43,7 @@ HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def _find_root(start):
     """프로젝트 뿌리를 찾는다 — **훅이 사는 깊이가 프로젝트마다 다르다**
-    (2026-09-01 실측: 나루는 `<뿌리>/훅/`, 전공정리·잡탕용·knu-bot·토익·XSanity는
+    (2026-09-01 실측: 공용 폴더는 `<뿌리>/훅/`, 전공정리·잡탕용·knu-bot·토익·XSanity는
     `<뿌리>/.claude/hooks/`나 `<뿌리>/_modding/scripts/`처럼 두 단 이상 깊다).
     `dirname()`을 고정 횟수로 부르면 얕은 리포에서만 맞는다 — 대신 `.git`이나
     `CLAUDE.md`가 있는 조상 폴더를 찾아 올라간다(최대 5단, 못 찾으면 두 단 위로 폴백).
@@ -61,7 +61,7 @@ def _find_root(start):
 
 ROOT = os.environ.get("CLAUDE_PROJECT_DIR") or _find_root(HOOKS_DIR)
 
-# ★ `check_narration.py`가 사는 자리도 프로젝트마다 다르다 — 나루는 `도구/`,
+# ★ `check_narration.py`가 사는 자리도 프로젝트마다 다르다 — 공용 폴더는 `도구/`,
 #   전공정리는 `tools/`, XSanity는 `_modding/scripts/`, 잡탕용·knu-bot·토익은
 #   훅과 **같은 폴더**(`.claude/hooks/`). 후보를 전부 시도한다 — 없는 경로는 건너뛴다.
 for _cand in ("도구", "tools", os.path.join("_modding", "scripts")):
@@ -118,7 +118,7 @@ else:
             except Exception:                       # noqa: BLE001 — 절대 세션을 막지 않는다
                 return 0
 
-            print("[공용 시스템] 이번 세션에 나루 변경 알림이 떴는데 아직 "
+            print("[공용 시스템] 이번 세션에 공용 폴더 변경 알림이 떴는데 아직 "
                   "「가져왔다」/「안 가져왔다(사유)」가 채팅에 안 남았다 — "
                   "이번 응답 끝에 한 줄 남길 것")
             return 0
@@ -131,6 +131,27 @@ def selftest():
         nonlocal bad
         bad += 0 if cond else 1
         print("  %s %s" % ("OK  " if cond else "**틀림**", desc))
+
+    chk("음성 — diff 없는데 assistant 발화 없어도 disposition_stated 는 문제 삼지 않는다"
+        "(호출부에서 diff 먼저 본다)", True)
+    positive = [{"type": "assistant",
+                "message": {"content": [{"type": "text", "text": "공용 폴더 변경 가져왔습니다"}]}}]
+    negative = [{"type": "assistant",
+                "message": {"content": [{"type": "text", "text": "다른 얘기만 했습니다"}]}}]
+    mixed_role = [{"type": "user",
+                  "message": {"content": "가져왔다고 사용자가 먼저 말한 경우"}}]
+    chk("양성 — assistant 가 「가져왔습니다」라고 하면 처리로 본다",
+        disposition_stated(positive))
+    chk("음성 — 관련 낱말이 없으면 처리로 안 본다", not disposition_stated(negative))
+    chk("음성 — user 발화의 낱말은 안 센다(assistant 만 본다)",
+        not disposition_stated(mixed_role))
+    skip_variant = [{"type": "assistant",
+                     "message": {"content": [{"type": "text",
+                                              "text": "이번엔 스킵했습니다 — 사유는 …"}]}}]
+    chk("양성 — 「스킵했다」류도 처리(안 가져오기로 판정)로 본다",
+        disposition_stated(skip_variant))
+
+    print("[자기 검정] %s" % ("전부 통과" if not bad else "**%d건 틀림**" % bad))
     return 1 if bad else 0
 
 

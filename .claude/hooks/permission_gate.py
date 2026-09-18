@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 """PermissionRequest 훅 — guard가 이미 안전하다고 판정한 명령의 **승인창 자체를 없앤다**.
 
-열린 날 2026-07-28. 사용자 지적(반복): *"난 ask로 뜨는 거에 불만있는 게 아냐.
-**모두 허용**으로 뜨는 게 불만이지. 1회 허용으로 뜨거나 allow로 안 떠야지."*
+열린 날 2026-07-28. 사용자 지적(반복): *[발화 생략]*
 
 **왜 PreToolUse 만으로는 안 되나 (guard_bash.allow_reason 독스트링의 실측):**
 PreToolUse 가 `permissionDecision: allow` 를 돌려줘도 **settings 의 `ask` 를 이기지 못한다**

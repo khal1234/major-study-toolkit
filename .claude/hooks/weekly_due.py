@@ -4,7 +4,7 @@
 
     settings.json 의 SessionStart 훅으로 건다 (훅 폴더 이름은 프로젝트마다 다르다):
         python "$CLAUDE_PROJECT_DIR/.claude/hooks/weekly_due.py"   # 이 리포
-        python "$CLAUDE_PROJECT_DIR/훅/weekly_due.py"              # 나루
+        python "$CLAUDE_PROJECT_DIR/훅/weekly_due.py"              # 공용 폴더
 
 월간(`insights_due`)과 무엇이 다른가
 ------------------------------------
@@ -35,7 +35,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NAMES = ("기록/주간-점검.txt", "docs/주간-점검.txt", "주간-점검.txt")
 # ★ **도구 폴더 이름도 박지 않는다** (2026-08-26). 첫 판은 알림에 `도구/weekly_check.py` 를
-#   글자로 박아 뒀는데 그건 **나루의 이름**이고 이 리포는 `tools/` 다 — 알림을 그대로 친
+#   글자로 박아 뒀는데 그건 **공용 폴더의 이름**이고 이 리포는 `tools/` 다 — 알림을 그대로 친
 #   세션은 «그런 파일 없다» 를 받는다. 이 자의 값어치는 «돌릴 명령을 같이 준다» 하나인데
 #   그 한 줄이 틀리면 값어치가 통째로 0 이 된다.
 TOOL_DIRS = ("tools", "도구")
@@ -93,9 +93,9 @@ def selftest():
     chk("측정 줄이 없으면 밀린 것으로 본다 (첫 실행 재촉)",
         verdict("# 머리만 있다\n", t) == (True, None))
     chk("7일이 안 지났으면 안 밀렸다",
-        verdict("측정 2026-08-28 나루=9/12\n", t)[0] is False, str(verdict("측정 2026-08-28 나루=9/12\n", t)))
+        verdict("측정 2026-08-28 공용 폴더=9/12\n", t)[0] is False, str(verdict("측정 2026-08-28 공용 폴더=9/12\n", t)))
     chk("7일이 지났으면 밀렸다",
-        verdict("측정 2026-08-25 나루=9/12\n", t) == (True, 7))
+        verdict("측정 2026-08-25 공용 폴더=9/12\n", t) == (True, 7))
     chk("★ **마지막** 줄을 쓴다 (여러 번 쟀으면 최근 것)",
         last_date("측정 2026-08-01 x=1/1\n측정 2026-08-30 x=1/1\n") == dt.date(2026, 8, 30))
     chk("깨진 날짜는 건너뛴다", last_date("측정 2026-13-99 x=1/1\n") is None)
