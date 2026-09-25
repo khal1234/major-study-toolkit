@@ -70,7 +70,9 @@ def iter_diagrams(node):
     #   `diagrams` 를 걷어내 슬라이드가 유일한 그림이 되면서 사각지대가 카드 전체로 커졌다.
     #   ★ 동역학도 같은 날 같은 자리에서 걸렸다 — 두 과목이 따로 고쳐 여기서 만났다.
     if isinstance(node, dict):
-        pools = [node.get("diagrams"), [node.get("figure")]]
+        # 풀이 접기 안에만 그리는 답 도해도 독자가 실제로 보는 SVG다. 지문 그림과
+        # 분리했다는 이유로 PNG 검수 경로에서 빠지면 작은 글자·잘린 라벨이 조용히 남는다.
+        pools = [node.get("diagrams"), node.get("solutionDiagrams"), [node.get("figure")]]
         for pool in pools:
             if isinstance(pool, list):
                 for diagram in pool:

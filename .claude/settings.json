@@ -226,6 +226,12 @@
             "command": "python \"$CLAUDE_PROJECT_DIR/tools/approval_window.py\" stop",
             "timeout": 10,
             "statusMessage": "미룬 승인 건을 최종 보고가 꺼냈나"
+          },
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/commit_ask_guard.py\"",
+            "timeout": 20,
+            "statusMessage": "빈손 커밋 물음으로 끝냈나 — 비공개·단독 저자·CI 없음일 때만 막는다"
           }
         ]
       }

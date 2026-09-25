@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{SUBJECT}} · {{TITLE}}</title>
+<!-- 범용 부록 페이지 (2026-09-24 E18). 선언은 SUBJECT_CONFIG.appendices, 렌더는 buildlib/render.build_appendix_page.
+     색 토큰은 물성표 페이지(tables.template.html)와 같은 값 — 두 부록이 한 책처럼 보이게. -->
+<style>
+  :root{
+    --paper:#f6f3ec; --paper-raised:#fffdf8; --ink:#20242b; --sub:#6b6558;
+    --copper:#b85f28; --line:#ded6c2; --line-strong:#c9bfa5; --sym-bg:#fffdf8;
+  }
+  :root[data-theme="dark"]{
+    --paper:#14171b; --paper-raised:#1b1f24; --ink:#e9e4d8; --sub:#a39c8a;
+    --copper:#e2915a; --line:#31363d; --line-strong:#3d444d; --sym-bg:#f6f3ec;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --paper:#14171b; --paper-raised:#1b1f24; --ink:#e9e4d8; --sub:#a39c8a;
+      --copper:#e2915a; --line:#31363d; --line-strong:#3d444d; --sym-bg:#f6f3ec;
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0; padding:0; max-width:100%; overflow-x:hidden;}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .shell{width:min(100%,960px); margin:0 auto; padding:20px 16px 72px;}
+  .eyebrow{font-size:12px; letter-spacing:.12em; color:var(--sub); font-weight:700;}
+  h1{font-family:"Nanum Myeongjo","Noto Serif KR","Batang",Georgia,serif; font-size:30px; margin:0 0 4px;}
+  .source{color:var(--sub); font-size:12px; margin:0 0 18px;}
+  .appx-section{margin:0 0 28px;}
+  .appx-section h2{font-family:"Nanum Myeongjo","Noto Serif KR","Batang",Georgia,serif; font-size:20px; margin:0 0 6px;}
+  .appx-note{font-size:13px; color:var(--sub); margin:0 0 10px;}
+  .appx-wrap{overflow-x:auto; border:1px solid var(--line-strong); border-radius:8px; background:var(--paper-raised);}
+  table{border-collapse:collapse; width:100%; font-size:14px;}
+  th,td{padding:8px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle;}
+  th{font-size:12.5px; color:var(--sub); font-weight:700; background:var(--paper);}
+  tr:last-child td{border-bottom:0;}
+  /* 기호 SVG 는 선 색이 고정(#3a4252)이라 어두운 테마에서도 밝은 바탕 위에 둔다. */
+  td.appx-sym{width:1%; white-space:nowrap; background:var(--sym-bg);}
+  td.appx-sym svg{display:block; width:112px; height:auto;}
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="eyebrow">{{SUBJECT}} · 부록</div>
+  <h1>{{TITLE}}</h1>
+  <p class="source">{{SOURCE}}</p>
+{{BODY}}
+</main>
+</body>
+</html>

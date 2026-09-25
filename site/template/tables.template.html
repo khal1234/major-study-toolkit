@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{SUBJECT}} · 수증기 표</title>
+<title>{{SUBJECT}} · {{TABLES_LABEL}}</title>
 <style>
   :root{
     --paper:#f6f3ec; --paper-raised:#fffdf8; --ink:#20242b; --sub:#6b6558;
@@ -40,11 +40,17 @@
   .topline{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:8px;}
   .eyebrow{font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--sub); font-weight:700;}
   h1{font-family:"Nanum Myeongjo","Noto Serif KR","Batang",Georgia,serif; font-size:32px; letter-spacing:0; margin:0;}
-  .metadata{margin-top:9px; color:var(--sub); font-size:13px;}
-  .source{margin-top:2px; color:var(--sub); font-size:12px;}
+  .metadata{color:var(--sub); font-size:12.5px;}
+  .source{margin-top:2px; color:var(--sub); font-size:11.5px;}
+  .shell{padding-top:20px;}
+  .head-row{display:flex; align-items:baseline; gap:18px; flex-wrap:wrap;}
+  .head-note{flex:1 1 320px; min-width:0; text-align:right;}
+  @media (max-width:700px){ .head-note{text-align:left;} }
+  /* 줄 사이 여백은 좁게 — 머리글·물질 줄·표 종류 줄이 연달아 오는데 예전 값(26/22px)은 화면 한 판을
+     세 줄이 차지했다(2026-09-20 사용자 [발화 생략]·「여기도」). */
   .tabs{
-    position:sticky; top:0; z-index:20; display:flex; gap:5px; margin:26px 0 20px;
-    padding:10px 0; overflow-x:auto; background:var(--paper); border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:20; display:flex; gap:5px; margin:10px 0 14px;
+    padding:6px 0; overflow-x:auto; background:var(--paper); border-bottom:1px solid var(--line);
     scrollbar-width:thin;
   }
   .tab-button{
@@ -53,14 +59,21 @@
   }
   /* ★ 물질 줄은 **고정(sticky)하지 않는다** — 표 종류 줄이 이미 `top:0` 에 붙어 있어서
      둘 다 붙이면 스크롤 중에 겹친다. 물질은 한 번 고르고 마는 것이라 따라다닐 이유도 없다. */
-  .tabs.substances{position:static; margin:22px 0 0; padding-bottom:0; border-bottom:0;}
+  .tabs.substances{position:static; margin:10px 0 0; padding:2px 0 0; border-bottom:0;}
   .tab-button:hover{color:var(--ink); background:var(--paper-raised);}
   .tab-button.active{color:var(--copper); background:var(--copper-soft); border-color:var(--copper);}
   .table-panel{min-width:0;}
   .panel-heading{display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:10px;}
   .panel-heading h2{font-family:"Nanum Myeongjo","Noto Serif KR","Batang",Georgia,serif; font-size:20px; margin:0;}
   .panel-note{font-size:12px; color:var(--sub); margin:0;}
-  .table-scroll{width:100%; max-width:100%; overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--paper-raised); box-shadow:var(--shadow); overscroll-behavior-x:contain;}
+  /* ★ 표는 **자기 상자 안에서** 세로로도 스크롤한다 (2026-09-20, 사용자 [발화 생략]). 머리글의 `position:sticky` 는 가장 가까운
+     스크롤 상자를 기준으로 붙는데, 이 상자가 가로만 스크롤하면 기준이 되어 버려 페이지를 내려도 머리가
+     따라오지 않았다. 높이를 화면에 맞춰 두면 머리글이 상자 위에 붙은 채 몸만 흐른다. */
+  /* ★ 스크롤 막대는 숨긴다 (2026-09-20 사용자 [발화 생략]) — 세로 스크롤
+     상자로 바꾸면서 막대가 표 오른쪽에 늘 떠 있었다. 스크롤 자체는 그대로 된다(휠·터치·키보드). */
+  .table-scroll{scrollbar-width:none; -ms-overflow-style:none;}
+  .table-scroll::-webkit-scrollbar{width:0; height:0;}
+  .table-scroll{width:100%; max-width:100%; overflow:auto; max-height:calc(100vh - 150px); border:1px solid var(--line); border-radius:8px; background:var(--paper-raised); box-shadow:var(--shadow); overscroll-behavior-x:contain;}
   .data-table{width:max-content; min-width:100%; border-collapse:separate; border-spacing:0; font-variant-numeric:tabular-nums; font-size:12.5px;}
   .data-table th,.data-table td{height:44px; padding:9px 12px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); text-align:right; white-space:nowrap;}
   .data-table th:last-child,.data-table td:last-child{border-right:0;}
@@ -85,7 +98,9 @@
   .data-table thead .sticky-first{z-index:8; background:var(--blue-soft); color:var(--blue);}
   .data-table tbody tr:hover .sticky-first{background:var(--blue-soft);}
   .data-table tbody tr.selected .sticky-first{background:var(--copper-soft);}
-  .pressure-chips{display:flex; gap:6px; overflow-x:auto; padding:2px 0 10px; margin-bottom:8px; scrollbar-width:thin;}
+  /* ★ 압력 칩은 **줄을 바꿔 쌓는다** (2026-09-20 사용자 [발화 생략]).
+     한 줄로 두고 가로 스크롤을 걸면 오른쪽 칩이 화면 밖에 숨어 몇 개가 있는지 안 보였다. */
+  .pressure-chips{display:flex; flex-wrap:wrap; gap:6px; padding:2px 0 10px; margin-bottom:8px;}
   .pressure-chip{
     flex:none; min-height:44px; padding:8px 13px; border:1px solid var(--line-strong); border-radius:8px;
     background:var(--paper-raised); color:var(--sub); cursor:pointer; font-size:12.5px; font-weight:700;
@@ -98,6 +113,25 @@
   .nav-button:disabled{opacity:.35; cursor:default;}
   .block-heading{font-family:"Nanum Myeongjo","Noto Serif KR","Batang",Georgia,serif; font-size:19px; font-weight:700; text-align:center;}
   .sat-tag{display:inline-block; margin-left:7px; padding:2px 6px; border-radius:5px; background:var(--copper-soft); color:var(--copper); font-size:10px; font-weight:700; vertical-align:middle;}
+  /* 이중보간 계산기 — 두 압력 블록 × 두 온도 줄의 네 값을 격자로 두고 단계를 편다 */
+  .interp{margin-top:18px; padding:14px 16px; border:1px solid var(--line); border-radius:8px; background:var(--paper-raised); box-shadow:var(--shadow);}
+  .interp h3{margin:0 0 8px; font-size:15px;}
+  .interp-inputs{display:flex; flex-wrap:wrap; gap:10px; align-items:center; font-size:13px;}
+  .interp-inputs input,.interp-inputs select{min-height:40px; padding:6px 8px; border:1px solid var(--line-strong); border-radius:6px; background:var(--paper); color:var(--ink); font:inherit; width:7.5em;}
+  .interp-scroll{margin-top:8px; overflow-x:auto;}
+  .interp-leg{margin-top:12px; font-size:12px; font-weight:700; color:var(--blue);}
+  .interp-grid{margin-top:12px; border-collapse:collapse; font-variant-numeric:tabular-nums; font-size:13px;}
+  .interp-grid th,.interp-grid td{padding:6px 12px; border:1px solid var(--line); text-align:right;}
+  .interp-grid th{background:var(--blue-soft); color:var(--blue);}
+  .interp-grid td.mid{background:var(--copper-soft); color:var(--copper); font-weight:700;}
+  .interp-steps{margin:10px 0 0; padding-left:1.4em; font-size:13px; line-height:1.9; font-variant-numeric:tabular-nums;}
+  .interp-final{margin-top:6px; font-weight:700; color:var(--copper);}
+  .interp-note{margin-top:6px; font-size:12px; color:var(--sub);}
+  .chart-box{border:1px solid var(--line); border-radius:8px; background:var(--paper-raised); box-shadow:var(--shadow); padding:8px;}
+  .chart-box svg{display:block; width:100%; height:auto; touch-action:none; cursor:crosshair;}
+  .chart-read{margin-top:6px; padding:6px 10px; border-top:1px solid var(--line); font-size:13px; color:var(--sub); font-variant-numeric:tabular-nums;}
+  .chart-read b{color:var(--copper);}
+  .chart-read.pinned{color:var(--ink);}
   @media (max-width:768px){
     .shell{padding:24px 16px 56px;}
     h1{font-size:28px;}
@@ -126,25 +160,33 @@
          빌드가 채운다(`render.build_tables_page`). -->
     <div class="eyebrow">전공정리 · {{SUBJECT}} 부록</div>
   </div>
-  <h1 id="pageTitle">수증기 표</h1>
-  <div class="metadata" id="unitsLine"></div>
-  <div class="source" id="sourceLine">CoolProp 8.0.0 (IAPWS-95) 계산값 · 유효숫자 5자리</div>
+  <!-- ★ 머리는 **두 칸 한 줄**이다 (2026-09-20 사용자 [발화 생략]·
+       「이거 프로판 표 옆쪽으로 못 넣나」). 제목이 왼쪽, 단위와 출처가 오른쪽에 붙어 세 줄이 한 줄이 된다. -->
+  <div class="head-row">
+    <h1 id="pageTitle">수증기 표</h1>
+    <div class="head-note">
+      <div class="metadata" id="unitsLine"></div>
+      <div class="source" id="sourceLine">CoolProp 8.0.0 (IAPWS-95) 계산값 · 유효숫자 5자리</div>
+    </div>
+  </div>
 
   <!-- ★ 물질 선택기 — **데이터에 `substances` 가 있을 때만** 채운다 (2026-09-08).
        열역학(Cengel)은 그 키가 없으므로 이 줄이 통째로 안 그려진다(선언이 곧 opt-in). -->
   <nav class="tabs substances" id="substanceTabs" aria-label="물질" hidden></nav>
 
-  <nav class="tabs" aria-label="수증기 표 종류">
+  <nav class="tabs" aria-label="표 종류">
     <button class="tab-button active" data-table="saturation_T">포화 (온도 기준)</button>
     <button class="tab-button" data-table="saturation_P">포화 (압력 기준)</button>
     <button class="tab-button" data-table="superheated">과열증기</button>
     <button class="tab-button" data-table="compressed_liquid">압축액</button>
+    <button class="tab-button" data-table="hs_chart">h-s 선도</button>
   </nav>
   <section class="table-panel" id="tablePanel"></section>
 </main>
 
 <script>
 var STEAM = {{STEAM_JSON}};
+var COMPRESS = {{COMPRESS_JSON}};     // 일반화 압축성 선도 격자 — 없으면 null 이고 탭이 숨는다
 /* ★ 단위와 임계압력은 **데이터가 정한다** (2026-09-08). 열역학은 kPa(Cengel), 응용열역학은
    bar(Moran)라 이 화면이 둘을 다 그려야 한다. 임계압력을 상수 `22064` 로 박아 두면 bar 판에서
    압축액 블록이 전부 「초임계」로 읽힌다 — 포화압력표의 마지막 행이 곧 임계점이므로 거기서 읽는다. */
@@ -159,7 +201,7 @@ var activePressureIndex = 0;
    ★ 냉매에는 **압축액 표가 없다**(교재도 안 싣는다) — 그 탭은 물일 때만 보인다. */
 var SUBSTANCES = STEAM.substances || null;
 var activeSubstance = '';                       // '' = 물(최상위)
-function SRC(){ return activeSubstance ? SUBSTANCES[activeSubstance] : STEAM; }
+function SRC(){ return (activeSubstance && activeSubstance !== '__z') ? SUBSTANCES[activeSubstance] : STEAM; }
 function CRITICAL_PRESSURE_OF(src){
   var rows = src.saturation_P.rows;
   return rows[rows.length - 1][0];
@@ -288,55 +330,606 @@ function compressedLiquidHtml(){
 }
 /* ★ 이상기체 표(공기)는 **포화·과열이라는 갈래가 없다** — 온도 하나로 줄이 정해진다.
    그래서 표 종류 탭을 통째로 숨기고 한 장만 그린다. 칸 이름은 데이터가 준다. */
+/* ★ 기호는 **기울임 글자 + 아래첨자**로 그린다 (2026-09-20 사용자 [발화 생략]).
+   밑줄 표기는 소스에 적는 방식이지 읽는 방식이 아니다. 비열은 **소문자 c** 가 맞다 — 이 표는 단위질량당
+   값(kJ/kg·K)이라 Moran·Cengel 둘 다 c_p 로 적는다(몰당은 윗줄 친 C̄_p). */
+var SUB = function(base, sub, unit){
+  return '<i>' + base + '</i><sub>' + sub + '</sub>' + (unit ? ' (' + unit + ')' : '');
+};
 var PLAIN_LABEL = {
-  T: 'T (K)', h: 'h (kJ/kg)', u: 'u (kJ/kg)',
-  s0: 's° (kJ/(kg·K))', p_r: 'p_r', v_r: 'v_r'
+  T: '<i>T</i> (K)', h: '<i>h</i> (kJ/kg)', u: '<i>u</i> (kJ/kg)',
+  s0: '<i>s</i>° (kJ/(kg·K))', p_r: SUB('p', 'r'), v_r: SUB('v', 'r')
 };
 /* ★ `기체_성질` 꼴(`공기_cp`)은 밑줄에서 갈라 「기체 성질」로 읽는다 — 비열표가 19칸이라
    기체 이름을 칸마다 적어야 어느 열인지 안 헷갈린다. 아래첨자 숫자는 보기 좋게 내린다. */
+function gasName(text){ return text.replace(/([A-Za-z])(\d)/g, '$1<sub>$2</sub>'); }
+function propLabel(name){
+  if(name === 'k') return '<i>k</i>';
+  var cut = name.indexOf('_');
+  return cut < 0 ? '<i>' + name + '</i>' : SUB(name.slice(0, cut), name.slice(cut + 1));
+}
 function plainLabel(name){
   if(PLAIN_LABEL[name]) return PLAIN_LABEL[name];
   var cut = name.indexOf('_');
   if(cut < 0) return name;
-  var gas = name.slice(0, cut).replace(/([A-Za-z])(\d)/g, '$1<sub>$2</sub>');
-  return gas + ' ' + name.slice(cut + 1);
+  return gasName(name.slice(0, cut)) + ' ' + propLabel(name.slice(cut + 1));
 }
+/* ★ 기체마다 칸이 셋(c_p·c_v·k)이면 **기체 이름을 위 줄에 한 번** 쓰고 아래 줄에 성질을 둔다
+   (2026-09-20 사용자 [발화 생략]). 19칸에 기체 이름을 매 칸 적으면
+   글자가 칸 폭을 정해 표가 가로로 늘어난다. 묶을 수 없는 표(공기 이상기체표)는 한 줄 그대로다. */
 function plainHeader(columns){
-  return '<thead><tr>' + columns.map(function(name,index){
-    return '<th' + (index === 0 ? ' class="sticky-first"' : '') +
-      ' tabindex="0" data-cols="' + index + '">' + plainLabel(name) + '</th>';
-  }).join('') + '</tr></thead>';
+  var groups = [];
+  columns.forEach(function(name, index){
+    var cut = name.indexOf('_');
+    var gas = cut < 0 ? '' : name.slice(0, cut);
+    var last = groups[groups.length - 1];
+    if(gas && last && last.gas === gas){ last.cols.push(index); last.props.push(name.slice(cut + 1)); }
+    else { groups.push({gas: gas, cols: [index], props: [cut < 0 ? name : name.slice(cut + 1)], plain: !gas}); }
+  });
+  var grouped = groups.some(function(g){ return g.cols.length > 1; });
+  if(!grouped){
+    return '<thead><tr>' + columns.map(function(name, index){
+      return '<th' + (index === 0 ? ' class="sticky-first"' : '') +
+        ' tabindex="0" data-cols="' + index + '">' + plainLabel(name) + '</th>';
+    }).join('') + '</tr></thead>';
+  }
+  var top = groups.map(function(g){
+    var first = g.cols[0] === 0 ? ' class="sticky-first"' : '';
+    if(g.plain) return '<th' + first + ' rowspan="2" tabindex="0" data-cols="' + g.cols.join(' ') + '">' + plainLabel(columns[g.cols[0]]) + '</th>';
+    return '<th' + first + ' colspan="' + g.cols.length + '" tabindex="0" data-cols="' + g.cols.join(' ') + '">' + gasName(g.gas) + '</th>';
+  }).join('');
+  var bottom = groups.filter(function(g){ return !g.plain; }).map(function(g){
+    return g.cols.map(function(index, slot){
+      return '<th tabindex="0" data-cols="' + index + '">' + propLabel(g.props[slot]) + '</th>';
+    }).join('');
+  }).join('');
+  return '<thead><tr>' + top + '</tr><tr>' + bottom + '</tr></thead>';
+}
+/* ★ 기체가 여럿인 표(비열표)는 **한 기체씩** 보인다 (2026-09-20 사용자 [발화 생략]) — 여섯 기체 열여덟 칸이 한 번에 뜨면 가로로 끝없이 늘어난다.
+   고른 기체의 칸만 남기고 T 칸은 언제나 남긴다. 「전부」 칸은 두지 않는다 — 사용자 [발화 생략]. */
+var activeGas = '';
+/* ★ 「기체 묶음」은 **같은 앞머리가 두 칸 이상**일 때만이다 (2026-09-20 사용자 [발화 생략]) — `p_r`·`v_r` 은 밑줄이 있어도 기체 이름이 아니라
+   성질 이름이라, 앞머리 하나를 기체로 세면 공기표가 두 칸으로 쪼개진다. */
+function gasesOf(columns){
+  var count = {}, order = [];
+  columns.forEach(function(name){
+    var cut = name.indexOf('_');
+    if(cut <= 0) return;
+    var gas = name.slice(0, cut);
+    if(!count[gas]){ count[gas] = 0; order.push(gas); }
+    count[gas] += 1;
+  });
+  return order.filter(function(g){ return count[g] >= 2; });
+}
+function gasChipsHtml(gases){
+  if(!gases.length) return '';
+  return '<div class="pressure-chips" aria-label="기체">' + gases.map(function(g){
+    return '<button class="pressure-chip' + (g === activeGas ? ' active' : '') + '" data-gas="' + esc(g) + '">' +
+      gasName(g) + '</button>';
+  }).join('') + '</div>';
 }
 function idealGasHtml(){
   var table = SRC().ideal_gas;
-  return '<div class="panel-heading"><h2>이상기체 표</h2><p class="panel-note">온도만으로 줄이 정해집니다 — p_r 과 v_r 은 등엔트로피 과정에서 비로 씁니다.</p></div>' +
-    '<div class="table-scroll"><table class="data-table">' + plainHeader(table.columns) +
-    '<tbody>' + table.rows.map(function(row){ return rowHtml(row,false); }).join('') +
+  var gases = gasesOf(table.columns);
+  var pick = gases.length > 0;
+  if(pick && gases.indexOf(activeGas) < 0) activeGas = gases[0];
+  var keep = table.columns.map(function(name, i){
+    if(!pick || i === 0) return i;
+    return name.indexOf(activeGas + '_') === 0 ? i : -1;
+  }).filter(function(i){ return i >= 0; });
+  var columns = keep.map(function(i){ return table.columns[i]; });
+  var rows = table.rows.map(function(row){ return keep.map(function(i){ return row[i]; }); });
+  return '<div class="panel-heading"><h2>이상기체 표</h2><p class="panel-note">온도만으로 줄이 정해집니다 — ' + SUB('p', 'r') + ' 과 ' + SUB('v', 'r') + ' 은 등엔트로피 과정에서 비로 씁니다.</p></div>' +
+    '<div class="table-scroll"><table class="data-table">' + plainHeader(columns) +
+    '<tbody>' + rows.map(function(row){ return rowHtml(row,false); }).join('') +
     '</tbody></table></div>';
 }
+/* ★★ 이중보간 계산기 (신설 2026-09-20, 사용자 [발화 생략]). 1회독용 — 손으로 셈하는 대신 **어느 네 값을 어떤 순서로 쓰는지**를 보인다.
+   순서: 두 압력 블록 각각에서 온도로 한 번씩 → 그 두 값을 압력으로 한 번. 블록마다 온도 눈금이 달라
+   (첫 줄이 포화온도) 온도 두 줄은 블록마다 따로 고른다.
+   못 보는 것: 압력 블록 사이에서 포화 경계를 넘는 경우(한 블록엔 그 온도가 과열인데 다른 블록엔 없다)는
+   보간하지 않고 알린다 — 그 자리는 상 경계라 직선 보간이 뜻이 없다. */
+var INTERP = {P:'', T:'', x:'', prop:'h'};
+var SUPER_PROPS = ['v', 'u', 'h', 's'];   // 과열·압축액 블록의 칸 차례(줄의 1~4번)
+function sig5(x){ return Number(x.toPrecision(5)); }
+function bracket(rows, x){
+  for(var i = 0; i < rows.length; i++){
+    if(rows[i][0] === x) return [i, i];
+    if(i + 1 < rows.length && rows[i][0] < x && x < rows[i + 1][0]) return [i, i + 1];
+  }
+  return null;
+}
+function interpOnce(x, x1, x2, y1, y2){ return x1 === x2 ? y1 : y1 + (x - x1) * (y2 - y1) / (x2 - x1); }
+/* ★★ 결과는 **표와 같은 세로 줄**로 낸다 (2026-09-20 사용자 *[발화 생략]*).
+   아래 줄 · 찾는 줄 · 위 줄을 위에서 아래로 쌓고 **칸은 그 표가 가진 것을 다** 낸다.
+   그전에는 고른 성질 하나만 가로 다섯 칸(아래 T · 값 · 위 T · 값 · 결과)으로 냈는데,
+   h 를 본 뒤 s 를 보려면 계산기를 다시 돌려야 했다 — 표를 읽을 때 눈이 가는 모양과도 달랐다.
+   `mid` 는 찾는 줄이고, 표의 줄과 정확히 같으면 그 줄 하나만 낸다. */
+function interpRowsHtml(head, rows){
+  return '<div class="interp-scroll"><table class="interp-grid"><thead><tr>' +
+    head.map(function(h){ return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    rows.map(function(r){
+      return '<tr>' + r.cells.map(function(c){
+        return '<td' + (r.mid ? ' class="mid"' : '') + '>' + c + '</td>';
+      }).join('') + '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+/* 아래·찾는·위 세 줄을 만든다. `cells(row)` 는 표의 줄을, `mid` 는 보간값을 글자로 돌려준다. */
+function interpStack(r1, r2, midCells, cells){
+  if(r1 === r2) return [{cells: midCells, mid: true}];
+  return [{cells: cells(r1)}, {cells: midCells, mid: true}, {cells: cells(r2)}];
+}
+/* ★ 이상기체 표는 **줄 하나만 보간한다** (2026-09-20 사용자 [발화 생략]) —
+   온도가 줄을 정하므로 압력 방향이 없다. 쓰는 자리는 같다: 어느 두 줄을 쓰는지와 그 사이 비를 보인다. */
+function interpIdealHtml(){
+  var table = SRC().ideal_gas, rows = table.rows, cols = table.columns;
+  var gases = gasesOf(cols);
+  var use = [0];
+  for(var i = 1; i < cols.length; i++){
+    if(!gases.length || cols[i].indexOf(activeGas + '_') === 0) use.push(i);
+  }
+  var ci = cols.indexOf(INTERP.prop) >= 0 ? cols.indexOf(INTERP.prop) : use[1];
+  var T = parseFloat(INTERP.T);
+  if(!isFinite(T)) return '<div class="interp-note">온도를 넣으면 쓰는 두 줄과 비를 보입니다.</div>';
+  var bt = bracket(rows, T);
+  if(!bt) return '<div class="interp-note">표의 온도 범위 밖입니다(' + rows[0][0] + ' ~ ' + rows[rows.length - 1][0] + ' K).</div>';
+  var r1 = rows[bt[0]], r2 = rows[bt[1]];
+  var y = interpOnce(T, r1[0], r2[0], r1[ci], r2[ci]);
+  var head = use.map(function(k){ return k === 0 ? 'T (K)' : plainLabel(cols[k]); });
+  var mid = use.map(function(k){ return k === 0 ? T : sig5(interpOnce(T, r1[0], r2[0], r1[k], r2[k])); });
+  var pick = function(r){ return use.map(function(k){ return r[k]; }); };
+  return interpRowsHtml(head, interpStack(r1, r2, mid, pick)) +
+    '<ol class="interp-steps"><li>' + plainLabel(cols[ci]) + ': ' + r1[ci] + ' + (' + T + ' − ' + r1[0] + ')/(' + r2[0] + ' − ' + r1[0] + ') × (' + r2[ci] + ' − ' + r1[ci] + ') = <b>' + sig5(y) + '</b>' +
+    (r1[0] === r2[0] ? ' (표의 줄 그대로)' : '') + '</li></ol>';
+}
+/* ★ 칸 이름은 **밑줄이 아니라 아래첨자로 조판한다** (2026-09-20 사용자 [발화 생략]). `v_f` 는 데이터에 적는 방식이지 읽는 방식이 아니다 — 본표 머리글이 이미
+   `propLabel` 로 내리고 있었는데 계산기만 날것을 냈다. 단위는 밑글자로 찾는다(`P_sat` → P). */
+/* `<option>` 안에는 태그가 안 살아 아래첨자를 못 쓴다 — 그래서 첨자를 **말로 편다**.
+   `plainLabel` 은 밑줄 왼쪽을 기체 이름으로 읽어 `v_f` 를 「v f」로 내던 자리다. */
+var SAT_SUFFIX = {f: '포화액', g: '포화증기', fg: '증발', sat: '포화'};
+function satOptionLabel(name){
+  var cut = name.indexOf('_');
+  if(cut < 0) return name;
+  var tail = name.slice(cut + 1);
+  return name.slice(0, cut) + ' (' + (SAT_SUFFIX[tail] || tail) + ')';
+}
+function satColLabel(name){
+  var cut = name.indexOf('_');
+  var base = cut < 0 ? name : name.slice(0, cut);
+  var unit = STEAM.units[base];
+  return propLabel(name) + (unit ? ' [' + esc(unit) + ']' : '');
+}
+/* ★★ 포화표는 **건도도 받는다** (2026-09-20 사용자 [발화 생략]). 습증기의 상태량은 표에 없다 — 포화액·포화증기 두 값을 건도로 섞어야 나온다.
+       y = y_f + x(y_g − y_f),  h 는 표에 h_fg 가 있으면 그것을 그대로 쓴다.
+   못 보는 것: x 가 0~1 밖이면 습증기가 아니므로 섞지 않고 알린다(과열·압축액은 다른 표다). */
+function mixtureHtml(cols, midNum, x){
+  var at = function(n){ var k = cols.indexOf(n); return k < 0 ? null : midNum[k]; };
+  var head = [], cells = [];
+  ['v', 'u', 'h', 's'].forEach(function(p){
+    var f = at(p + '_f'), g = at(p + '_g'), fg = at(p + '_fg');
+    if(f === null) return;
+    var val = fg !== null ? f + x * fg : (g === null ? null : f + x * (g - f));
+    if(val === null) return;
+    head.push(satColLabel(p + '_f').replace(/<sub>f<\/sub>/, ''));
+    cells.push(sig5(val));
+  });
+  if(!cells.length) return '';
+  return '<div class="interp-leg">건도 x = ' + x + ' 에서 (습증기)</div>' +
+    interpRowsHtml(head, [{cells: cells, mid: true}]);
+}
+/* ★ 포화표도 보간한다 (2026-09-20 사용자 [발화 생략]) — 여기는 기준 칸이
+   하나(온도 기준 표는 T, 압력 기준 표는 P)라 줄 둘 사이 한 번만 보간한다. */
+function interpSatHtml(kind){
+  var table = SRC()[kind], rows = table.rows, cols = table.columns;
+  var ci = cols.indexOf(INTERP.prop) > 0 ? cols.indexOf(INTERP.prop) : 1;
+  var byT = kind === 'saturation_T';
+  var x = parseFloat(byT ? INTERP.T : INTERP.P);
+  var unit = byT ? '°C' : PRESSURE_UNIT;
+  if(!isFinite(x)) return '<div class="interp-note">' + (byT ? '온도' : '압력') + '를 넣으면 쓰는 두 줄과 비를 보입니다.</div>';
+  var bt = bracket(rows, x);
+  if(!bt) return '<div class="interp-note">표 범위 밖입니다(' + rows[0][0] + ' ~ ' + rows[rows.length - 1][0] + ' ' + esc(unit) + ').</div>';
+  var r1 = rows[bt[0]], r2 = rows[bt[1]];
+  var y = interpOnce(x, r1[0], r2[0], r1[ci], r2[ci]);
+  var head = cols.map(satColLabel);
+  var midNum = cols.map(function(c, k){ return k === 0 ? x : interpOnce(x, r1[0], r2[0], r1[k], r2[k]); });
+  var mid = midNum.map(function(v, k){ return k === 0 ? x : sig5(v); });
+  var pick = function(r){ return cols.map(function(c, k){ return r[k]; }); };
+  var q = parseFloat(INTERP.x);
+  var mix = !isFinite(q) ? ''
+    : (q < 0 || q > 1) ? '<div class="interp-note">건도는 0 ~ 1 입니다 — 그 밖이면 습증기가 아니라 과열증기·압축액 표를 봅니다.</div>'
+    : mixtureHtml(cols, midNum, q);
+  return interpRowsHtml(head, interpStack(r1, r2, mid, pick)) + mix +
+    '<ol class="interp-steps"><li>' + satColLabel(cols[ci]) + ': ' + r1[ci] + ' + (' + x + ' − ' + r1[0] + ')/(' + r2[0] + ' − ' + r1[0] + ') × (' + r2[ci] + ' − ' + r1[ci] + ') = <b>' + sig5(y) + '</b>' +
+    (r1[0] === r2[0] ? ' (표의 줄 그대로)' : '') + '</li>' +
+    (isFinite(q) && q >= 0 && q <= 1 ? '<li>습증기: ' + propLabel('y_x') + ' = ' + propLabel('y_f') + ' + x(' + propLabel('y_g') + ' − ' + propLabel('y_f') + ') — h 는 표의 ' + propLabel('h_fg') + ' 를 그대로 씁니다</li>' : '') +
+    '</ol>';
+}
+function interpResultHtml(kind){
+  if(kind === 'ideal_gas') return interpIdealHtml();
+  if(kind === 'saturation_T' || kind === 'saturation_P') return interpSatHtml(kind);
+  var blocks = SRC()[kind].blocks;
+  var col = {v:1, u:2, h:3, s:4}[INTERP.prop];
+  var P = parseFloat(INTERP.P), T = parseFloat(INTERP.T);
+  if(!(isFinite(P) && isFinite(T))) return '<div class="interp-note">압력과 온도를 넣으면 쓰는 네 값과 순서를 보입니다.</div>';
+  var bp = bracket(blocks.map(function(b){ return [b.P]; }), P);
+  if(!bp) return '<div class="interp-note">이 표의 압력 범위 밖입니다(' + blocks[0].P + ' ~ ' + blocks[blocks.length - 1].P + ' ' + PRESSURE_UNIT + ').</div>';
+  var legs = [bp[0], bp[1]].filter(function(v, i, a){ return a.indexOf(v) === i; }).map(function(bi){
+    var block = blocks[bi], bt = bracket(block.rows, T);
+    if(!bt) return {P: block.P, missing: true, lo: block.rows[0][0], hi: block.rows[block.rows.length - 1][0]};
+    var r1 = block.rows[bt[0]], r2 = block.rows[bt[1]];
+    return {P: block.P, r1: r1, r2: r2, T1: r1[0], T2: r2[0], y1: r1[col], y2: r2[col],
+            all: SUPER_PROPS.map(function(p, k){ return interpOnce(T, r1[0], r2[0], r1[k + 1], r2[k + 1]); }),
+            y: interpOnce(T, r1[0], r2[0], r1[col], r2[col])};
+  });
+  var miss = legs.filter(function(l){ return l.missing; });
+  if(miss.length) return '<div class="interp-note">' + miss.map(function(l){
+    return 'P = ' + l.P + ' ' + PRESSURE_UNIT + ' 블록에는 ' + T + ' °C 가 없습니다(' + l.lo + ' ~ ' + l.hi + ' °C) — 상 경계를 넘는 자리라 보간하지 않습니다.';
+  }).join('<br>') + '</div>';
+  var unit = STEAM.units[INTERP.prop];
+  // 블록마다 세로 세 줄(아래 T · 찾는 T · 위 T)을 내고 칸은 v·u·h·s 넷을 다 낸다.
+  var head = ['T [' + esc(STEAM.units.T) + ']'].concat(SUPER_PROPS.map(function(p){
+    return propLabel(p) + ' [' + esc(STEAM.units[p]) + ']';
+  }));
+  var grid = legs.map(function(l){
+    var mid = [T].concat(l.all.map(sig5));
+    var pick = function(r){ return [r[0], r[1], r[2], r[3], r[4]]; };
+    return '<div class="interp-leg">P = ' + l.P + ' ' + esc(PRESSURE_UNIT) + ' 블록</div>' +
+      interpRowsHtml(head, interpStack(l.r1, l.r2, mid, pick));
+  }).join('');
+  var steps = legs.map(function(l, i){
+    return '<li>P = ' + l.P + ' ' + PRESSURE_UNIT + ' 에서 온도로: ' + l.y1 + ' + (' + T + ' − ' + l.T1 + ')/(' + l.T2 + ' − ' + l.T1 + ') × (' + l.y2 + ' − ' + l.y1 + ') = <b>' + sig5(l.y) + '</b>' +
+      (l.T1 === l.T2 ? ' (표의 줄 그대로)' : '') + '</li>';
+  });
+  var result = legs[0].y, finalAll = legs[0].all;
+  if(legs.length === 2){
+    var a = legs[0], b = legs[1];
+    finalAll = SUPER_PROPS.map(function(p, k){ return interpOnce(P, a.P, b.P, a.all[k], b.all[k]); });
+    result = interpOnce(P, a.P, b.P, a.y, b.y);
+    steps.push('<li>두 값을 압력으로: ' + sig5(a.y) + ' + (' + P + ' − ' + a.P + ')/(' + b.P + ' − ' + a.P + ') × (' + sig5(b.y) + ' − ' + sig5(a.y) + ') = <b>' + sig5(result) + '</b></li>');
+    // 압력까지 보간한 줄도 **칸을 다 채워** 낸다 — 성질 하나만 내면 다른 칸을 또 돌려야 한다
+    grid += '<div class="interp-leg">P = ' + P + ' ' + esc(PRESSURE_UNIT) + ' · T = ' + T + ' ' + esc(STEAM.units.T) + '</div>' +
+      interpRowsHtml(head, [{cells: [T].concat(finalAll.map(sig5)), mid: true}]);
+  }
+  return grid + '<ol class="interp-steps">' + steps.join('') + '</ol>' +
+    '<div class="interp-final">' + INTERP.prop + ' ≈ ' + sig5(result) + ' ' + esc(unit) + '</div>';
+}
+function interpPanelHtml(kind){
+  var ideal = kind === 'ideal_gas';
+  var sat = kind === 'saturation_T' || kind === 'saturation_P';
+  // 기체가 여럿인 표에서는 **고른 기체의 성질만** 목록에 둔다 (2026-09-20 사용자 [발화 생략]) — 여섯 기체 × 세 성질이 한 목록에 들어가면 열여덟 줄이 된다.
+  var idealCols = ideal ? (SRC().ideal_gas.columns || []) : [];
+  var gases = ideal ? gasesOf(idealCols) : [];
+  var props = ideal ? idealCols.slice(1).filter(function(c){ return !gases.length || c.indexOf(activeGas + '_') === 0; })
+    : sat ? (SRC()[kind].columns || []).slice(1) : ['v', 'u', 'h', 's'];
+  if(props.indexOf(INTERP.prop) < 0) INTERP.prop = props[0];
+  var opt = props.map(function(p){
+    var cut = gases.length ? p.indexOf('_') : -1;
+    return '<option value="' + esc(p) + '"' + (p === INTERP.prop ? ' selected' : '') + '>' +
+      (sat ? esc(satOptionLabel(p)) : cut > 0 ? propLabel(p.slice(cut + 1)) : plainLabel(p)) + '</option>';
+  }).join('');
+  var wantP = !ideal && kind !== 'saturation_T';
+  var wantT = !sat || kind === 'saturation_T';
+  return '<section class="interp" data-interp-kind="' + kind + '"><h3>' +
+      (ideal || sat ? '보간 — 표의 두 줄 사이' : '이중보간 — 압력 둘 × 온도 둘') + '</h3>' +
+    '<div class="interp-inputs">' +
+      (wantP ? '<label>P <input type="number" step="any" inputmode="decimal" data-interp="P" value="' + esc(INTERP.P) + '"> ' + esc(PRESSURE_UNIT) + '</label>' : '') +
+      (wantT ? '<label>T <input type="number" step="any" inputmode="decimal" data-interp="T" value="' + esc(INTERP.T) + '"> ' + (ideal ? 'K' : '°C') + '</label>' : '') +
+      // 건도는 포화표에만 — 과열·압축액·이상기체에는 습증기가 없다
+      (sat ? '<label>x <input type="number" step="any" min="0" max="1" inputmode="decimal" data-interp="x" value="' + esc(INTERP.x) + '"> 건도</label>' : '') +
+      // 표는 칸을 다 내므로 이 고르개는 **풀이 줄에 쓸 성질** 하나만 정한다
+      '<label>풀이 <select data-interp="prop">' + opt + '</select></label>' +
+    '</div><div class="interp-out">' + interpResultHtml(kind) + '</div></section>';
+}
+/* ★ h-s 선도 (신설 2026-09-20, 사용자 [발화 생략]).
+   교재 그림을 옮기지 않고 **이 화면이 가진 표 값으로** 그린다 — 포화 돔은 온도 기준 포화표의 (s_f,h_f)·(s_g,h_g),
+   등압선은 과열표 블록의 (s,h) 와 그 압력의 습증기 구간(포화액 → 포화증기 직선).
+   못 보는 것: 표 눈금 사이의 곡률(점을 직선으로 잇는다) · 압축액 쪽 등압선(포화액선과 거의 겹쳐 생략). */
+/* ★ 선도 공통 틀 (2026-09-20 사용자 [발화 생략]).
+   ⑴ 높이를 340 으로 줄여 제목·설명과 함께 한 화면에 들어온다 ⑵ 격자는 옅게·선은 가늘게·글자는 작게
+   ⑶ **좌표 읽기** — 그림 위에서 움직이면 십자선과 값이 따라오고, 누르면 그 자리에 고정된다.
+   값 ↔ 화면 좌표 환산에 필요한 수는 `data-*` 로 SVG 에 싣는다(핸들러가 그림 종류를 몰라도 된다). */
+var CHART = {W: 640, H: 340, L: 56, R: 26, T: 14, B: 40};
+/* 눈금 간격 — 범위를 8칸 안팎으로 가르는 1·2·2.5·5 배수. 손으로 박으면 물질마다 어긋난다(냉매는 s 가 0~2). */
+function niceStep(range){
+  if(!(range > 0)) return 1;
+  var raw = range / 8, mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10)), n = raw / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * mag;
+}
+function fmtTick(step){
+  var dec = step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log(step) / Math.LN10) + 1);
+  return function(v){ return dec ? v.toFixed(dec) : String(Math.round(v)); };
+}
+function chartScale(x0, x1, y0, y1, chart){
+  var c = chart || CHART;
+  return {
+    X: function(v){ return c.L + (v - x0) / (x1 - x0) * (c.W - c.L - c.R); },
+    Y: function(v){ return c.H - c.B - (v - y0) / (y1 - y0) * (c.H - c.T - c.B); }
+  };
+}
+function chartGrid(s, x0, x1, xstep, y0, y1, ystep, xfmt, yfmt, chart){
+  var c = chart || CHART, out = '', v;
+  for(v = x0; v <= x1 + 1e-9; v += xstep){
+    out += '<line x1="' + s.X(v).toFixed(1) + '" y1="' + c.T + '" x2="' + s.X(v).toFixed(1) + '" y2="' + (c.H - c.B) + '" stroke="var(--line)" stroke-width="0.5" opacity="0.7"/>' +
+      '<text x="' + s.X(v).toFixed(1) + '" y="' + (c.H - c.B + 15) + '" font-size="11" fill="var(--sub)" text-anchor="middle">' + xfmt(v) + '</text>';
+  }
+  for(v = y0; v <= y1 + 1e-9; v += ystep){
+    out += '<line x1="' + c.L + '" y1="' + s.Y(v).toFixed(1) + '" x2="' + (c.W - c.R) + '" y2="' + s.Y(v).toFixed(1) + '" stroke="var(--line)" stroke-width="0.5" opacity="0.7"/>' +
+      '<text x="' + (c.L - 6) + '" y="' + (s.Y(v) + 4).toFixed(1) + '" font-size="11" fill="var(--sub)" text-anchor="end">' + yfmt(v) + '</text>';
+  }
+  return out;
+}
+/* 선분 양끝이 상자 밖이어도 중간이 가로지르면 충돌이다. 끝점만 재면 대각선 등압선이 압력 숫자를
+   관통한 채 통과한다. Liang-Barsky의 t 구간을 써서 수평·수직·대각선 모두 같은 기준으로 잰다. */
+function segmentHitsBox(a, b, box, pad){
+  var xmin = box.x - pad, xmax = box.x + box.w + pad, ymin = box.y - pad, ymax = box.y + box.h + pad;
+  var dx = b[0] - a[0], dy = b[1] - a[1], lo = 0, hi = 1;
+  function clip(p, q){
+    if(p === 0) return q >= 0;
+    var t = q / p;
+    if(p < 0){ if(t > hi) return false; if(t > lo) lo = t; }
+    else { if(t < lo) return false; if(t < hi) hi = t; }
+    return true;
+  }
+  return clip(-dx, a[0] - xmin) && clip(dx, xmax - a[0]) &&
+    clip(-dy, a[1] - ymin) && clip(dy, ymax - a[1]);
+}
+function pathsHitBox(paths, box, pad){
+  return paths.some(function(points){
+    for(var i = 1; i < points.length; i++) if(segmentHitsBox(points[i - 1], points[i], box, pad)) return true;
+    return false;
+  });
+}
+/* ★ 이름표는 **곡선 위 빈자리**에 둔다 (2026-09-20 사용자 [발화 생략]). 곡선 끝에서 거슬러 올라가며
+   앞서 놓인 이름표·모든 선분과 안 겹치는 첫 자리를 고른다 — 한쪽 기둥에 몰면 어느 선의 값인지 다시 못 찾는다. */
+function placeLabel(placed, curves, points, text, size){
+  var w = String(text).length * (size * 0.62) + 4, h = size + 2;
+  /* 위쪽 여백은 h-s에서 hmax를 조금 늘려 확보한다. 같은 점에만 매달리면 고밀도 냉매 표에서
+     이름을 빼게 되므로, 곡선의 다른 빈자리와 좌·우/아래도 차례로 찾는다. */
+  var offsets = [[6, -6], [6, -18], [-w - 6, -6], [6, 13], [-w - 6, 13]];
+  for(var i = points.length - 1; i >= 0; i--){
+    for(var j = 0; j < offsets.length; j++){
+      var x = points[i][0] + offsets[j][0], y = points[i][1] + offsets[j][1];
+      if(x < CHART.L || x + w > CHART.W - CHART.R || y - h < CHART.T || y > CHART.H - CHART.B) continue;
+      var box = {x: x, y: y - h, w: w, h: h};
+      var labelHit = placed.some(function(b){
+        return box.x < b.x + b.w + 3 && b.x < box.x + box.w + 3 && box.y < b.y + b.h + 3 && b.y < box.y + box.h + 3;
+      });
+      if(!labelHit && !pathsHitBox(curves, box, 2)){ placed.push(box); return {x: x, y: y}; }
+    }
+  }
+  return null;
+}
+/* h-s 등압선은 끝점이 꼭대기에 촘촘히 모인다. 중간 빈자리로 피하면 숫자는 겹치지 않아도 어느 선의
+   값인지 끊긴다. 끝점 x 순서를 보존하되, 각 숫자는 자기 끝점 바로 위에 놓아 안내선을 데이터 선으로
+   오독할 만큼 길게 만들지 않는다. */
+function placeHsTopLabels(items, size, chart){
+  var c = chart || CHART, plan = [], gap = 3, topY = c.T + 16, nextX = c.L, right = c.W - c.R;
+  var sorted = items.slice().sort(function(a, b){
+    return a.screen[a.screen.length - 1][0] - b.screen[b.screen.length - 1][0];
+  });
+  sorted.forEach(function(item){
+    var point = item.screen[item.screen.length - 1];
+    // 실제 SVG 글꼴의 획·흰 테두리까지 남길 수 있게 문자 폭 계수를 넉넉히 둔다.
+    var w = String(item.b.P).length * (size * 0.70) + 4;
+    // 숫자를 각자 좌·우 빈자리로 보내면 곡선 끝점 순서가 뒤집혀 지시선이 서로 교차한다.
+    // 그래서 한 꼭대기 줄에서 끝점 x 순서를 보존하고, 필요한 최소 글자 간격만 오른쪽으로 민다.
+    var x = Math.max(point[0] - w / 2, nextX);
+    plan.push({item:item, x:x, y:topY, w:w, point:point});
+    nextX = x + w + gap;
+  });
+  // 밀집 냉매도 한 덩어리로만 좌·우 이동한다. 개별 라벨을 되돌리면 순서·교차 보장이 깨진다.
+  var shift = Math.max(0, plan[plan.length - 1].x + plan[plan.length - 1].w - right);
+  if(shift) plan.forEach(function(at){ at.x -= shift; });
+  shift = Math.max(0, c.L - plan[0].x);
+  if(shift) plan.forEach(function(at){ at.x += shift; });
+  // 물처럼 한 줄 안에서 끝점 가까이에 머물면 이것이 가장 읽기 쉽다. 반대로 R-134a처럼
+  // 여덟 끝점이 한 점 근처에 몰리면 줄 하나를 강제하는 순간 먼 대각선이 생긴다. 그때만
+  // 가까운 후보를 쓰되 앞 지시선과 교차하는 후보는 버린다.
+  var longest = Math.max.apply(null, plan.map(function(at){
+    return Math.hypot(at.point[0] - (at.x + at.w / 2), at.point[1] - (at.y + 6));
+  }));
+  if(longest <= 65) return plan;
+  var placed = [], leaders = [], local = [];
+  function crossed(a, b, c, d){
+    function side(p, q, r){ return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]); }
+    var ab1 = side(a, b, c), ab2 = side(a, b, d), cd1 = side(c, d, a), cd2 = side(c, d, b);
+    return ab1 * ab2 < 0 && cd1 * cd2 < 0;
+  }
+  sorted.forEach(function(item){
+    var point = item.screen[item.screen.length - 1], w = String(item.b.P).length * (size * 0.70) + 4;
+    var raw = [[point[0] + 6, point[1] - 14], [point[0] - w - 6, point[1] - 14],
+               [point[0] - w - 44, point[1] - 14], [point[0] - w - 6, point[1] + 16],
+               [point[0] - w - 44, point[1] + 16], [point[0] + 6, point[1] + 16],
+               [point[0] - w - 82, point[1] - 14]], box, x, y, end;
+    for(var candidate = 0; candidate < raw.length; candidate += 1){
+      x = Math.max(c.L, Math.min(raw[candidate][0], c.W - c.R - w));
+      y = Math.max(c.T + 16, Math.min(raw[candidate][1], c.H - c.B - 4));
+      box = {x:x, y:y - 11, w:w, h:13}; end = [x + w / 2, y + 6];
+      if(!placed.some(function(other){ return box.x < other.x + other.w && box.x + box.w > other.x && box.y < other.y + other.h && box.y + box.h > other.y; }) &&
+         !leaders.some(function(old){ return crossed(point, end, old.point, old.end); })) break;
+    }
+    placed.push(box); leaders.push({point:point, end:end});
+    local.push({item:item, x:x, y:y, w:w, point:point});
+  });
+  return local;
+}
+/* R-134a처럼 끝점이 한곳에 몰리면, 그래프 안의 빈자리 찾기는 결국 다른 등압선을 가로지른다.
+   플롯 오른쪽을 비워 끝점 y 순서를 보존한 전용 라벨열로 보낸다. 라벨 상자는 플롯 바깥에만
+   있으므로 파란 등압선과 겹칠 수 없고, 지시선은 자기 끝점에서 그 여백으로만 짧게 나간다. */
+function placeHsGutterLabels(items, size, chart){
+  var c = chart || CHART, gutter = c.W - c.R, textX = gutter + 8, lastY = c.T + 16;
+  return items.slice().sort(function(a, b){
+    return a.screen[a.screen.length - 1][1] - b.screen[b.screen.length - 1][1];
+  }).map(function(item){
+    var point = item.screen[item.screen.length - 1], w = String(item.b.P).length * (size * 0.70) + 4;
+    var y = Math.max(point[1] - 8, lastY);
+    lastY = y + 14;
+    return {item:item, x:textX, y:y, w:w, point:point,
+      leaderEnd:[gutter + 3, y - 5]};
+  });
+}
+function chartLegend(items, chart){
+  var c = chart || CHART;
+  return '<g>' + items.map(function(it, i){
+    var y = c.T + 12 + i * 15, x = c.L + 10;
+    return '<line x1="' + x + '" y1="' + y + '" x2="' + (x + 18) + '" y2="' + y + '" stroke="' + it.color +
+        '" stroke-width="' + (it.width || 1.6) + '"' + (it.dash ? ' stroke-dasharray="' + it.dash + '"' : '') + '/>' +
+      '<text x="' + (x + 24) + '" y="' + (y + 4) + '" font-size="11" fill="var(--sub)" paint-order="stroke" stroke="var(--paper-raised)" stroke-width="3">' + it.text + '</text>';
+  }).join('') + '</g>';
+}
+function chartSvg(o){
+  var c = o.chart || CHART;
+  return '<svg viewBox="0 0 ' + c.W + ' ' + c.H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="' + esc(o.aria) + '"' +
+      ' data-x0="' + o.x0 + '" data-x1="' + o.x1 + '" data-y0="' + o.y0 + '" data-y1="' + o.y1 +
+      '" data-chart-l="' + c.L + '" data-chart-r="' + c.R + '" data-chart-t="' + c.T + '" data-chart-b="' + c.B +
+      '" data-xl="' + esc(o.xname) + '" data-yl="' + esc(o.yname) + '" data-xd="' + o.xdec + '" data-yd="' + o.ydec + '">' +
+    o.body +
+    '<rect x="' + c.L + '" y="' + c.T + '" width="' + (c.W - c.L - c.R) + '" height="' + (c.H - c.T - c.B) + '" fill="none" stroke="var(--line-strong)" stroke-width="0.8"/>' +
+    '<g class="xhair" hidden><line class="xh-v" y1="' + c.T + '" y2="' + (c.H - c.B) + '" stroke="var(--copper)" stroke-width="0.8" stroke-dasharray="4 3"/>' +
+      '<line class="xh-h" x1="' + c.L + '" x2="' + (c.W - c.R) + '" stroke="var(--copper)" stroke-width="0.8" stroke-dasharray="4 3"/>' +
+      // 찍은 자리는 **십자 표시**다 (2026-09-20 사용자 [발화 생략]) — 점 하나는
+      // 곡선과 겹치면 안 보이고, 십자는 가로·세로 눈금 어디에 걸리는지까지 함께 읽힌다.
+      '<path class="xh-mark" fill="none" stroke="var(--copper)" stroke-width="1.6"/></g>' +
+    '<text x="' + ((c.W + c.L - c.R) / 2) + '" y="' + (c.H - 6) + '" font-size="12" fill="var(--ink)" text-anchor="middle">' + o.xaxis + '</text>' +
+    '<text x="13" y="' + ((c.H - c.B + c.T) / 2) + '" font-size="12" fill="var(--ink)" text-anchor="middle" transform="rotate(-90 13 ' + ((c.H - c.B + c.T) / 2) + ')">' + o.yaxis + '</text></svg>';
+}
+function hsChartHtml(){
+  var src = SRC(), sat = src.saturation_T, satP = src.saturation_P;
+  // R-134a는 선택한 여덟 등압선 끝이 한 덩어리라, 플롯 바깥 라벨열을 위해 오른쪽만 넓힌다.
+  // 다른 물질과 물의 한 줄 배치는 기존 CHART를 그대로 쓴다.
+  var hsChart = activeSubstance === 'R-134a' ? {W:640,H:340,L:56,R:120,T:14,B:40} : CHART;
+  var ci = function(t, n){ return t.columns.indexOf(n); };
+  var sf = ci(sat, 's_f'), sg = ci(sat, 's_g'), hf = ci(sat, 'h_f'), hg = ci(sat, 'h_g');
+  var pts = [];
+  (src.superheated.blocks || []).forEach(function(b){ b.rows.forEach(function(r){ pts.push([r[4], r[3]]); }); });
+  sat.rows.forEach(function(r){ pts.push([r[sf], r[hf]]); pts.push([r[sg], r[hg]]); });
+  /* ★ 축은 **데이터가 있는 자리**에 맞춘다 (2026-09-20 사용자 [발화 생략]) — 0 부터 그리면 냉매처럼 s 가 0~2 인 물질은 그림의 한 귀퉁이에만 선이 몰린다.
+     눈금 간격도 범위에 맞춰 고른다(사용자 [발화 생략]). */
+  var sLo = Math.min.apply(null, pts.map(function(p){ return p[0]; }));
+  var sHi = Math.max.apply(null, pts.map(function(p){ return p[0]; }));
+  var hLo = Math.min.apply(null, pts.map(function(p){ return p[1]; }));
+  var hHi = Math.max.apply(null, pts.map(function(p){ return p[1]; }));
+  var sStep = niceStep(sHi - sLo), hStep = niceStep(hHi - hLo);
+  var smin = Math.floor(sLo / sStep) * sStep, smax = Math.ceil(sHi / sStep) * sStep;
+  var hmin = Math.floor(hLo / hStep) * hStep, hmax = Math.ceil(hHi / hStep) * hStep;
+  // 꼭대기 데이터 바로 위에 한 줄 이름표를 둘 최소 여백만 둔다. 과한 빈 축 범위는
+  // 안내선을 데이터 곡선의 연장처럼 보이게 하므로, 눈금 한 칸의 1/4를 넘기지 않는다.
+  hmax += hStep * 0.25;
+  var sc = chartScale(smin, smax, hmin, hmax, hsChart), X = sc.X, Y = sc.Y;
+  var path = function(list){ return list.map(function(p, i){ return (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1); }).join(''); };
+  var dome = sat.rows.map(function(r){ return [r[sf], r[hf]]; }).concat(sat.rows.slice().reverse().map(function(r){ return [r[sg], r[hg]]; }));
+  var blocks = src.superheated.blocks, pick = [];
+  var step = Math.max(1, Math.round(blocks.length / 7));
+  for(var i = 0; i < blocks.length; i += step) pick.push(blocks[i]);
+  // 모든 곡선을 먼저 화면 좌표로 만든다. 앞 라벨이 **아직 그리지 않은** 뒤 곡선을 못 보고
+  // 그 위에 올라가는 순서 의존을 없앤다.
+  var isobarData = pick.map(function(b){
+    var row = null;
+    satP.rows.forEach(function(r){ if(r[0] === b.P) row = r; });
+    var wet = row ? [[row[ci(satP, 's_f')], row[ci(satP, 'h_f')]], [row[ci(satP, 's_g')], row[ci(satP, 'h_g')]]] : [];
+    var dry = b.rows.map(function(r){ return [r[4], r[3]]; });
+    var full = wet.concat(dry);
+    return {b: b, full: full, screen: full.map(function(p){ return [X(p[0]), Y(p[1])]; })};
+  });
+  var isobars = isobarData.map(function(item){
+    return '<path d="' + path(item.full) + '" fill="none" stroke="var(--blue)" stroke-width="1.1" stroke-linejoin="round"/>';
+  }).join('');
+  var labelPlan = activeSubstance === 'R-134a' ? placeHsGutterLabels(isobarData, 11, hsChart) : placeHsTopLabels(isobarData, 11, hsChart);
+  var hsLabels = labelPlan.map(function(at){
+    var endX = at.leaderEnd ? at.leaderEnd[0] : at.x + at.w / 2, endY = at.leaderEnd ? at.leaderEnd[1] : at.y + 6;
+    return '<path class="hs-label-leader" d="M' + at.point[0].toFixed(1) + ' ' + at.point[1].toFixed(1) +
+      ' L' + endX.toFixed(1) + ' ' + endY.toFixed(1) + '" fill="none" stroke="var(--sub)" stroke-width="0.7" stroke-dasharray="2 1" opacity="0.8"/>' +
+      '<text x="' + at.x.toFixed(1) + '" y="' + at.y.toFixed(1) + '" font-size="11" fill="var(--blue)"' +
+      ' paint-order="stroke" stroke="var(--paper-raised)" stroke-width="3">' + at.item.b.P + '</text>';
+  }).join('');
+  var body = chartGrid(sc, smin, smax, sStep, hmin, hmax, hStep, fmtTick(sStep), fmtTick(hStep), hsChart) +
+    '<path d="' + path(dome) + '" fill="none" stroke="var(--copper)" stroke-width="1.7" stroke-linejoin="round"/>' + isobars + hsLabels +
+    chartLegend([{color: 'var(--copper)', text: '포화 돔(왼쪽 액체선 · 오른쪽 증기선)'},
+                 {color: 'var(--blue)', width: 1.1, text: '등압선 — 숫자는 압력 ' + esc(PRESSURE_UNIT)}], hsChart);
+  var svg = chartSvg({body: body, aria: 'h-s 선도 — 포화 돔과 등압선', x0: smin, x1: smax, y0: hmin, y1: hmax,
+    xname: 's', yname: 'h', xdec: 3, ydec: 0,
+    xaxis: '<tspan font-style="italic">s</tspan> [' + esc(STEAM.units.s) + ']',
+    yaxis: '<tspan font-style="italic">h</tspan> [' + esc(STEAM.units.h) + ']', chart:hsChart});
+  return '<div class="panel-heading"><h2>h-s 선도</h2><p class="panel-note">주황 = 포화 돔 · 파랑 = 등압선(숫자는 압력 ' + esc(PRESSURE_UNIT) + ') · 그림 위에서 움직이면 그 자리의 s 와 h 가 읽히고, 누르면 고정됩니다.</p></div>' +
+    '<div class="chart-box">' + svg + '<div class="chart-read">그림 위로 커서를 옮기면 값이 나옵니다.</div></div>';
+}
+/* ★ 일반화 압축성 선도 (신설 2026-09-20) — Lee-Kesler 단순유체 식으로 계산한 격자(`compressibility.json`)를 그린다.
+   가로 p_R · 세로 Z · 곡선마다 T_R. 물질과 무관한 선도라 어느 물질 탭에서 열어도 같다.
+   못 보는 것: T_R < 1 의 액체 쪽과 포화선(격자에 없다) · 편심인자 보정. */
+function zChartHtml(){
+  /* ★ 액체 가지는 **안 그린다** (2026-09-20 사용자 [발화 생략]) — 직선에 가까운
+     여덟 줄이 등온선 골을 통째로 가로질러 읽을 수가 없었다. 읽는 목적(기체의 Z 를 찾는다)에 쓰이는 것은
+     T_R ≥ 1 곡선과 포화 증기선이고, 액체 쪽은 표로 읽는다. 격자에는 남아 있어 되살리려면 이 줄만 되돌린다. */
+  var pmax = 10, zmin = 0.2, zmax = 1.2;
+  var sc = chartScale(0, pmax, zmin, zmax), X = sc.X, Y = sc.Y;
+  var clip = function(list){ return (list || []).filter(function(q){ return q[1] >= zmin && q[1] <= zmax; }); };
+  var path = function(list){ return list.map(function(q, i){ return (i ? 'L' : 'M') + X(q[0]).toFixed(1) + ' ' + Y(q[1]).toFixed(1); }).join(''); };
+  var curves = COMPRESS.curves.map(function(c){
+    var pts = clip(c.points);
+    if(pts.length < 2) return '';
+    // 이름 자리 — 골이 깊은 곡선은 골 아래, 얕은 곡선은 p_R 2.5 위(끝점에 모으면 여덟이 겹친다, bbox 실측).
+    var low = pts.reduce(function(m, q){ return q[1] < m[1] ? q : m; }, pts[0]);
+    var deep = low[1] < 0.9;
+    var at = deep ? low : (pts.filter(function(q){ return q[0] >= 2.5; })[0] || pts[pts.length - 1]);
+    return '<path d="' + path(pts) + '" fill="none" stroke="var(--blue)" stroke-width="1.1" stroke-linejoin="round"/>' +
+      '<text x="' + X(at[0]).toFixed(1) + '" y="' + (Y(at[1]) + (deep ? 14 : -6)).toFixed(1) + '" font-size="11" fill="var(--blue)" text-anchor="middle" paint-order="stroke" stroke="var(--paper-raised)" stroke-width="3">' + c.Tr + '</text>';
+  }).join('');
+  var subs = (COMPRESS.sub_curves || []).map(function(c){
+    var pts = clip(c.vapor);
+    return pts.length < 2 ? '' : '<path d="' + path(pts) + '" fill="none" stroke="var(--blue)" stroke-width="0.8" opacity="0.75"/>';
+  }).join('');
+  var sat = clip((COMPRESS.saturation || {}).vapor);
+  var satLine = sat.length < 2 ? '' : '<path d="' + path(sat) + '" fill="none" stroke="var(--copper)" stroke-width="1.7" stroke-linejoin="round"/>';
+  var body = chartGrid(sc, 0, pmax, 1, zmin, zmax, 0.2, function(v){ return v; }, function(v){ return v.toFixed(1); }) +
+    '<line x1="' + CHART.L + '" y1="' + Y(1).toFixed(1) + '" x2="' + (CHART.W - CHART.R) + '" y2="' + Y(1).toFixed(1) + '" stroke="var(--copper)" stroke-width="0.9" stroke-dasharray="5 4"/>' +
+    subs + satLine + curves;
+  var svg = chartSvg({body: body, aria: '일반화 압축성 선도 — 환산압력에 따른 압축성 인자', x0: 0, x1: pmax, y0: zmin, y1: zmax,
+    xname: 'p_R', yname: 'Z', xdec: 2, ydec: 3,
+    xaxis: '환산압력 <tspan font-style="italic">p</tspan><tspan baseline-shift="sub" font-size="9">R</tspan>',
+    yaxis: '<tspan font-style="italic">Z</tspan> = <tspan font-style="italic">pv</tspan> / <tspan font-style="italic">RT</tspan>'});
+  return '<div class="panel-heading"><h2>일반화 압축성 선도</h2><p class="panel-note">어느 기체든 같은 그림입니다 — 대응상태원리로 p_R · T_R 만 있으면 Z 가 정해집니다. 굵은 주황 = 포화 증기선 · 점선 = Z 1 · 가는 선 = T_R &lt; 1 증기 쪽. 누르면 그 자리의 값이 고정됩니다.</p></div>' +
+    '<div class="chart-box">' + svg + '<div class="chart-read">그림 위로 커서를 옮기면 값이 나옵니다.</div></div>';
+}
 function renderTable(){
-  if(SRC().ideal_gas) { document.getElementById('tablePanel').innerHTML = idealGasHtml(); selectedColumns = {}; return; }
-  var html = activeTable === 'superheated' ? superheatedHtml() : activeTable === 'compressed_liquid' ? compressedLiquidHtml() : saturationTableHtml(activeTable);
+  if(activeSubstance === Z_TAB && COMPRESS){ document.getElementById('tablePanel').innerHTML = zChartHtml(); selectedColumns = {}; return; }
+  // 계산기는 **표 위**에 둔다 (2026-09-20 사용자 [발화 생략]) — 표가 길어
+  // 아래에 두면 매번 끝까지 내려야 닿는다.
+  if(SRC().ideal_gas){
+    // 기체 칩이 계산기보다 위다 — 계산기의 성질 목록이 고른 기체에 딸리므로 고르는 차례가 먼저다.
+    var gs = gasesOf(SRC().ideal_gas.columns || []);
+    if(gs.length && gs.indexOf(activeGas) < 0) activeGas = gs[0];
+    document.getElementById('tablePanel').innerHTML = gasChipsHtml(gs) + interpPanelHtml('ideal_gas') + idealGasHtml();
+    selectedColumns = {};
+    return;
+  }
+  var html = activeTable === 'superheated' ? interpPanelHtml('superheated') + superheatedHtml()
+    : activeTable === 'compressed_liquid' ? interpPanelHtml('compressed_liquid') + compressedLiquidHtml()
+    : activeTable === 'hs_chart' ? hsChartHtml()
+    : interpPanelHtml(activeTable) + saturationTableHtml(activeTable);
   document.getElementById('tablePanel').innerHTML = html;
   selectedColumns = {};        // 표가 바뀌면 비운다 — 표마다 몇 번째 칸이 무엇인지가 다르다
 }
 
 /* ★ 물질 선택기 — 데이터가 `substances` 를 선언했을 때만 그린다. */
+/* ★ 압축성 선도는 **물질 줄의 한 칸**이다 (2026-09-20 사용자 [발화 생략]). 대응상태원리라 물질과 무관한데 물질 안에
+   두면 물질마다 같은 그림이 한 벌씩 있는 꼴이 된다. 고르면 표 종류 줄을 숨기고 선도만 그린다. */
+var Z_TAB = '__z';
 function renderSubstanceTabs(){
   var host = document.getElementById('substanceTabs');
   if(!SUBSTANCES){ return; }                      // 열역학 화면은 여기서 끝난다
-  var names = [''].concat(Object.keys(SUBSTANCES));
+  var names = [''].concat(Object.keys(SUBSTANCES)).concat(COMPRESS ? [Z_TAB] : []);
   host.innerHTML = names.map(function(name){
     return '<button class="tab-button' + (name === activeSubstance ? ' active' : '') +
-      '" data-substance="' + esc(name) + '">' + esc(name || '물') + '</button>';
+      '" data-substance="' + esc(name) + '">' + esc(name === Z_TAB ? '압축성 선도' : (name || '물')) + '</button>';
   }).join('');
   host.hidden = false;
 }
 function applySubstance(){
   var src = SRC();
-  // 이상기체 표는 갈래가 없다 — 표 종류 줄을 통째로 숨긴다.
-  var kindNav = document.querySelector('nav.tabs[aria-label="수증기 표 종류"]');
-  if(kindNav) kindNav.hidden = !!src.ideal_gas;
+  var zOnly = activeSubstance === Z_TAB;
+  // 이상기체 표와 압축성 선도는 갈래가 없다 — 표 종류 줄을 통째로 숨긴다.
+  var kindNav = document.querySelector('nav.tabs[aria-label="표 종류"]');
+  if(kindNav) kindNav.hidden = !!src.ideal_gas || zOnly;
   // 냉매에는 압축액 표가 없다 — 그 탭을 숨기고, 거기 서 있었으면 포화 온도표로 돌린다.
   var hasCompressed = !!src.compressed_liquid;
   var tab = document.querySelector('.tab-button[data-table="compressed_liquid"]');
@@ -346,7 +939,7 @@ function applySubstance(){
     item.classList.toggle('active', item.getAttribute('data-table') === activeTable);
   });
   document.getElementById('pageTitle').textContent =
-    src.ideal_gas ? activeSubstance + ' 표' : (activeSubstance || '수증기') + ' 표';
+    zOnly ? '일반화 압축성 선도' : src.ideal_gas ? activeSubstance + ' 표' : (activeSubstance || '수증기') + ' 표';
   document.getElementById('sourceLine').textContent =
     src.source || 'CoolProp 8.0.0 (IAPWS-95) 계산값 · 유효숫자 5자리';
   activePressureIndex = 0;
@@ -390,7 +983,7 @@ document.getElementById('substanceTabs').addEventListener('click',function(event
   activeSubstance = button.getAttribute('data-substance');
   applySubstance();
 });
-document.querySelector('nav.tabs[aria-label="수증기 표 종류"]').addEventListener('click',function(event){
+document.querySelector('nav.tabs[aria-label="표 종류"]').addEventListener('click',function(event){
   var button = event.target.closest('.tab-button');
   if(!button) return;
   activeTable = button.getAttribute('data-table');
@@ -399,6 +992,8 @@ document.querySelector('nav.tabs[aria-label="수증기 표 종류"]').addEventLi
   renderTable();
 });
 document.getElementById('tablePanel').addEventListener('click',function(event){
+  var gasChip = event.target.closest('.pressure-chip[data-gas]');
+  if(gasChip){ activeGas = gasChip.getAttribute('data-gas'); renderTable(); return; }
   var chip = event.target.closest('.pressure-chip');
   if(chip){ activePressureIndex = Number(chip.getAttribute('data-pressure-index')); renderTable(); return; }
   var nav = event.target.closest('.nav-button');
@@ -412,6 +1007,57 @@ document.getElementById('tablePanel').addEventListener('click',function(event){
   var row = event.target.closest('tbody tr');
   if(row) row.classList.toggle('selected');
 });
+/* ★ 선도 좌표 읽기 — 커서(또는 손가락) 자리의 두 값을 읽어 준다. 「s 하나 누르면 다른 하나」가 이 화면의
+   쓰임이라(2026-09-20 사용자), 십자선과 숫자를 함께 둔다. 누르면 그 자리에 고정되고 다시 누르면 풀린다.
+   환산에 필요한 수는 SVG 의 `data-*` 에 실려 있어 이 핸들러는 어느 선도인지 몰라도 된다. */
+function chartReadout(svg, event){
+  var box = svg.getBoundingClientRect();
+  var vw = CHART.W, vh = CHART.H;
+  var px = (event.clientX - box.left) / box.width * vw;
+  var py = (event.clientY - box.top) / box.height * vh;
+  var x0 = +svg.dataset.x0, x1 = +svg.dataset.x1, y0 = +svg.dataset.y0, y1 = +svg.dataset.y1;
+  var cl = +(svg.dataset.chartL || CHART.L), cr = +(svg.dataset.chartR || CHART.R);
+  var ct = +(svg.dataset.chartT || CHART.T), cb = +(svg.dataset.chartB || CHART.B);
+  var inx = Math.min(Math.max(px, cl), vw - cr);
+  var iny = Math.min(Math.max(py, ct), vh - cb);
+  var xv = x0 + (inx - cl) / (vw - cl - cr) * (x1 - x0);
+  var yv = y0 + (vh - cb - iny) / (vh - ct - cb) * (y1 - y0);
+  var g = svg.querySelector('.xhair');
+  g.hidden = false;
+  g.querySelector('.xh-v').setAttribute('x1', inx); g.querySelector('.xh-v').setAttribute('x2', inx);
+  g.querySelector('.xh-h').setAttribute('y1', iny); g.querySelector('.xh-h').setAttribute('y2', iny);
+  g.querySelector('.xh-mark').setAttribute('d',
+    'M' + (inx - 8).toFixed(1) + ' ' + iny.toFixed(1) + 'H' + (inx + 8).toFixed(1) +
+    'M' + inx.toFixed(1) + ' ' + (iny - 8).toFixed(1) + 'V' + (iny + 8).toFixed(1));
+  var read = svg.parentNode.querySelector('.chart-read');
+  if(read) read.innerHTML = svg.dataset.xl + ' = <b>' + xv.toFixed(+svg.dataset.xd) + '</b> · ' +
+    svg.dataset.yl + ' = <b>' + yv.toFixed(+svg.dataset.yd) + '</b>' +
+    (svg.dataset.pinned === '1' ? ' (고정 — 다시 누르면 풀립니다)' : '');
+}
+document.getElementById('tablePanel').addEventListener('pointermove', function(event){
+  var svg = event.target.closest ? event.target.closest('svg[data-x0]') : null;
+  if(!svg || svg.dataset.pinned === '1') return;
+  chartReadout(svg, event);
+});
+document.getElementById('tablePanel').addEventListener('pointerdown', function(event){
+  var svg = event.target.closest ? event.target.closest('svg[data-x0]') : null;
+  if(!svg) return;
+  var pinned = svg.dataset.pinned === '1';
+  svg.dataset.pinned = pinned ? '0' : '1';
+  var read = svg.parentNode.querySelector('.chart-read');
+  if(read) read.classList.toggle('pinned', !pinned);
+  chartReadout(svg, event);
+});
+// 계산기 입력은 결과 칸만 다시 그린다 — 표 전체를 다시 그리면 입력 칸의 초점이 날아간다.
+function onInterpInput(event){
+  var field = event.target.getAttribute && event.target.getAttribute('data-interp');
+  if(!field) return;
+  INTERP[field] = event.target.value;
+  var box = event.target.closest('.interp');
+  box.querySelector('.interp-out').innerHTML = interpResultHtml(box.getAttribute('data-interp-kind'));
+}
+document.getElementById('tablePanel').addEventListener('input', onInterpInput);
+document.getElementById('tablePanel').addEventListener('change', onInterpInput);
 document.getElementById('tablePanel').addEventListener('keydown',function(event){
   if(event.key !== 'Enter' && event.key !== ' ') return;
   var head = event.target.closest('thead th[data-cols]');

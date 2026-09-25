@@ -17,6 +17,7 @@
     python tools/inspect_data.py ch01 --practice       # 문풀 표
     python tools/inspect_data.py ch01 --keys           # 최상위 키와 컬렉션별 필드 이름
     python tools/inspect_data.py ch01 --item ch01-q09  # 그 항목의 JSON 전체
+    python tools/inspect_data.py ch01 --answers        # 문제 답만(id 와 answer 원문)
     python tools/inspect_data.py ch01 --figures        # 삽화 id·제목·SVG 길이
     python tools/inspect_data.py ch01 --figure fig-x   # 그 삽화의 SVG 원본
     python tools/inspect_data.py ch01 --derivations    # 유도 카드의 단계 스키마와 본문
@@ -320,6 +321,16 @@ def ox_list():
             print(f"  [{mark}] {it.get('id')}: {it.get('prompt')}")
 
 
+def ramps(ch):
+    """화면 순서(빈칸 풀이 → 문제)대로 id·ramp·언어·지문 앞머리 — 램프 이음을 한눈에 본다(C54·ramp-skip)."""
+    d = load(ch)
+    for coll in ("practice", "problems"):
+        for it in _collection(d, coll):
+            if isinstance(it, dict) and "oxCorrect" not in it:
+                print(f"  {coll[:4]} {str(it.get('id')):<16} ramp {it.get('ramp')}  "
+                      f"{it.get('promptLanguage') or '-':<2}  {_short(it.get('prompt', ''), 80)}")
+
+
 def main(argv):
     args = argv[1:]
     if "--steam" in args:
@@ -338,10 +349,16 @@ def main(argv):
     if ch is None:
         overview()
         return 0
-    if "--item" in args:
+    if "--answers" in args:
+        for q in load(ch).get("problems") or []:
+            if isinstance(q, dict):
+                print("[%s] %s\n" % (q.get("id"), json.dumps(q.get("answer"), ensure_ascii=False)))
+    elif "--item" in args:
         item(ch, args[args.index("--item") + 1])
     elif "--problems" in args:
         problems(ch)
+    elif "--ramps" in args:
+        ramps(ch)
     elif "--practice" in args:
         practice(ch)
     elif "--figure" in args:

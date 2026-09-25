@@ -60,14 +60,31 @@ def rejected_args(paths):
     return [p for p in paths if p in BAD_ARGS or p.startswith("-")]
 
 
-def backup_dir():
-    """사본을 둘 자리 — 세션 스크래치패드. 없으면 리포 밖 임시 폴더로 물러선다.
+def backup_base(env):
+    """사본을 둘 바탕 폴더 — 순수 함수, 테스트가 부른다.
 
-    리포 안에 두지 않는다 — 되돌린 자국이 다음 배치의 변경점으로 잡히면 잡음이 스스로를
-    재생산한다(변경점 판정의 「저자 전용 필드」와 같은 이유).
+    세션 스크래치패드가 있으면 거기, 없으면 **`.git/` 안**이다. 작업 트리에 두지 않는다 —
+    되돌린 자국이 다음 배치의 변경점·미커밋으로 잡히면 잡음이 스스로를 재생산한다.
+    ★ 2026-09-24 클라우드 실사고: 스크래치패드·TEMP 변수가 없는 컨테이너에서 옛 폴백 `"."` 이
+      리포 루트에 `revert-backup-*/` 를 만들었고, 그것이 미커밋으로 남아 Stop 훅이 커밋을 요구했다
+      (지우려면 `rm -rf` 승인이 필요했다). `.git/` 은 git 이 안 세고 리포 안이라 쓰기 경계(규칙 9)도 지킨다.
     """
-    base = os.environ.get("CLAUDE_SCRATCHPAD") or os.environ.get("TEMP") or "."
-    out = os.path.join(base, "revert-backup-" + time.strftime("%Y%m%d-%H%M%S"))
+    return env.get("CLAUDE_SCRATCHPAD") or env.get("TEMP") or os.path.join(ROOT, ".git")
+
+
+def checkout_args(paths):
+    """되돌리는 git 인자 — **HEAD 에서** 꺼낸다. 순수 함수, 테스트가 부른다.
+
+    ★ 2026-09-24 실사고: 예전엔 `checkout -- <경로>` 였는데, 그건 **인덱스**에서 꺼낸다.
+      `commit.py` 가 게이트에 막혀 스테이징을 남기면 인덱스 = 작업 트리라 아무것도 안 되돌리면서
+      「HEAD 로 되돌렸다」 를 찍었고, 사람이 `git reset` 승인을 따로 해야 했다(클라우드 두 세션에서).
+      `checkout HEAD -- <경로>` 는 인덱스와 작업 트리를 **둘 다** HEAD 로 되돌린다.
+    """
+    return ["checkout", "HEAD", "--"] + list(paths)
+
+
+def backup_dir():
+    out = os.path.join(backup_base(os.environ), "revert-backup-" + time.strftime("%Y%m%d-%H%M%S"))
     os.makedirs(out, exist_ok=True)
     return out
 
@@ -123,7 +140,7 @@ def main(argv):
         saved.append(dst)
     print("[사본] " + str(len(saved)) + "개 — " + out)
 
-    r = _git(["checkout"] + scope)
+    r = _git(checkout_args(paths))
     if r.returncode != 0:
         print("복원 실패:\n" + (r.stdout + r.stderr).strip())
         return 1

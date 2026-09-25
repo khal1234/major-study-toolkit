@@ -2857,6 +2857,41 @@ def digit_subscript_ratio_hits(fig_id, svg):
     return digit_subscript_ratio_issues(fig_id, vw, _svg_texts(svg)) if vw else []
 
 
+# ★ 삽화 라벨의 **날것 첨자** — `σx1`·`τx1y1`·`σmax` 처럼 밑글자 뒤에 첨자를 그냥 이어 쓴 자리
+#   (열린 날 2026-09-25 · 응고 ch11 APPSOLIDS11-SUBSCRIPT, 사용자 [발화 생략]). 규격 `docs/삽화-규격.md` [발화 생략]는
+#   2026-07 부터 있었는데 재는 자가 `P_atm`(밑줄) 꼴만 봐서 밑줄 없는 날것은 전부 통과했다.
+#   재는 것: 기준선(shift ≤ 0)에 놓인 글자 조각 안에서 응력·변형률 기호(σ τ ε γ) 바로 뒤에
+#     축 첨자(x·y·z, 뒤에 숫자 하나 가능, 최대 둘) · 숫자 한두 자리 · max·min·avg·eq·allow·ult 가
+#     붙고 그 뒤에 영숫자가 더 없는 자리. 유니코드 첨자 숫자(`x₁y₁`)도 같은 부류로 본다.
+#   못 보는 것: 라틴 밑글자(`Vin`·`Pgas` — `mg`·`PV` 곱과 못 가른다) · ρgh·ωt 같은 곱(그래서 밑글자를
+#     넷으로 좁혔다) · `<tspan>` 안에 `x1` 을 한 덩어리로 넣은 자리(C47-b 의 사각지대와 같다).
+#   처방 `python tools/fix_flat_subscript.py --apply` — 등폭(수식 줄) 글자는 안 고치고 사람 몫으로 낸다.
+FLAT_SUBSCRIPT_RE = re.compile(
+    r"(?<![A-Za-z0-9α-ωΑ-Ω])([στεγ])((?:[xyz][0-9₀-₉]?){1,2}|[0-9]{1,2}|max|min|avg|eq|allow|ult)"
+    r"(?![A-Za-z0-9])")
+
+
+def flat_subscript_issues(fig_id, texts):
+    """기준선 글자 조각에 날것 첨자가 있는 자리. 순수 함수 — 테스트가 직접 부른다."""
+    found = []
+    for t in texts:
+        for run in script_runs(t):
+            if run["shift"] > 0:
+                continue
+            for m in FLAT_SUBSCRIPT_RE.finditer(run["s"]):
+                found.append(m.group(0) + ("(수식 줄)" if t.get("mono") else ""))
+    if not found:
+        return []
+    return [fig_id + ": 라벨 첨자가 날것이다 — 밑글자 뒤 첨자는 `<tspan dy>` 로 내린다 · "
+            + str(len(found)) + "곳: " + ", ".join(found[:6]) + (" 외" if len(found) > 6 else "")
+            + " · 처방 `python tools/fix_flat_subscript.py --apply`(수식 줄은 생성기로 다시 찍는다)"]
+
+
+def flat_subscript_hits(fig_id, svg):
+    """SVG 한 장. `check_content` 의 삽화 순회가 부른다(`…_hits` 규약)."""
+    return flat_subscript_issues(fig_id, _svg_texts(svg or ""))
+
+
 def figure_text_scale_issues(fig_id, view_width, texts):
     """화면 실효 크기가 규격 밖인 글자를 신고한다. 순수 함수 — 테스트가 직접 부른다."""
     out = []
@@ -3329,11 +3364,13 @@ def _segments_cross(p, q):
 AXIS_ARROW_MAX_EM = 3.5
 
 
-# 축 이름과 화살촉 사이의 거리 규격 — AGENTS 「라벨의 기준 위치」: *[발화 생략]* 위 `AXIS_ARROW_MAX_EM` 은 *[발화 생략]*
-# 를 잡는 자라 넉넉하고, **거리는 이 자가 따로 잰다** — 둘을 한 자로 묶으면 어느 쪽 결함인지
-# 진단이 섞인다(2026-08-06 실측: ch04 3건이 화살표는 있는데 이름만 2.1~3.1em 떨어져 있었다).
-AXIS_NAME_GAP_EM = 1.0
-AXIS_NAME_GAP_TOL_EM = 0.5      # 이만큼 벗어나면 신고 (0.5~1.5em 통과)
+# 축 이름과 화살촉 사이의 거리 규격 — `docs/삽화-규격.md` 「라벨의 기준 위치」: *[발화 생략]* 위 `AXIS_ARROW_MAX_EM` 은 *[발화 생략]* 를 잡는 자라 넉넉하고, **거리는 이 자가 따로 잰다** — 둘을 한 자로 묶으면 어느 쪽
+# 결함인지 진단이 섞인다(2026-08-06 실측: ch04 3건이 화살표는 있는데 이름만 2.1~3.1em 떨어져 있었다).
+# ★ 2026-09-24 — 값을 1.0em → **0.5em** 으로 내렸다(설계도 `2026-09-24-전전-ch01-E10-E26-설계도.md`
+# 4절, 사용자 판정 *[발화 생략]*, 반대 근거 없음). 허용도 절반(±0.5em → ±0.25em)으로 따라 내렸다 —
+# 예전 상한(1.5em)을 그대로 두면 옛 결함(2.1~3.1em)의 일부가 다시 통과한다.
+AXIS_NAME_GAP_EM = 0.5
+AXIS_NAME_GAP_TOL_EM = 0.25     # 이만큼 벗어나면 신고 (0.25~0.75em 통과)
 
 
 def _triangle_apex(nums):
@@ -3383,7 +3420,7 @@ def _axis_name_gaps(svg):
 
 
 def axis_name_gap_issues(fig_id, svg):
-    """축 이름이 화살촉에서 규격(1.0em)만큼 떨어져 있는가. 순수 함수 — 테스트가 부른다.
+    """축 이름이 화살촉에서 규격(0.5em)만큼 떨어져 있는가. 순수 함수 — 테스트가 부른다.
 
     ★ 화살표가 **없는** 것은 `axis_arrow_issues` 의 몫이다 — 여기서는 거리만 본다.
       한 자로 묶으면 *[발화 생략]* 는 틀린 진단이 거리 결함에 붙는다.
@@ -3398,9 +3435,402 @@ def axis_name_gap_issues(fig_id, svg):
             # 사람이 좌표를 다시 뒤지게 만든다(AGENTS: 경고가 갈 길을 알려주지 않으면
             # 그 상태가 그대로 유지된다).
             out.append(fig_id + ": [축] 축 이름이 화살촉에서 %.1fem 떨어져 있다 "
-                       "(이름 %.0f,%.0f · 화살촉 %.0f,%.0f · 규격 1.0em = %.0fpx · 허용 ±0.5em). "
-                       "AGENTS 「라벨의 기준 위치」 — 두 축 모두 같은 값이어야 한다"
-                       % (em, x, y, apex[0], apex[1], fs))
+                       "(이름 %.0f,%.0f · 화살촉 %.0f,%.0f · 규격 0.5em = %.1fpx · 허용 ±0.25em). "
+                       "`docs/삽화-규격.md` 「라벨의 기준 위치」 — 두 축 모두 같은 값이어야 한다"
+                       % (em, x, y, apex[0], apex[1], AXIS_NAME_GAP_EM * fs))
+    return out
+
+
+# ── 전지 판 간격 (E15, 설계도 2026-09-24 3절 · 판정 조건 좁힘 2026-09-24 재판정) ─────
+# 전지는 생성기(`svg_circuit.battery`)가 없어 손으로 그리다 판 간격이 20 으로 벌어졌다(재발 3회).
+# **정본은 생성기다** — 이 값은 `svg_circuit.CAP_PLATE_WIDTH`(판 굵기)·`CAP_GAP`(간격)와 같다.
+# 두 상수를 여기 되풀이하는 것은 규칙 16(근거 없는 숫자)의 예외로 본다 — checks_svg 는 도구쪽
+# (svg_circuit)을 임포트하지 않는다(그쪽이 이미 이 파일을 임포트해 순환이 생긴다). 값이 갈리면
+# `test_svg_generators_pass_their_own_rulers` 부류의 대조 테스트가 잡는다(생성기 출력을 이 자로 잰다).
+#
+# ★★ 재판정 2026-09-24 — **폭 고정 필터(3.0)만으로는 회로가 아닌 삽화까지 「길이 다른 평행선
+#   둘」로 잡혔다**(응용열·열역학 실측, 전 과목 빌드 0건 목표가 안 됐다). 판을 회로 기호로
+#   **구조로** 좁힌다 — 셋 다 만족해야 후보다:
+#   ⑴ 두 판 각각의 중점에 **수직으로 닿는 리드**가 있다(`svg_circuit.battery` 출력 형태 그대로).
+#   ⑵ 판 간격이 `BATTERY_GAP_CAP_EM` 을 넘으면 **아예 후보가 아니다**(그 이상은 우연히 평행한
+#      무관한 선이다) — 규격 위반이 아니라 「전지가 아니다」.
+#   ⑶ 판 굵기가 자기 리드의 굵기 **이상**이고 두 판의 굵기가 서로 **같다**.
+#   폭을 특정 값(3.0)에 고정하지 않은 것은 이 조건이면 값과 무관하게 회로 기호만 남기 때문이다.
+BATTERY_GAP_SCREEN_PX = 8.0      # = svg_circuit.CAP_GAP, 화면 실효 px(0.5em, 16px 기준)
+# 고른 값(잰 값 아님) — 간격 자체(8px)의 1/4. 좁히면 생성기 반올림(소수 둘째 자리)에도 오탐이 나고,
+# 넓히면 옛 손그림(간격 20 = 규격의 2.5배)이 빠져나간다.
+BATTERY_GAP_TOL_PX = 2.0
+# 고른 값(잰 값 아님, 재판정 2026-09-24) — 1.5em(16px 기준 24px). 이보다 멀리 떨어진 평행선
+# 한 쌍은 전지 판일 수 없다(전지 판은 붙어 있는 소자다) — 규격 위반이 아니라 후보에서 뺀다.
+BATTERY_GAP_CAP_EM = 1.5
+# 두 판이 같은 전지의 짝인지 가르는 문턱 — 손으로 정한 값(잰 값 아님):
+# ⑴ 평행 판정은 각도차 ~11.5°(코사인 0.98) 이내 — 렌더 반올림 오차보다 넉넉하게 잡았다.
+BATTERY_PARALLEL_COS_MIN = 0.98
+# ⑵ 길이비가 이보다 크면(=비슷하면) 커패시터로 보고 뺀다 — 전지만 「긴 판(0.5배 아님)+짧은 판」이
+# 다르다(`svg_circuit.BATTERY_SHORT_RATIO` 0.5). 0.9 는 그 0.5 와 「같다(1.0)」 사이의 중간보다도
+# 전지 쪽에 가깝게 잡아, 렌더 오차로 길이가 살짝 갈린 커패시터까지 전지로 오인하지 않는다.
+BATTERY_LENGTH_RATIO_MAX = 0.9
+# 재판정 2026-09-24 — 리드가 판 중점에 「닿았다」로 볼 허용 오차(px). 생성기 좌표가 소수
+# 둘째 자리라 0.01 이면 되지만, 손그림은 반올림이 있어 넉넉히 잡는다.
+BATTERY_LEAD_TOUCH_PX = 2.0
+# 재판정 2026-09-24 — 리드는 판과 **대략 수직**이어야 한다. 코사인 절댓값이 이보다 작으면
+# (=각도가 90°에 가까우면) 수직으로 본다. 0.3 은 약 72.5° 이상 벌어지면 수직으로 치는 값
+# — 완전한 직각(0)만 요구하면 렌더 반올림에도 오탐(=미인식)이 난다.
+BATTERY_LEAD_PERP_COS_MAX = 0.3
+
+
+def _straight_segments(svg):
+    """모든 **홑 선분**(`<path>`·`<line>`) — (선분, 굵기). 판·리드 후보 전부. 순수 함수.
+
+    ★ 열린 날 2026-09-24(세션 3 신고, `fig-ee03-mesh-current` 오탐) — **저항 리드를 판으로
+      읽었다.** `svg_circuit.resistor()` 는 리드+지그재그+리드를 **한 `<path>` 로 잇는다**
+      (다중 세그먼트). `battery`·`capacitor` 의 판·리드는 각각 **독립된 두 점짜리 path/line**
+      이다. 그래서 그 요소가 정확히 **선분 하나**(두 점)일 때만 후보로 본다 — 다중 세그먼트
+      path 의 부분 선분(저항 리드처럼)은 그 path 통째로 제외한다.
+    """
+    out = []
+    for m in re.finditer(r"<(path|line)\b([^>]*?)/?>", svg):
+        tag, attrs = m.group(1), m.group(2)
+        try:
+            width = float(_attr(attrs, "stroke-width", "0") or 0)
+        except ValueError:
+            continue
+        if tag == "line":
+            seg = (float(_attr(attrs, "x1", "0")), float(_attr(attrs, "y1", "0")),
+                  float(_attr(attrs, "x2", "0")), float(_attr(attrs, "y2", "0")))
+        else:
+            dstr = _attr(attrs, "d")
+            segs = _path_polyline(dstr) if dstr else []
+            if len(segs) != 1:
+                continue                              # 다중 세그먼트 — 판·리드가 아니라 부품 몸통이다
+            seg = segs[0]
+        x1, y1, x2, y2 = seg
+        length = math.hypot(x2 - x1, y2 - y1)
+        if length > 1e-6:
+            out.append({"mid": ((x1 + x2) / 2.0, (y1 + y2) / 2.0), "len": length,
+                        "seg": seg, "width": width})
+    return out
+
+
+def _lead_width(candidate, mid, others):
+    """`mid`(판 중점)에 수직으로 닿는 리드가 있으면 그 굵기, 없으면 `None`. 순수 함수."""
+    ux, uy = ((candidate["seg"][2] - candidate["seg"][0]) / candidate["len"],
+              (candidate["seg"][3] - candidate["seg"][1]) / candidate["len"])
+    for other in others:
+        if other is candidate:
+            continue
+        seg, olen = other["seg"], other["len"]
+        touches = (_distance((seg[0], seg[1]), mid) <= BATTERY_LEAD_TOUCH_PX
+                  or _distance((seg[2], seg[3]), mid) <= BATTERY_LEAD_TOUCH_PX)
+        if not touches:
+            continue
+        vx, vy = (seg[2] - seg[0]) / olen, (seg[3] - seg[1]) / olen
+        if abs(ux * vx + uy * vy) <= BATTERY_LEAD_PERP_COS_MAX:
+            return other["width"]
+    return None
+
+
+def _ends_free(candidate, others):
+    """판의 **양 끝**에 다른 선이 닿지 않는가. 순수 함수.
+
+    ★ 열린 날 2026-09-24(병합 뒤 전체 빌드, 시스템제어 ch02 댐퍼 · 전전 ch01 접지 기호) —
+      댐퍼의 컵(긴 판 끝에서 꺾여 나가는 두 선)과 접지 위의 도선(양 끝이 저항 리드와 이어짐)은
+      「길이 다른 평행선 + 중점 수직 리드」까지 전지와 같다. 전지 판만이 **끝이 자유**다 —
+      판 끝에서 이어지는 선이 있으면 판이 아니라 부품 몸통·도선이다.
+    """
+    x1, y1, x2, y2 = candidate["seg"]
+    for other in others:
+        if other is candidate:
+            continue
+        for end in ((x1, y1), (x2, y2)):
+            seg = other["seg"]
+            if (_distance((seg[0], seg[1]), end) <= BATTERY_LEAD_TOUCH_PX
+                    or _distance((seg[2], seg[3]), end) <= BATTERY_LEAD_TOUCH_PX):
+                return False
+    return True
+
+
+def battery_plate_gap_issues(fig_id, svg):
+    """전지 기호(길이 다른 평행 판 둘, 각각 수직 리드가 있음)의 판 간격이 규격(0.5em)과 다른
+    자리. 순수 함수 — 테스트가 부른다.
+
+    ★ **커패시터는 대상이 아니다** — 두 판의 길이가 같아 `BATTERY_LENGTH_RATIO_MAX` 문턱에 걸리지
+      않는다. 「길이가 다른 판 둘」이 전지만의 표지다(설계도 3절).
+    ★ 재판정 2026-09-24 — 굵기를 특정 값에 고정하지 않고 **회로 기호의 구조**(수직 리드 · 간격
+      상한 · 판–리드 굵기 관계) 셋을 전부 요구한다(위 상수 블록 주석이 정본). 회로가 아닌 삽화의
+      우연한 평행선(응용열·열역학 실측)은 리드가 없거나 간격이 멀어 후보에서 빠진다.
+    """
+    segs = _straight_segments(svg)
+    if len(segs) < 2:
+        return []
+    vb = _attr(svg[svg.find("<svg"):svg.find(">") + 1], "viewBox")
+    try:
+        view_width = float(vb.split()[2]) if vb else VIEWER_FIGURE_WIDTH
+    except (ValueError, IndexError):
+        view_width = VIEWER_FIGURE_WIDTH
+    # ★ 재판정 2026-09-24 — `screen_scale()` 은 「화면 실효 px → SVG px」배율(`vb_width/612`)이다.
+    #   거꾸로 SVG px 를 화면 실효 px 로 내리려면 **나눠야** 한다(같은 파일 3641행 주석이 정본:
+    #   "SVG px × (1/scale) = 화면 실효 px"). 옛 코드가 곱해 viewBox 가 612 에서 먼 삽화일수록
+    #   간격을 틀리게 쟀다(640 은 4.6 % 차이라 안 드러났다) — 여기서 바로잡는다.
+    scale = 1.0 / screen_scale(view_width)
+    gap_cap = BATTERY_GAP_CAP_EM * 16.0
+    out = []
+    for i, a in enumerate(segs):
+        for b in segs[i + 1:]:
+            (ax1, ay1, ax2, ay2), (bx1, by1, bx2, by2) = a["seg"], b["seg"]
+            ux, uy = (ax2 - ax1) / a["len"], (ay2 - ay1) / a["len"]
+            vx, vy = (bx2 - bx1) / b["len"], (by2 - by1) / b["len"]
+            if abs(ux * vx + uy * vy) < BATTERY_PARALLEL_COS_MIN:
+                continue                          # 평행이 아니다 — 판 짝이 아니다
+            ratio = min(a["len"], b["len"]) / max(a["len"], b["len"])
+            if ratio > BATTERY_LENGTH_RATIO_MAX:
+                continue                          # 길이가 비슷하다 — 커패시터, 이 자의 대상이 아니다
+            if abs(a["width"] - b["width"]) > 0.05:
+                continue                          # ⑶ 두 판은 굵기가 같아야 한다
+            dx, dy = b["mid"][0] - a["mid"][0], b["mid"][1] - a["mid"][1]
+            if math.hypot(dx, dy) > a["len"] + b["len"]:
+                continue                          # 너무 멀다 — 같은 부품이 아니다
+            nx, ny = -uy, ux                       # 판의 법선 — 간격은 이 방향으로 잰다
+            gap = abs(dx * nx + dy * ny) * scale
+            if gap > gap_cap:
+                continue                          # ⑵ 이만큼 떨어지면 전지 판일 수 없다 — 후보 아님
+            lead_a = _lead_width(a, a["mid"], segs)
+            lead_b = _lead_width(b, b["mid"], segs)
+            if lead_a is None or lead_b is None:
+                continue                          # ⑴ 수직 리드가 없다 — 회로 기호가 아니다
+            if not (_ends_free(a, segs) and _ends_free(b, segs)):
+                continue                          # ⑷ 판 끝에 다른 선이 닿는다 — 댐퍼 컵·도선이다
+            if a["width"] < lead_a - 0.05 or b["width"] < lead_b - 0.05:
+                continue                          # ⑶ 판이 자기 리드보다 가늘면 판이 아니다
+            if abs(gap - BATTERY_GAP_SCREEN_PX) > BATTERY_GAP_TOL_PX:
+                out.append(fig_id + ": [전지] 판 간격이 %.1fpx 다(규격 %.0fpx=0.5em · 허용 ±%.0fpx) — "
+                           "`svg_circuit.battery()` 로 다시 그릴 것"
+                           % (gap, BATTERY_GAP_SCREEN_PX, BATTERY_GAP_TOL_PX))
+    return out
+
+
+# ── 회로 소자 비율(자 `circuit-part-ratio`, 규격 「회로 소자」 절 · 2026-09-25 E43) ──
+# 고른 값: 지그재그 꼭짓점 간격 상한(화면 px). 새 저항 40/9 ≈ 4.4(화면 4.25)는 통과, 옛 44/7 ≈ 6.3(화면 6.0)은 걸린다.
+CIRCUIT_ZIG_PITCH_MAX_PX = 5.0
+# 전원 지름 ≤ 저항 몸통 × 이 비(`svg_circuit.SRC_DIAM_RATIO` 와 같은 값). 그림에 저항이 없으면 기준 몸통 40.
+CIRCUIT_SRC_DIAM_RATIO = 0.65
+CIRCUIT_REF_BODY = 40.0      # 잰 값: `svg_circuit.RES_BODY` — 저항 없는 그림의 전원 지름 기준
+# 고른 값: 반올림(0.01)·손그림 정수 좌표를 덮고, 지름 26.4 한계와 옛 34 사이를 가르는 여유.
+CIRCUIT_SRC_DIAM_TOL = 1.0
+# 전원 끝 리드의 하한 — 규격 여백 0.5em(8.5)에 조금 못 미치는 8. 이보다 짧은 리드 끝이 가로지르는 도선에 닿으면
+# 「동그라미가 꺾인 도선에 바로 앉았다」로 본다(E43 사용자 [발화 생략]).
+CIRCUIT_SRC_LEAD_MIN = 8.0
+_CIRCUIT_TOUCH = 1.5         # 고른 값: 끝점이 「닿았다」로 볼 거리 — 손그림 반올림(0.5)과 선 반굵기(1)
+# 회로 표지 「저항값」 — 숫자 뒤 Ω(10 Ω · 1.5 kΩ). 홀로 선 Ω 는 각속도일 수 있다(동역학 ch16 「Ω = 5 rad/s」 오탐).
+_OHM_VALUE = re.compile(r"\d\s*[kmMμ]?Ω")
+
+
+def _chains(svg):
+    """직선 꺾은선 전부 — `<line>` · `<polyline>` · 절대 `M/L/H/V` 만 쓴 `<path>`. [[점…]]. 순수 함수.
+    못 보는 것: transform · 상대 명령 · 곡선(회로 도선은 생성기·손그림 모두 절대 직선이다)."""
+    out = []
+    for m in re.finditer(r"<line\b([^>]*?)/?>", svg):
+        a = m.group(1)
+        try:
+            out.append([(float(_attr(a, "x1", "0")), float(_attr(a, "y1", "0"))),
+                        (float(_attr(a, "x2", "0")), float(_attr(a, "y2", "0")))])
+        except ValueError:
+            continue
+    for m in re.finditer(r"<polyline\b([^>]*?)/?>", svg):
+        nums = [float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", _attr(m.group(1), "points", "") or "")]
+        if len(nums) >= 4:
+            out.append(list(zip(nums[0::2], nums[1::2])))
+    for m in re.finditer(r"<path\b([^>]*?)/?>", svg):
+        d = _attr(m.group(1), "d", "") or ""
+        if not re.fullmatch(r"[MLHV\d\s.,-]+", d) or not d.strip().startswith("M"):
+            continue
+        pts, cur = [], (0.0, 0.0)
+        for cmd, args in re.findall(r"([MLHV])([^MLHV]*)", d):
+            v = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", args)]
+            if cmd in "ML":
+                for x, y in zip(v[0::2], v[1::2]):
+                    cur = (x, y)
+                    pts.append(cur)
+            elif cmd == "H" and v:
+                cur = (v[-1], cur[1])
+                pts.append(cur)
+            elif cmd == "V" and v:
+                cur = (cur[0], v[-1])
+                pts.append(cur)
+        if len(pts) >= 2:
+            out.append(pts)
+    return out
+
+
+def _zigzags(chains):
+    """저항 지그재그 — 리드 둘이 한 축 위에 있고 가운데 꼭짓점(≥5)이 축 양쪽을 번갈아 같은 거리로 오간다.
+    [(축 방향 'h'|'v', 몸통 길이, 평균 꼭짓점 간격, 첫 리드 끝, 끝 리드 끝)]. 순수 함수."""
+    out = []
+    for pts in chains:
+        if len(pts) < 7:
+            continue
+        (x0, y0), (x1, y1), (xa, ya), (xb, yb) = pts[0], pts[1], pts[-2], pts[-1]
+        if abs(y0 - y1) < 0.6 and abs(ya - yb) < 0.6 and abs(y0 - yb) < 0.6:
+            axis, along, off = "h", [p[0] for p in pts[2:-2]], [p[1] - y0 for p in pts[2:-2]]
+        elif abs(x0 - x1) < 0.6 and abs(xa - xb) < 0.6 and abs(x0 - xb) < 0.6:
+            axis, along, off = "v", [p[1] for p in pts[2:-2]], [p[0] - x0 for p in pts[2:-2]]
+        else:
+            continue
+        if len(off) < 5 or min(abs(o) for o in off) < 3.0:
+            continue
+        amp = sum(abs(o) for o in off) / len(off)
+        if any(abs(abs(o) - amp) > 0.2 * amp for o in off):
+            continue
+        if any(off[i] * off[i + 1] >= 0 for i in range(len(off) - 1)):
+            continue
+        gaps = [abs(along[i + 1] - along[i]) for i in range(len(along) - 1)]
+        body = abs((xa - x1) if axis == "h" else (ya - y1))
+        out.append((axis, body, sum(gaps) / len(gaps), pts[0], pts[-1]))
+    return out
+
+
+def circuit_part_ratio_issues(fig_id, svg):
+    """회로 소자 비율 규격(`docs/삽화-규격.md` 「회로 소자」) 위반. 순수 함수 — 테스트가 부른다.
+
+    잰 것: ⑴ 저항 지그재그 꼭짓점 간격(화면 px) ⑵ 전원 동그라미 지름 : 저항 몸통 ⑶ 전원 끝 리드가 꺾인 도선에 바로 앉음.
+    전원 = 채운 동그라미로 **양 극점에서 축 방향 리드가 나가는** 것(또는 한쪽 리드 + 다른 극점이 가로 도선에 닿음).
+    회로 표지(전원 · 「Ω」 글자) 가 없는 그림의 지그재그(스프링)는 안 본다.
+    못 보는 것: transform 안의 도형 · 곡선 도선 · 가로로 누운 전원(극점 축이 가로인 것은 세로와 같게 잰다).
+    """
+    chains = _chains(svg)
+    vb = _attr(svg[svg.find("<svg"):svg.find(">") + 1], "viewBox")
+    try:
+        view_width = float(vb.split()[2]) if vb else VIEWER_FIGURE_WIDTH
+    except (ValueError, IndexError):
+        view_width = VIEWER_FIGURE_WIDTH
+    to_screen = 1.0 / screen_scale(view_width)
+    sources = _circuit_sources(svg, chains)
+    if not sources and not _OHM_VALUE.search(svg):
+        return []
+    return _circuit_part_findings(fig_id, chains, sources, to_screen)
+
+
+def _circuit_sources(svg, chains):
+    """전원 동그라미 — [(cx, cy, r, {극 부호: (리드, 가로 도선 닿음)})]. 순수 함수(`circuit_part_ratio_issues` 주석)."""
+    ends = []                                    # (끝점, 이웃점, 사슬 전체) — 극점에 닿은 선 찾기
+    for pts in chains:
+        ends.append((pts[0], pts[1], pts))
+        ends.append((pts[-1], pts[-2], pts))
+    text_at = []
+    for m in re.finditer(r"<text\b([^>]*)>", svg):
+        try:
+            text_at.append((float(_attr(m.group(1), "x", "nan")), float(_attr(m.group(1), "y", "nan"))))
+        except ValueError:
+            continue
+    sources = []
+    for m in re.finditer(r"<circle\b([^>]*?)/?>", svg):
+        a = m.group(1)
+        fill = (_attr(a, "fill") or "").strip().lower()
+        try:
+            cx, cy, r = float(_attr(a, "cx", "0")), float(_attr(a, "cy", "0")), float(_attr(a, "r", "0"))
+        except ValueError:
+            continue
+        if fill in ("", "none") or not 6.0 <= r <= 40.0:
+            continue
+        if any(abs(tx - cx) < r and abs(ty - 6.0 - cy) < r for tx, ty in text_at):
+            continue                              # 글자가 든 동그라미 — 계기(V·A)·기관(A·B)이지 전원이 아니다
+        poles = {}
+        for sgn in (-1.0, 1.0):
+            pole = (cx, cy + sgn * r)
+            lead = next((pe for pe in ends if _distance(pe[0], pole) <= _CIRCUIT_TOUCH
+                         and abs(pe[1][0] - cx) < 0.6 and (pe[1][1] - cy) * sgn > 0), None)
+            rail = any(_distance(p, pole) <= _CIRCUIT_TOUCH and abs(q[1] - p[1]) < 0.6 and abs(q[0] - p[0]) > 0.6
+                       for pts in chains for p, q in zip(pts, pts[1:] + pts[-2:-1]))
+            poles[sgn] = (lead, rail)
+        n_lead = sum(1 for v in poles.values() if v[0])
+        n_rail = sum(1 for v in poles.values() if v[1])
+        if n_lead == 2 or (n_lead == 1 and n_rail == 1):
+            sources.append((cx, cy, r, poles))
+    return sources
+
+
+def _circuit_part_findings(fig_id, chains, sources, to_screen):
+    out = []
+    zigs = _zigzags(chains)
+    for axis, body, pitch, p0, _p1 in zigs:
+        if pitch * to_screen > CIRCUIT_ZIG_PITCH_MAX_PX:
+            out.append(fig_id + ": [회로 소자] 저항 지그재그 꼭짓점 간격 %.1fpx(화면) > %.1f — `svg_circuit.resistor()` 로"
+                       " 다시 찍을 것 (%.0f, %.0f)" % (pitch * to_screen, CIRCUIT_ZIG_PITCH_MAX_PX, p0[0], p0[1]))
+    body = max([z[1] for z in zigs] or [CIRCUIT_REF_BODY])
+    for cx, cy, r, poles in sources:
+        if 2.0 * r > CIRCUIT_SRC_DIAM_RATIO * body + CIRCUIT_SRC_DIAM_TOL:
+            out.append(fig_id + ": [회로 소자] 전원 지름 %.0f > 저항 몸통 %.0f × %.2f — 전원이 저항보다 크게 읽힌다 (%.0f, %.0f)"
+                       % (2.0 * r, body, CIRCUIT_SRC_DIAM_RATIO, cx, cy))
+        for sgn, (lead, rail) in poles.items():
+            short_lead = False
+            if lead:
+                far = lead[1]
+                length = abs(far[1] - (cy + sgn * r))
+                if length < CIRCUIT_SRC_LEAD_MIN and len(lead[2]) == 2:
+                    short_lead = any(_distance(p, far) <= _CIRCUIT_TOUCH and abs(q[1] - p[1]) < 0.6
+                                     and abs(q[0] - p[0]) > 0.6
+                                     for pts in chains for p, q in zip(pts, pts[1:] + pts[-2:-1]))
+            if (rail and not lead) or short_lead:
+                out.append(fig_id + ": [회로 소자] 전원 끝이 꺾인 도선에 바로 닿는다 — 동그라미를 세로 구간 가운데로"
+                           " 옮겨 위아래 리드를 남길 것 (%.0f, %.0f)" % (cx, cy))
+                break
+    return out
+
+
+BOUNDARY_INSET_PX = 3.0      # 고른 값: 소자가 사각 변 위(도선 고리)가 아니라 안쪽에 있다고 볼 거리 — 선 굵기 2 + 반올림
+
+
+def boundary_dashed_issues(fig_id, svg):
+    """회로 그림의 경계(관찰 영역) 사각이 실선인 자리(`docs/삽화-규격.md` 「회로 소자」 · E22). 순수 함수.
+
+    경계 = 채움 없는 사각(`<rect>` 또는 네 꼭짓점 닫힌 `<path>`)으로 **저항·전원을 안쪽에 품은 것** — 도선 고리는
+    소자가 변 위에 있어 안 걸린다. 실선 = `stroke-dasharray` 없음. 회로 표지(저항 지그재그·「Ω」)가 없는 그림은 안 본다.
+    못 보는 것: transform 안의 사각 · 둥근 모양(원·타원) 경계 · 부모 `<g>` 에서 물려받은 dasharray.
+    """
+    chains = _chains(svg)
+    zigs = _zigzags(chains)
+    circles = []
+    for m in re.finditer(r"<circle\b([^>]*?)/?>", svg):
+        try:
+            r = float(_attr(m.group(1), "r", "0"))
+            if 6.0 <= r <= 40.0 and (_attr(m.group(1), "fill") or "none") not in ("none", ""):
+                circles.append((float(_attr(m.group(1), "cx", "0")), float(_attr(m.group(1), "cy", "0"))))
+        except ValueError:
+            continue
+    # 회로 표지 = 저항값(`_OHM_VALUE`) 또는 전원(양 극점 리드, `_circuit_sources`). 지그재그·채운 동그라미만으로는 스프링·질량일 수
+    # 있다(전 과목 실행 두 번: 동역학 ch16 q05 가 지그재그만으로도, 지그재그 + 동그라미로도 걸렸다).
+    if not _OHM_VALUE.search(svg) and not _circuit_sources(svg, chains):
+        return []
+    marks = [((p0[0] + p1[0]) / 2.0, (p0[1] + p1[1]) / 2.0) for _a, _b, _p, p0, p1 in zigs] + circles
+    rects = []
+    for m in re.finditer(r"<rect\b([^>]*?)/?>", svg):
+        a = m.group(1)
+        try:
+            x, y = float(_attr(a, "x", "0")), float(_attr(a, "y", "0"))
+            w, h = float(_attr(a, "width", "0")), float(_attr(a, "height", "0"))
+        except ValueError:
+            continue
+        rects.append((a, (x, y, x + w, y + h)))
+    for m in re.finditer(r"<path\b([^>]*?)/?>", svg):
+        a = m.group(1)
+        d = _attr(a, "d", "") or ""
+        if not re.fullmatch(r"\s*M[\d\s.,-]+(L[\d\s.,-]+){3}Z\s*", d):
+            continue
+        v = [float(t) for t in re.findall(r"-?\d+(?:\.\d+)?", d)]
+        xs, ys = v[0::2], v[1::2]
+        if len(set(round(t, 1) for t in xs)) == 2 and len(set(round(t, 1) for t in ys)) == 2:
+            rects.append((a, (min(xs), min(ys), max(xs), max(ys))))
+    out = []
+    for a, (x0, y0, x1, y1) in rects:
+        fill = (_attr(a, "fill") or "").strip().lower()
+        stroke = (_attr(a, "stroke") or "").strip().lower()
+        if fill not in ("none", "transparent") or stroke in ("", "none") or "dasharray" in a:
+            continue
+        inside = [p for p in marks if x0 + BOUNDARY_INSET_PX < p[0] < x1 - BOUNDARY_INSET_PX
+                  and y0 + BOUNDARY_INSET_PX < p[1] < y1 - BOUNDARY_INSET_PX]
+        if inside:
+            out.append(fig_id + ": [경계] 소자를 품은 경계 사각이 실선이다 — 실선은 실물(도선), 경계·보조는 점선"
+                       " (stroke-dasharray) (%.0f, %.0f)" % (x0, y0))
     return out
 
 
@@ -4964,6 +5394,9 @@ def _iter_diagrams(ch):
             yield dg
     for q in ch.get("problems") or []:
         for dg in q.get("diagrams") or []:
+            yield dg
+        # 정답을 먼저 보이지 않게 별도 배열에 둔 그림도 SVG 규격·글자 크기 검사를 받아야 한다.
+        for dg in q.get("solutionDiagrams") or []:
             yield dg
 
 def _iter_answer_diagrams(ch):

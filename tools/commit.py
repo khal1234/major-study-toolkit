@@ -66,6 +66,8 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
+from feedback_lifecycle import linkage_issues, machine_issues, registry_ids, triage_issues
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -83,9 +85,33 @@ import sync_common  # noqa: E402
 TRAILER = "Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 
-def _git(args):
+def _git(args, env=None):
     return subprocess.run(["git", "-C", ROOT] + args, capture_output=True,
-                          text=True, encoding="utf-8", errors="replace")
+                          text=True, encoding="utf-8", errors="replace",
+                          env=None if env is None else {**os.environ, **env})
+
+
+def probe_index_env(real_index):
+    """판정용 **사본 인덱스** 를 만들고 그 환경을 돌려준다.
+
+    ★ 2026-09-24 실사고(클라우드 두 세션): 예전엔 진짜 인덱스에 `add` 한 뒤 게이트를 돌렸고,
+      막히면 스테이징을 남긴 채 끝났다. 그 뒤 되돌리려면 사람이 `git reset`·`restore` 를
+      승인해야 했다(사용자 *[발화 생략]*). 도구가 그 둘을 대신 부르는 것도 막혀 있다
+      (`test_tools_do_not_call_gated_git` — 게이트 git 쓰기는 승인 목록 밖 도구가 못 부른다).
+      → **판정은 사본 인덱스로 하고, 진짜 인덱스에는 게이트를 다 통과한 뒤에만 올린다.**
+      막히면 사본만 지우면 되고 진짜 인덱스는 처음 그대로다 — 되돌릴 것이 생기지 않는다.
+    """
+    probe = real_index + ".commit-probe"
+    if os.path.isfile(real_index):          # 인덱스가 아직 없으면 git 은 빈 인덱스로 본다
+        with open(real_index, "rb") as src, open(probe, "wb") as dst:
+            dst.write(src.read())
+    return probe, {"GIT_INDEX_FILE": probe}
+
+
+def real_index_path():
+    """진짜 인덱스 파일 자리 — 워크트리면 git 이 알려 주는 자리, 못 물으면 `.git/index`."""
+    rel = _git(["rev-parse", "--git-path", "index"]).stdout.strip()
+    return os.path.join(ROOT, rel or os.path.join(".git", "index"))
 
 
 def names_of(out):
@@ -150,21 +176,68 @@ def main(argv):
 
     # ★ 이 커밋의 범위. add·판정·commit 이 **같은 하나**를 쓴다 — 두 번 적으면 갈라진다.
     scope = ["--"] + list(paths)
+    quiet_path = ["-c", "core.quotepath=false"]
+    probe, penv = probe_index_env(real_index_path())
+    try:
+        rc, mine = _probe_checks(scope, quiet_path, penv)
+    finally:
+        if os.path.isfile(probe):
+            os.remove(probe)
+    if rc:
+        return rc
+    # ★ 게이트를 다 통과했다 — 여기서 처음으로 진짜 인덱스에 올린다.
     r = _git(["add"] + scope)
     if r.returncode != 0:
         print("add 실패:\n" + r.stderr)
         return 1
+
+    full = msg if TRAILER in msg else msg + "\n\n" + TRAILER
+    if integration_owner:
+        full += "\nIntegration-Owner: " + integration_owner + "\nIntegration-State: pending"
+    c = _git(["commit", "-m", full] + scope)
+    print((c.stdout + c.stderr).strip())
+    if c.returncode != 0:
+        return c.returncode
+    return _after_commit(branch, mine, integration_owner)
+
+
+def _probe_checks(scope, quiet_path, penv):
+    """사본 인덱스(`penv`)로 커밋 전 판정을 전부 돈다. (종료 코드, 이 커밋에 담길 이름) — 0 이면 통과."""
+    r = _git(["add"] + scope, env=penv)
+    if r.returncode != 0:
+        print("add 실패:\n" + r.stderr)
+        return 1, []
     # 한글 경로가 8진 이스케이프로 나오지 않게 한다(quotepath). 판정·표시 둘 다 이 이름을 쓴다.
-    quiet_path = ["-c", "core.quotepath=false"]
-    mine = names_of(_git(quiet_path + ["diff", "--cached", "--name-only"] + scope).stdout)
+    mine = names_of(_git(quiet_path + ["diff", "--cached", "--name-only"] + scope, env=penv).stdout)
     if not mine:
         print("스테이징된 변경이 없다 — 커밋 안 함(인자로 준 경로 기준).")
-        return 1
+        return 1, []
     others = out_of_scope(names_of(_git(quiet_path + ["diff", "--cached", "--name-only"]).stdout), mine)
     if others:
         print("[알림] 이 커밋에 안 담긴 스테이징 변경 " + str(len(others)) + "건"
               "(다른 세션 작업일 수 있다): " + ", ".join(others[:4])
               + (" 외 " + str(len(others) - 4) + "건" if len(others) > 4 else ""))
+
+    # New workorders must link an inbox item; chapter edits must reconcile open feedback.
+    added = names_of(_git(quiet_path + ["diff", "--cached", "--diff-filter=A", "--name-only"] + scope,
+                          env=penv).stdout)
+    inboxes = [name for name in mine if name.endswith("-review-inbox.md")
+               or name == "docs/받은것-인박스.md"]
+    new_lines = []
+    if inboxes:
+        inbox_diff = _git(quiet_path + ["diff", "--cached", "--unified=0", "--"] + inboxes, env=penv)
+        if inbox_diff.returncode != 0:
+            print("인박스 분류 검사 실패:\n" + inbox_diff.stderr)
+            return 1, mine
+        new_lines = [line[1:] for line in inbox_diff.stdout.splitlines()
+                     if line.startswith("+") and not line.startswith("+++")]
+    feedback_issues = (triage_issues(new_lines) + machine_issues(new_lines, registry_ids(Path(ROOT)))
+                       + linkage_issues(Path(ROOT), mine, added))
+    if feedback_issues:
+        print("커밋 안 함 — 인박스 연결/상태 재판정 누락(진짜 인덱스는 건드리지 않았다):")
+        for issue in feedback_issues:
+            print("  - " + issue)
+        return 1, mine
 
     # ★ 규칙 등록부 게이트 (2026-09-18) — 장 JSON 이 담긴 커밋은 그 장의 미판정이 HEAD 보다 늘면 막는다.
     #   `rules.py` 가 있는 리포에서만 돈다(공용 폴더 미러에는 없다).
@@ -175,16 +248,13 @@ def main(argv):
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
         if g.returncode != 0:
             print((g.stdout + g.stderr).strip())
-            print("커밋 안 함 — 스테이징은 남아 있다.")
-            return 1
+            print("커밋 안 함 — 진짜 인덱스는 건드리지 않았다(되돌릴 스테이징 없음).")
+            return 1, mine
+    return 0, mine
 
-    full = msg if TRAILER in msg else msg + "\n\n" + TRAILER
-    if integration_owner:
-        full += "\nIntegration-Owner: " + integration_owner + "\nIntegration-State: pending"
-    c = _git(["commit", "-m", full] + scope)
-    print((c.stdout + c.stderr).strip())
-    if c.returncode != 0:
-        return c.returncode
+
+def _after_commit(branch, mine, integration_owner):
+    """커밋 성공 뒤의 일 — main 반영·미러·후속 게이트."""
 
     # ★ 커밋이 성공한 **이 자리**가 트리거다 (위 독스트링 참조).
     # 판정은 **이 커밋에 담긴 것**만 본다 — 남이 스테이징만 해 둔 공통 파일을 옮기면 안 된다.

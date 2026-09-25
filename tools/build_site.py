@@ -14,7 +14,8 @@ from buildlib.render import (  # noqa: E402
     TEMPLATE,
     build_chapter,
     build_home,
-    build_tables_page,
+    appendices_of,
+    build_appendix_page,
     copy_lab_pages,
     lint_viewer_css_comments,
     lint_viewer_setting_registry,
@@ -51,8 +52,27 @@ def _say_ok(*parts):
     ★ **줄어드는 것은 「판정이 끝난 줄」뿐이다** — `[FAIL]`·`[warn/미해결]` 은 어떤
     깃발로도 안 줄어든다. 그 둘이 조용해지면 그건 완화이지 요약이 아니다(규칙 10 빨강).
     """
-    if "--fail-only" not in sys.argv:
+    if "--fail-only" not in sys.argv and "--quiet" not in sys.argv:
         print("[ok]", *parts)
+
+
+# ★ 이 빌드가 아는 깃발 전부 — 모르는 깃발은 **거부한다**(열린 날 2026-09-25, 세션 1 보류·소).
+#   `--help` 가 전체 빌드를 돌렸고(깃발을 안 받는 구조), `--quiet` 는 `_say_ok` 가 몰라 `[ok]` 가 그대로
+#   나왔다 — 모르는 인자가 조용히 무시되면 「켰다고 믿는」 상태가 된다(위 `_say_ok` 독스트링의 실사고와
+#   같은 부류). 값이 붙는 깃발은 `=` 앞까지만 견준다. 잠금 `test_build_site_help_does_not_build`.
+KNOWN_FLAGS = ("--all", "--quiet", "--fail-only", "--accept-review", "--accept-review-head",
+               "--accept-review-as-built", "--accept-review-rev", "--accept-review-only",
+               "--accept-review-section", "--accept-review-formula", "--accept-review-chapter",
+               "--accept-review-subject", "--accept-review-user-saw")
+USAGE = ("python tools/build_site.py [--all] [--quiet | --fail-only] [--accept-review… (buildlib/review.py 독스트링)]\n"
+         "  깃발 없음: 기본 챕터 집합 빌드 · --all: 전 과목 전 챕터 · --quiet/--fail-only: 판정이 끝난 줄을 줄인다\n"
+         "  기준선 수락 깃발은 스킬 `review-baseline` 이 정본이다 — `--accept-review-chapter=` 는 `--accept-review-subject=` 와 함께만")
+
+
+def unknown_flags(argv):
+    """`--` 로 시작하는데 KNOWN_FLAGS 에 없는 인자. `--help`/`-h` 는 호출부가 먼저 가른다."""
+    return [a for a in argv if a.startswith("--") and a.split("=", 1)[0] not in KNOWN_FLAGS]
+
 
 SUBJECT_CONFIG = {
     "열역학": {
@@ -65,7 +85,8 @@ SUBJECT_CONFIG = {
         #   · **되돌리는 법은 이 한 줄을 `False` 로** — 링크와 `tables.html` 생성이 함께 꺼진다.
         #   한 플래그가 두 자리를 모두 가리는 것이 요점이다 — 2026-07-28 에 링크만 게이트
         #   밖에 있어 공학수학 화면에 수증기 표가 떴던 사고가 그 반대 사례다.
-        "steamTables": True,
+        #   (2026-09-24 E18: 옛 플래그 steamTables → 부록 선언 첫 항목. 끄는 법은 이 항목을 지우는 것.)
+        "appendices": [{"id": "tables", "file": "tables/steam.json"}],
     },
     "공학수학 1": {
         "coverSub": "Kreyszig 10판 기준 · 유튜브 부교재 보충.",
@@ -100,13 +121,18 @@ SUBJECT_CONFIG = {
         #   ☐ 아직 Cengel 판이다 — 단위가 kPa 이고 압력 눈금도 열역학판 그대로이며, 냉매 표가
         #     한 장도 없다(물뿐). 그 둘은 `docs/2026-09-08-사용자-지적-인박스.md` 에 열려 있다.
         #     **먼저 켜는 판정은 사용자가 했다** — 물 표라도 갈 수 있는 것이 못 가는 것보다 낫다.
-        "steamTables": True,
+        "appendices": [{"id": "tables", "file": "tables/steam.json"}],
     },
     "응용고체역학": {
         "coverSub": "Gere, Statics and Mechanics of Materials (SI) 기준.",
     },
     "전기전자공학기초 및 실험": {
         "coverSub": "Rizzoni, Principles and Applications of Electrical Engineering 기준.",
+        # 2026-09-24 E18 사용자 판정 — 뒤로 자주 가서 보는 두 표. 저항률 표는 교재 표 복제라 뺐다(규칙 3).
+        "appendices": [
+            {"id": "symbols", "title": "소자 기호표", "file": "tables/symbols.json"},
+            {"id": "si-units", "title": "SI 접두어·단위", "file": "tables/si-units.json"},
+        ],
     },
     "공학수학 2": {
         "coverSub": "Zill, Advanced Engineering Mathematics 기준.",
@@ -202,6 +228,18 @@ sys.path.insert(0, os.path.join(ROOT, ".claude", "hooks"))
 from guard_bash import SUBJECT_BY_BRANCH  # noqa: E402  — 브랜치→과목(포트 맵을 과목으로 옮긴다)
 
 VBS_PORT_RE = re.compile(r'Case\s+"([a-z0-9]+)"\s*\r?\n\s*port\s*=\s*(\d+)')
+
+
+def ordered_chapters(chapters):
+    """`index.json` chapters 를 **표시 순서**로 — `order` 가 있으면 그 값, 없으면 파일에 적힌 자리.
+
+    재는 것: 사이드바·「다음 챕터」(SUBJECT_NAV 배열 순서)·홈 목록이 모두 이 순서를 따른다.
+    장 번호·파일명은 안 바꾼다 — 강의 주차가 교재 장 순서와 다를 때 표시만 주차대로 둔다(2026-09-24 EE-W4 ⓑ).
+    `order` 가 없는 장은 제 파일 자리를 order 로 쓴다(안정 정렬) — 선언 안 한 과목은 그대로다.
+    """
+    chapters = list(chapters or [])
+    return [e for _, _, e in sorted(
+        ((e.get("order", i) if isinstance(e, dict) else i), i, e) for i, e in enumerate(chapters))]
 
 
 def _read_text(path):
@@ -377,7 +415,21 @@ def _accept_scope(only, sections, formulas):
     return ""
 
 
+def accept_review_chapter_needs_subject(argv):
+    """기준선 수락에 장만 한정하고 과목을 안 한정했는가 — 그러면 전 과목의 같은 이름 장이 함께 밀린다."""
+    has_chapter = any(a.startswith("--accept-review-chapter=") for a in argv)
+    has_subject = any(a.startswith("--accept-review-subject=") for a in argv)
+    return has_chapter and not has_subject
+
+
 def main():
+    if "--help" in sys.argv[1:] or "-h" in sys.argv[1:]:
+        print(USAGE)
+        return 0
+    bad = unknown_flags(sys.argv[1:])
+    if bad:
+        print("[거부] 모르는 깃발 " + " ".join(bad) + " — 조용히 무시하면 「켰다고 믿는」 상태가 된다\n" + USAGE)
+        return 2
     if run_preflight() != 0:
         return 1
     build_all = "--all" in sys.argv
@@ -429,6 +481,13 @@ def main():
     #   기계공작법·수치해석 보류가 차례로 막았다). 없으면 옛날처럼 전 과목의 그 챕터가 대상이다.
     accept_review_subject = next((a.split("=", 1)[1] for a in sys.argv
                                   if a.startswith("--accept-review-subject=")), None)
+    # ★ 챕터만 주고 과목을 안 주면 거부한다(2026-09-19). `ch07` 하나로 공수2 를 밀려다 응용열·열역학 등
+    #   다른 과목 ch07 여덟 장의 기준선이 함께 as-built 로 밀렸다 — 스냅샷은 git 밖이라 되돌릴 기록이 없다.
+    #   잠금 test_accept_chapter_requires_subject.
+    if accept_review_chapter_needs_subject(sys.argv):
+        print("[거부] --accept-review-chapter= 는 --accept-review-subject=<과목 폴더> 와 함께만 쓴다 — "
+              "장 이름은 여러 과목에 있다")
+        sys.exit(1)
 
     def accept_covers(subject, entry_file):
         """이번 수락이 (과목, 챕터 파일)을 덮는가 — 보류 게이트·삼킴 게이트·수락 루프가 같은 자를 쓴다."""
@@ -481,6 +540,7 @@ def main():
             print("[skip] subject not in SUBJECT_CONFIG:", subject)
             continue
         idx = json.load(open(idx_path, encoding="utf-8"))
+        idx["chapters"] = ordered_chapters(idx.get("chapters"))   # 표시 순서 — 아래 nav·트리·홈이 같은 순서를 쓴다
         chapter_nav = []
         for entry in idx.get("chapters", []):
             source_path = os.path.join(data_root, subject, entry["file"])
@@ -801,9 +861,8 @@ def main():
                 print("  [앞으로 보이는 변경] %d항목%s"
                       % (total, "" if total else " — 밀었는데 볼 게 없다"))
     for _s, cfg, _i, _n in subjects_meta:
-        if cfg.get("steamTables"):
-            tables_out = build_tables_page(_s)
-            _say_ok(os.path.relpath(tables_out, ROOT))
+        for item in appendices_of(cfg):
+            _say_ok(os.path.relpath(build_appendix_page(_s, item), ROOT))
         for lab_out in copy_lab_pages(_s):
             _say_ok(os.path.relpath(lab_out, ROOT))
     # 포트 맵은 위에서 한 번 잰 chapter_ports 를 그대로 쓴다(배포 번들 홈은 `deploy_all` 이

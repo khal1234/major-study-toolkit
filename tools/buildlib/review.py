@@ -653,7 +653,10 @@ _COORD_NOISE_PX = 10.0
 #       `sourceRef`  — 뷰어가 *[발화 생략]* 고 명시하고 데이터에만 남긴다.
 #       `rationale`  — 삽화가 왜 필요한가를 적는 저자 메모. 뷰어에 등장하지 않는다.
 #     `kind` 는 **넣지 않는다** — 삽화에서는 딱지로 렌더된다(`kindLabel[d.kind]`).
-AUTHOR_ONLY_FIELDS = ("changeNote", "sourceRef", "rationale")
+#       `objectives` — 문항·자가점검의 학습목표 태그. 뷰어는 진도 판정에만 읽고 글자로 안 그린다.
+#       `basis`      — 학습목표의 근거(교재 절·분모 번호). 뷰어에 등장하지 않는다(2026-09-19 — 태그만 단
+#                      전전 ch01 에서 사유 없는 하이라이트 다섯이 떴다).
+AUTHOR_ONLY_FIELDS = ("changeNote", "sourceRef", "rationale", "objectives", "basis")
 
 
 def reader_facing(value):
@@ -1041,6 +1044,9 @@ def _compare_review_items(current, previous, fields, summary):
             for diagram in item.get("diagrams") or []:
                 diagram["_reviewChanged"] = True
                 diagram["_reviewChangeLevel"] = "major"
+            for diagram in item.get("solutionDiagrams") or []:
+                diagram["_reviewChanged"] = True
+                diagram["_reviewChangeLevel"] = "major"
             if isinstance(item.get("figure"), dict):
                 item["figure"]["_reviewChanged"] = True      # 카드가 새것이면 그 삽화도 새것이다
                 item["figure"]["_reviewChangeLevel"] = "major"
@@ -1050,6 +1056,8 @@ def _compare_review_items(current, previous, fields, summary):
         changes = [field for field in fields if item.get(field) != old_item.get(field)]
         levels = [_classify_change(old_item.get(field), item.get(field)) for field in changes]
         _mark_changed_diagrams(item.get("diagrams"), old_item.get("diagrams"), changes, levels)
+        _mark_changed_diagrams(item.get("solutionDiagrams"), old_item.get("solutionDiagrams"),
+                               changes, levels)
         _mark_changed_figure(item, old_item, changes, levels)   # 슬라이드 삽화(카드에 한 벌)
         # 배열 필드는 **바뀐 원소만** 표시하고 부모의 필드 표시는 뗀다(위 GRANULAR_FIELDS 주석).
         granular = [field for field in changes if field in GRANULAR_FIELDS
@@ -1142,15 +1150,19 @@ def review_note_gate(review_ch, ch_path):
     """변경점 하이라이트에 사유가 빠졌으면 차단 사유, 아니면 None. 순수 함수(파일은 과목 index 만 읽는다).
 
     재는 것: `add_review_changes` 가 남긴 `summary.noNoteSeen`(사유 없는 하이라이트 id).
-    문턱: 그 장이 과목 `index.json` 의 `strictChapters.review_note` 에 **선언됐을 때만** 막는다.
+    문턱: **전 과목·전 장 기본 error** — 안 켤 과목은 `index.json` 의 `strictWaivers.review_note` 에
+      사유와 함께 적는다(`is_strict_chapter` 의 기본값 규칙).
     왜(2026-09-14 기계공작법 ch10 여섯째 지적 3): 다섯째 배치가 사유를 한 건도 안 달아 「올리면 무엇이 바뀌었는지」가
-      안 떴다 — 빌드는 `[사유 없음]` 경고만 냈다. 전 과목 기본 error 로 켜면 다른 과목 index 에 면제를 적어야 해서
-      사용자 판정 *[발화 생략]* 를 따른다(새 검사 기본 error 규칙의 예외).
+      안 떴다 — 빌드는 `[사유 없음]` 경고만 냈다.
+    ★ 선언식(`strictChapters.review_note`)은 **2026-09-20 에 기본 error 로 승격했다** — 선언한 장 밖에서
+      사유 없는 수정이 그대로 커밋됐다(2026-09-19 여섯 건 `b2efbcc6` · 이 승격 직전에도 다섯 건이 남아 있었다).
+      옛 판정 *[발화 생략]* 를 사용자가 뒤집었다
+      (2026-09-19 *[발화 생략]*). 승격 시점의 실측 잔량은 0 이라 다른 과목 빌드를 멈추지 않는다.
     못 보는 것: 사유 **내용**이 그 카드의 것인지(복사해 붙인 사유는 `staleNote` 가 반쪽만 잡는다).
     """
-    from .checks_content import subject_strict_chapters
+    from .checks_content import is_strict_chapter
     missing = (((review_ch or {}).get("_reviewChanges") or {}).get("summary") or {}).get("noNoteSeen") or []
-    if not missing or os.path.basename(ch_path) not in subject_strict_chapters(ch_path, "review_note"):
+    if not missing or not is_strict_chapter(ch_path, (), "review_note"):
         return None
     return ("변경점 하이라이트 %d건에 사유(changeNote)가 없다 — %s — `python tools/set_change_notes.py --chapter=%s --from=<사유.json> --apply`"
             % (len(missing), ", ".join(missing[:6]), os.path.basename(ch_path)))

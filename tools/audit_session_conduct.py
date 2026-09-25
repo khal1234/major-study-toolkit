@@ -226,14 +226,16 @@ LEFTOVER_RE = re.compile(r"남은\s*일")
 def leftover_missing(said, used):
     """도구를 실제로 쓴 턴인데, 마지막 글 조각에 「남은 일」 표지가 없다. 순수 함수.
 
-    ★ **도구를 안 쓴 턴은 안 잰다** — 순수 대화(질문에 바로 답하는 등)까지
-      「남은 일」을 요구하면 매 답변이 걸려 소음이 된다. 이 표지는 **일을 한 뒤**
-      마무리하는 자리에서만 뜻이 있다.
+    ★ **「일을 했다」의 증거는 도구 사용 또는 완료 선언(`COMPLETION_RE`)이다** — 둘 다 없는
+      순수 대화(질문에 바로 답하는 등)는 안 잰다. 매 답변을 걸면 소음이 된다.
+    ★ 2026-09-24 — 도구 없는 최종 보고(「다 됐어」)가 빠졌다(/insights 마찰). 그래서 완료어를 둘째 증거로 본다.
     ★ **마지막 글 조각만 본다** — 중간 글은 아직 마무리하는 자리가 아니다.
     """
-    if not used or not said:
+    if not said:
         return None
     last = said[-1].strip()
+    if not used and not COMPLETION_RE.search(last):
+        return None
     if not last or LEFTOVER_RE.search(last):
         return None
     lines = [ln for ln in last.splitlines() if ln.strip()]
@@ -481,6 +483,10 @@ def selftest():
         leftover_missing(["커밋했습니다."], []) is None)
     chk("음성 — 「남은 일」 표지가 있으면 안 잡는다",
         leftover_missing(["**남은 일:** 없음."], [{}]) is None)
+    chk("★ 양성 — 도구 없어도 완료 선언이면 잡는다 (2026-09-24)",
+        leftover_missing(["다 됐습니다."], []) is not None)
+    chk("음성 — 도구도 완료어도 없는 질문 답은 안 잡는다",
+        leftover_missing(["그 값은 3입니다."], []) is None)
 
     chk("음성 — `**제안:**` 이 있으면 빈손이 아니다",
         not barehanded_asks(["**제안:** A 로 갑니다\n이렇게 할까요?"]))

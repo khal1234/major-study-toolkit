@@ -132,6 +132,12 @@ _CASUAL_END = re.compile(r"(다|야|어|음|봄|함|줌|짐)[.!?～]*\s*$")
 #   그래서 어미 바로 앞이 아니라 **문장 전체에 "수 있"이 없을 때만** 잡는다.
 _FORECAST_END = re.compile(r"겠(습니다|어요|음|다)[.!?～]*\s*$")
 _POSSIBILITY = re.compile(r"수\s*있")
+# ── 다섯 번째 잣대: 채팅에 `§` 기호 (2026-09-24, 원장 2026-09-05 「열림 · 기계 없음」 닫음) ──
+#
+# 리포 문서·독스트링의 `§13.1` 은 정상 표기다 — 위반은 그 표기가 **채팅 산문**으로 새는 것.
+# 잰다: 코드·경로를 걷어낸 산문 줄에 `§` 가 있으면 그 줄이 위반. 못 본다: 「절 13.1」처럼
+# 기호 없이 적은 절 번호는 안 잡는다(그건 허용 표기다).
+_SECTION_SIGN = "§"
 
 
 def _prose_lines(text):
@@ -156,6 +162,8 @@ def tone_bad_count(text):
             continue
         total += 1
         if ascii_letters > hangul:
+            bad += 1
+        elif _SECTION_SIGN in line:
             bad += 1
         elif _FORECAST_END.search(line) and not _POSSIBILITY.search(line):
             bad += 1
@@ -416,8 +424,8 @@ def last_turn_verdict(path, completed=False, prefix=""):
         print("  「…합니다 · …겠습니다 · …봅니다」 예고와 「확인했습니다」 행위 보고는")
         print("  도구 호출 줄이 이미 보여 준다 — **이번 턴은 도구 호출 앞에 문장을 쓰지 않는다(0회).**")
     if tone_bad:
-        print("[말투] %s중계+최종 보고 %d줄 중 %d줄이 영어·평어·예고체로 샜다 (중계 %d/%d · 최종 %d/%d)"
-              " — **채팅은 존댓말, 예고는 금지다.**"
+        print("[말투] %s중계+최종 보고 %d줄 중 %d줄이 영어·평어·예고체·§ 로 샜다 (중계 %d/%d · 최종 %d/%d)"
+              " — **채팅은 존댓말, 예고와 § 는 금지다.**"
               % (prefix or "방금 ", tone_total, tone_bad,
                  r["relay_tone_bad"], r["relay_tone_total"],
                  r["final_tone_bad"], r["final_tone_total"]))
@@ -484,6 +492,10 @@ def selftest():
     chk("「수 있습니다」는 가능성이지 예고가 아니다 — 통과", tt8 == 1 and tb8 == 0, "total=%d bad=%d" % (tt8, tb8))
     tt9, tb9 = tone_bad_count("한 줄입니다.\n```\ndef f():\n    return 1이다\n```\n또 한 줄입니다.")
     chk("fenced 코드블록 안 내용은 안 잰다", tt9 == 2 and tb9 == 0, "total=%d bad=%d" % (tt9, tb9))
+    tt10, tb10 = tone_bad_count("교재 §13.1~13.5 를 대조했어.")
+    chk("채팅 산문의 § 는 위반 (원장 2026-09-05)", tt10 == 1 and tb10 == 1, "total=%d bad=%d" % (tt10, tb10))
+    tt11, tb11 = tone_bad_count("`sourceRef: §13.1` 을 그대로 뒀어.")
+    chk("코드 조각 안의 § 는 안 잰다", tt11 == 1 and tb11 == 0, "total=%d bad=%d" % (tt11, tb11))
     t2 = Tally()
     for r in [_rec_user(), _rec_asst("f1", "Final result is ready.", tool=False)]:
         t2.feed(r)

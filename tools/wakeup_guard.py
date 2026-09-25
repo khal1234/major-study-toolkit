@@ -271,6 +271,43 @@ def round_work(entries):
     return tools, commits, loop, edits + len(tool_written - hand_edited)
 
 
+# 루프 회차에 쓰면 안 되는 「끝날 때 보고」 표지 — 사용자 층 [발화 생략]의 ★ 줄과 [발화 생략]의 남은 일.
+#   열린 날 2026-09-19 — 새어나간 것: 재예약 프롬프트가 사용자 발화 모양으로 와서 매 회차 끝에 ★ 세 줄·남은 일·
+#   긴 표 보고를 붙였다. 사용자 [발화 생략].
+#   못 보는 것: 표지 없이 길게 쓴 보고(길이 자는 check_narration 몫).
+ROUND_REPORT_MARKS = ("★ 이번에 좋았던", "★ 이렇게 쓰면", "**남은 일")
+
+
+def last_turn_text(entries):
+    """마지막 사용자 발화 뒤 어시스턴트가 쓴 글(도구 호출 제외)을 이어 붙인다. 순수 함수."""
+    out = []
+    for entry in reversed(entries):
+        if _is_user_prompt(entry):
+            break
+        if isinstance(entry, dict) and entry.get("type") == "assistant":
+            content = (entry.get("message") or {}).get("content")
+            if isinstance(content, list):
+                out.extend(c.get("text", "") for c in content
+                           if isinstance(c, dict) and c.get("type") == "text")
+            elif isinstance(content, str):
+                out.append(content)
+    return "\n".join(reversed(out))
+
+
+def round_report_marks(entries):
+    """재예약한 턴(= 아직 루프 중)에 끝날 때 보고 표지가 있으면 그 표지들. 순수 함수."""
+    if not wakeup_in_last_turn(entries):
+        return []
+    text = last_turn_text(entries)
+    return [m for m in ROUND_REPORT_MARKS if m in text]
+
+
+ROUND_REPORT = (
+    "[루프 회차 보고] 재예약한 턴(루프가 계속된다)인데 끝날 때 보고 표지가 있다: %s.\n"
+    "  사용자 2026-09-19 [발화 생략].\n"
+    "  → 회차 끝은 한 줄 상태뿐이다. ★ 줄·남은 일·표 보고는 `wakeup_guard.py off` 로 루프를 끝내는 턴에만 쓴다.")
+
+
 def load_lines(path):
     """빈 줄을 뺀 줄 목록. 파일이 없으면 빈 목록이다."""
     try:
@@ -325,6 +362,9 @@ def tick(payload, now=None):
         return 0, ""
     if not wakeup_in_last_turn(entries):
         return 2, NAG
+    marks = round_report_marks(entries)
+    if marks:
+        return 2, ROUND_REPORT % " · ".join(marks)
     tools, commits, loop, edits = round_work(entries)
     if loop:
         record_round(tools, commits, now, edits)

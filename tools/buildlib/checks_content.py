@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Chapter content-policy and cross-reference checks."""
 import copy
+from collections import Counter
 import json
 import math
 import os
@@ -42,6 +43,7 @@ from .checks_svg import (
     figure_box_center_x_hits,
     figure_subtext_scale_hits,
     digit_subscript_ratio_hits,
+    flat_subscript_hits,
     figure_text_grouping_hits,
     text_runs,
     in_leader,
@@ -50,12 +52,16 @@ from .checks_svg import (
     pipe_arrow_clearance_issues,
     axis_arrow_issues,
     axis_name_gap_issues,
+    battery_plate_gap_issues,
+    boundary_dashed_issues,
+    circuit_part_ratio_issues,
     leader_spans,
 )
 from .motion import (
     expand_frames,
     grow_target_issues,
     missing_targets,
+    shape_target_issues,
     motion_issues,
 )
 from .textutil import (LATEX_SUPPORTED, PITFALL_SOURCE_PREFIXES, VEC_COMBINING,
@@ -294,6 +300,16 @@ def iter_visible_texts(node, trail="root"):
 # `latex`·`equations`처럼 **필드 전체가 LaTeX인 곳은 제외**한다(거기서는 `∂`가 정상 표기다).
 PLAIN_MATH_MARKS = ("∂", "∫", "≡", "√")
 MATH_NATIVE_KEYS = ("/latex", "/equations", "/svg", "/solutionTemplate")
+# 독자 화면에 수식으로 조판되지 않는 메타데이터만 제외한다. `source`는
+# textbookProblems.source에서 실제 표제로 렌더되므로 여기 넣지 않는다.
+# render.strip_author_only 및 viewer.template.html의 sourceRef 비표시 경로,
+# review.AUTHOR_ONLY_FIELDS와 대조한 목록이다. changeNote는 검수 UI 전용 기록이다.
+MATH_BLOB_NON_RENDERED_KEYS = frozenset({
+    "sourceRef", "sourcePages", "supplementNotes", "rationale", "basis",
+    "noTheoryDiagramReason", "noDiagramReason", "lintWaivers",
+    "objectives", "changeNote", "gradingKeywords", "relatedSections", "relatedFormulas",
+    "hint",  # 빈칸 힌트는 현재 뷰어가 읽지 않는다.
+})
 
 
 # ★ C12. 첨자를 **아예 안 쓰고** 기호에 숫자를 붙여 쓴 자리 (열린 날 2026-08-01, 사용자 재지적).
@@ -312,10 +328,11 @@ MATH_NATIVE_KEYS = ("/latex", "/equations", "/svg", "/solutionTemplate")
 #   · `Fe3C`(두 글자 원소) · `10-3` · `m³` → 기호가 한 글자가 아니거나 숫자가 아니라 통과
 #   · 단위·연도·`A4` 류는 아래 기호 집합에 없다 — 열역학에서 첨자를 받는 기호만 넣었다.
 # ★ `L` 은 뺀다 — 물리량보다 **항목 번호**(`L2 후보`·`L항목`)로 쓰이는 빈도가 높아 오탐이 난다.
-_RAW_SUBSCRIPT = re.compile(r"(?<![0-9A-Za-z가-힣])([hPTVvWQmAsDρ])([0-9])(?![0-9A-Za-z])")
+_RAW_SUBSCRIPT = re.compile(r"(?<![0-9A-Za-z가-힣])([hPTVvWQmAsDρσετγθ])([0-9])(?![0-9A-Za-z])")
+_RAW_SUBSCRIPT_LEGACY = re.compile(r"(?<![0-9A-Za-z가-힣])([hPTVvWQmAsDρ])([0-9])(?![0-9A-Za-z])")
 # ★ `changeNote` 는 **과거 사용자 지적을 그대로 인용**하는 리뷰 메타라 `h1`·`P2` 가 들어 있는 것이
 #   정상이다(원문을 고치면 기록이 아니게 된다). 독자 화면에도 안 나온다 — 그래서 이 검사만 제외한다.
-_RAW_SUBSCRIPT_EXEMPT = ("/changeNote",)
+_RAW_SUBSCRIPT_EXEMPT = ("/changeNote",)  # 기존 오류 범위는 그대로 둔다.
 
 
 # ★★ C46. 첨자에 **한글**을 쓴 자리 (열린 날 2026-08-13, 사용자 판정 뒤 신설).
@@ -395,13 +412,20 @@ def hangul_subscript_issues(ch):
     return out
 
 
-def raw_subscript_issues(ch):
+def raw_subscript_issues(ch, pattern=None, rendered_only=True):
     """첨자 마크업 없이 `h3` 처럼 붙여 쓴 자리. 순수 함수 — 테스트가 직접 부른다."""
     out = []
     for where, blob in iter_visible_texts(ch):
         if any(k in where for k in MATH_NATIVE_KEYS + _RAW_SUBSCRIPT_EXEMPT):
             continue
-        for m in _RAW_SUBSCRIPT.finditer(mask_inline_math(blob)):
+        if rendered_only:
+            if any("/" + key in where for key in MATH_BLOB_NON_RENDERED_KEYS):
+                continue
+            if "/blanks[" in where and where.endswith("/explanation"):
+                continue  # .answers가 display:none인 현재 뷰어의 빈칸 해설.
+            if where.endswith("/source") and where != "root/textbookProblems/source":
+                continue  # 함정 등의 근거는 비표시, 교재 표제 source만 독자에게 보인다.
+        for m in (pattern or _RAW_SUBSCRIPT).finditer(mask_inline_math(blob)):
             out.append(where + ": 첨자를 안 쓰고 붙여 썼다 — " + repr(m.group(0))
                        + " → 유니코드 첨자(`" + m.group(1) + "₃` 꼴)나 `"
                        + m.group(1) + "_" + m.group(2) + "` 로 쓸 것. "
@@ -791,9 +815,15 @@ _MATHRM_GROUP = re.compile(r"\\(?:mathrm|text|operatorname)\{[^{}]*\}")
 #   잘못 잘라 화면을 깨뜨린다(자와 처방이 같은 원자를 쓰므로 자만 넓힐 수 없다). 그 부류는 빚으로 남긴다.
 _SLASH_MACRO_ATOM = r"\\[A-Za-z]+\{[^{}]*\}"
 _SLASH_NORM_ATOM = r"\\\|(?:" + _SLASH_MACRO_ATOM + r"|[A-Za-z0-9]+)\\\|"
-_SLASH_ATOM = (r"(?:" + _SLASH_NORM_ATOM + r"|" + _SLASH_MACRO_ATOM
+# 괄호로 묶은 분자도 화면에는 한 원자다. 처방기의 _ATOM 은 이를 자동 변환하지 않고
+# 수동 검토로 남긴다: 괄호 안의 합·부호를 기계가 잘라 분자 경계를 망치지 않게 한다.
+_SLASH_PAREN_ATOM = r"\((?:[^()]|\([^()]*\))*\)"
+_SLASH_ATOM = (r"(?:" + _SLASH_PAREN_ATOM + r"|" + _SLASH_NORM_ATOM + r"|" + _SLASH_MACRO_ATOM
                + r"|(?:[^\W\d_]|[0-9∂∆])(?:[\w∂∆\\^{}]*))")
 _SLASH_FRAC = re.compile(r"(" + _SLASH_ATOM + r")\s*/\s*(" + _SLASH_ATOM + r")")
+_SLASH_LEGACY_ATOM = (r"(?:" + _SLASH_NORM_ATOM + r"|" + _SLASH_MACRO_ATOM
+                      + r"|(?:[^\W\d_]|[0-9∂∆])(?:[\w∂∆\\^{}]*))")
+_SLASH_FRAC_LEGACY = re.compile(r"(" + _SLASH_LEGACY_ATOM + r")\s*/\s*(" + _SLASH_LEGACY_ATOM + r")")
 _UNICODE_PARTIAL_FRAC = re.compile(r"∂([A-Za-zΑ-Ωα-ω]+)\s*/\s*∂([A-Za-zΑ-Ωα-ω]+)")
 
 
@@ -821,7 +851,7 @@ def _bare(token):
     return re.sub(r"[\^\{\}\\]", "", token or "")
 
 
-def iter_math_blobs(ch):
+def iter_math_blobs(ch, rendered_only=False):
     r"""화면에 **수식으로 그려지는** 문자열 전부를 (위치, LaTeX)로 흘린다.
 
     ★ 열린 날 2026-08-12 — `formula.variables` 의 **키**를 아무 검사도 보지 않았다.
@@ -841,7 +871,12 @@ def iter_math_blobs(ch):
                 for k in node:
                     yield trail + "{" + str(k) + "}", str(k)
             for k, v in node.items():
-                if k == "svg":          # SVG 는 LaTeX 가 아니다(인라인 수식이 렌더 안 된다)
+                if rendered_only and k == "explanation" and "/blanks[" in trail:
+                    continue  # 빈칸 해설은 숨긴 .answers에만 주입된다.
+                if rendered_only and k == "source" and trail != "root/textbookProblems":
+                    continue  # 함정 source는 비표시, 교재 출처 표제만 fmtText로 렌더.
+                if k == "svg" or (rendered_only and k in MATH_BLOB_NON_RENDERED_KEYS):
+                    # SVG는 LaTeX가 아니며, 메타데이터는 독자 수식 화면에 표시되지 않는다.
                     continue
                 for hit in walk(v, trail + "/" + str(k), k):
                     yield hit
@@ -894,7 +929,7 @@ def _blank_same_length(m):
     return " " * (m.end() - m.start())
 
 
-def slash_fraction_spans(span):
+def slash_fraction_spans(span, pattern=None):
     r"""수식 하나 안의 슬래시 분수 [(시작, 끝, 분자, 분모)] — 좌표는 **원문과 같다**. 순수 함수.
 
     ★ **자와 처방이 같은 함수를 쓰게 하려고 갈라냈다** (2026-08-12, 공학수학 세션 보고).
@@ -910,7 +945,7 @@ def slash_fraction_spans(span):
     probe = _MATHRM_GROUP.sub(_blank_same_length,
                               _SUP_SUB_GROUP.sub(_blank_same_length, span or ""))
     out = []
-    for m in _SLASH_FRAC.finditer(probe):
+    for m in (pattern or _SLASH_FRAC).finditer(probe):
         num, den = m.group(1), m.group(2)
         # 단위 판정은 산문·삽화와 **같은 함수**로 한다(위 주석 참조).
         if is_mathrm_unit(num) or is_mathrm_unit(den):
@@ -924,11 +959,11 @@ def slash_fraction_spans(span):
     return out
 
 
-def math_slash_fraction_issues(ch):
+def math_slash_fraction_issues(ch, pattern=None, rendered_only=True):
     """인라인 수식 안에서 `/` 로 쓴 분수. 순수 함수 — 테스트가 직접 부른다."""
     out = []
-    for where, span in iter_math_blobs(ch):
-        for _at, _slash, _end, num, den in slash_fraction_spans(span):
+    for where, span in iter_math_blobs(ch, rendered_only=rendered_only):
+        for _at, _slash, _end, num, den in slash_fraction_spans(span, pattern=pattern):
             out.append(
                 where + ": 수식 안에서 분수를 슬래시로 썼다 — "
                 + repr(_bare(num) + "/" + _bare(den))
@@ -937,6 +972,72 @@ def math_slash_fraction_issues(ch):
                 " · `python tools/fix_math_slash_fraction.py --apply` 가 확실한 것만 고친다): "
                 + repr(span[:60]))
     return out
+
+
+def math_notation_issue_tiers(ch):
+    """Return unchanged legacy errors and only the added parenthesis/Greek hits.
+
+    Subtract as a multiset: two equal tokens in one visible field remain two issues.
+    The public check functions and the slash fixer retain their full detection scope.
+    """
+    legacy = (math_slash_fraction_issues(ch, pattern=_SLASH_FRAC_LEGACY, rendered_only=False)
+              + raw_subscript_issues(ch, pattern=_RAW_SUBSCRIPT_LEGACY, rendered_only=False))
+    full = math_slash_fraction_issues(ch) + raw_subscript_issues(ch)
+    remaining = Counter(legacy)
+    extended = []
+    for issue in full:
+        if remaining[issue]:
+            remaining[issue] -= 1
+        else:
+            extended.append(issue)
+    return legacy, extended
+
+
+MATH_NOTATION_EXTENDED_KEY = "math_notation_extended"
+
+
+def math_notation_extended_declaration_issues(ch_path):
+    """Validate this one opt-in key; a typo or stale chapter ref must not go quiet."""
+    index_path = os.path.join(os.path.dirname(ch_path), "index.json")
+    try:
+        with open(index_path, encoding="utf-8") as fh:
+            index = json.load(fh)
+    except (OSError, ValueError):
+        return []  # 기존 장 lint가 index 유무를 맡고, 선언 없으면 경고 진단이다.
+    out = []
+    registries = {}
+    for registry_name in ("strictChapters", "pendingChapters"):
+        registry = (index or {}).get(registry_name) or {}
+        if not isinstance(registry, dict):
+            out.append(registry_name + ": 객체여야 한다")
+            continue
+        for key in registry:
+            if str(key).startswith("math_notation") and key != MATH_NOTATION_EXTENDED_KEY:
+                out.append(registry_name + ": 알 수 없는 수식 표기 키 " + repr(key))
+        refs = registry.get(MATH_NOTATION_EXTENDED_KEY, [])
+        if not isinstance(refs, list):
+            out.append(registry_name + "." + MATH_NOTATION_EXTENDED_KEY + ": 장 목록이어야 한다")
+            continue
+        registries[registry_name] = refs
+        for ref in refs:
+            if not isinstance(ref, str) or not re.fullmatch(r"ch\d{2}\.json", ref) or not os.path.isfile(
+                os.path.join(os.path.dirname(ch_path), ref)
+            ):
+                out.append(registry_name + "." + MATH_NOTATION_EXTENDED_KEY
+                           + ": 존재하지 않는 장 참조 " + repr(ref))
+    both = ({x for x in registries.get("strictChapters", []) if isinstance(x, str)}
+            & {x for x in registries.get("pendingChapters", []) if isinstance(x, str)})
+    if both:
+        out.append(MATH_NOTATION_EXTENDED_KEY + ": strict/pending 양쪽에 선언된 장 " + repr(sorted(both)))
+    return out
+
+
+def math_notation_lint_messages(ch, ch_path):
+    """Keep all legacy errors; newly covered shapes warn until the chapter opts in."""
+    legacy, extended = math_notation_issue_tiers(ch)
+    tagged = ["[math_notation_extended] " + issue for issue in extended]
+    strict = os.path.basename(ch_path) in subject_strict_chapters(ch_path, MATH_NOTATION_EXTENDED_KEY)
+    return legacy + (tagged if strict else []), ([] if strict else tagged)
 
 
 # ★ 독자 환경 단정 (열린 날 2026-08-01 — 사용자 **재지적**).
@@ -2017,6 +2118,175 @@ def horizontal_step_issues(ch):
     return out
 
 
+# ★ C75. 수식 줄의 못 끊는 조각이 폰 폭 카드를 넘긴다 (열린 날 2026-09-25, APPSOLIDS11-HSCROLL 재발).
+#
+# 재는 것: 유도 카드 `latex` 줄·걸음 `equations` 줄을 뷰어 `.fmath`/`.steq`(19px 등폭) 폭으로 추정해,
+#   뷰어가 끊어 주는 자리(관계 기호 앞 공백 · 쉼표 뒤 공백 · 분수·근호·행렬 같은 인라인블록 경계) 사이의
+#   **가장 넓은 조각**을 폰 카드 폭과 견준다. 조각이 카드보다 넓으면 어느 화면 폭에서든 가로 스크롤이다.
+# 문턱과 근거: 조각 폭 > `FMATH_PHONE_CONTENT_PX`(375px 폰의 `.fmath` 내용 폭, 아래 산식). 응고 ch11 옛 줄
+#   `σx1 = … sin 2θ, \quad τx1y1 = …` 은 쉼표·quad 가 NBSP 로 묶여 조각 282px(DOM 실측) 이라 넘쳤고,
+#   식 하나에 한 줄로 가른 새 줄은 최대 180px 이다(줄마다 새 상자에서 잰 값) — 사용자 캡처가 곧 그 대조다.
+# 못 보는 것: 두 열 선언(`latex` 중첩 배열)은 열 폭이 절반이라 안 잰다 · 문항 풀이틀(`.soltpl`, pre-wrap) ·
+#   글꼴 대체(등폭 스택이 없는 기기) · 뷰어가 아직 못 끊는 자리(`+`·`−` 앞) — 그건 뷰어 몫이다.
+MONO_CHAR_PX = 11.13       # 잰 값: 뷰어 .fmath 19px 등폭에서 'x'×10 = 111.33px (2026-09-25 DOM 실측)
+MATH_SCRIPT_RATIO = 0.68   # 잰 값: σ_{xy} 26.28px = 11.13 + 2 × 0.68 × 11.13 (템플릿 첨자 규격 0.68 과 일치)
+MATH_FRAC_PAD_PX = 10.0    # 잰 값: \frac{σx+σy}{2} 61.6px − 분자 홀로 51.6px
+MATH_SQRT_PAD_PX = 16.3    # 잰 값: \sqrt{x} 27.4px − x 11.1px (근호 글리프 + 여백)
+MATH_HANGUL_PX = 20.0      # 잰 값: 등폭 스택에서 '가나다' 60px
+# 계산값: 375(폰) − .app-layout 16×2(≤960 규칙) − .shell 16×2(≤840) − .fcard 18×2 + 테두리 1×2(≤840)
+#         − .fmath 16×2 = 241. 템플릿의 그 네 규칙이 바뀌면 이 값도 다시 계산한다.
+FMATH_PHONE_CONTENT_PX = 241
+_MATH_FUNC_NAMES = {"cos", "sin", "tan", "ln", "log", "exp", "max", "min", "sec", "csc", "cot",
+                    "sinh", "cosh", "tanh", "det", "lim", "arg", "deg"}
+_MATH_WRAP_NAMES = {"text", "mathrm", "mathbf", "mathcal", "mathsf", "vec", "hat", "bar", "dot", "ddot",
+                    "overline", "underline", "tilde", "hl"}
+_MATH_ATOMIC_NAMES = {"frac", "dfrac", "sqrt"}
+_MATH_RELATION_GLYPH = "=<>≤≥≈≅"
+_MATH_RELATION_NAMES = {"le", "ge", "approx", "leq", "geq", "cong"}
+
+
+def _math_group(s, i):
+    """`s[i] == '{'` 인 자리의 짝 닫힘까지 — (안쪽 문자열, 닫힘 다음 인덱스). 짝이 없으면 끝까지."""
+    depth, j = 0, i
+    while j < len(s):
+        if s[j] == "{":
+            depth += 1
+        elif s[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return s[i + 1:j], j + 1
+        j += 1
+    return s[i + 1:], len(s)
+
+
+def _math_atoms(s):
+    """LaTeX 한 줄을 (폭 px, 앞에서 끊을 수 있나) 원자 목록으로 편다 — 뷰어 `breakBeforeEquals` 와 같은 자리에서만
+    끊는다(관계 기호 앞 공백 · 쉼표 뒤 공백 · 인라인블록 경계). 재귀는 첨자·꾸밈 명령 안만."""
+    atoms, i, n = [], 0, len(s)
+    brk = False                      # 다음 원자 앞에서 끊을 수 있나
+
+    def push(width, breakable=False):
+        atoms.append((width, breakable))
+
+    while i < n:
+        c = s[i]
+        if c == "\\":
+            m = re.match(r"\\([A-Za-z]+|.)", s[i:])
+            name = m.group(1) if m else ""
+            i += len(m.group(0)) if m else 1
+            if name == "begin":
+                inner, j = _math_group(s, i) if i < n and s[i] == "{" else ("", i)
+                end = s.find("\\end{" + inner + "}", j)
+                body = s[j:end if end >= 0 else n]
+                i = (end + len("\\end{" + inner + "}")) if end >= 0 else n
+                rows = [r for r in re.split(r"\\\\", body) if r.strip()]
+                width = max([sum(w for w, _b in _math_atoms(cell)) + MONO_CHAR_PX * 0.8
+                             for r in rows for cell in [r]] or [0.0])
+                push(width, True)
+                brk = True
+                continue
+            if name in _MATH_ATOMIC_NAMES:
+                parts = []
+                for _k in range(2 if name != "sqrt" else 1):
+                    if i < n and s[i] == "{":
+                        inner, i = _math_group(s, i)
+                        parts.append(sum(w for w, _b in _math_atoms(inner)))
+                    else:
+                        parts.append(MONO_CHAR_PX)
+                        i += 1
+                pad = MATH_SQRT_PAD_PX if name == "sqrt" else MATH_FRAC_PAD_PX
+                push(max(parts) + pad, True)
+                brk = True
+                continue
+            if name in _MATH_WRAP_NAMES:
+                if i < n and s[i] == "{":
+                    inner, i = _math_group(s, i)
+                    push(sum(w for w, _b in _math_atoms(inner)), brk)
+                brk = False
+                continue
+            if name in ("left", "right"):
+                continue
+            if name in ("quad", "qquad", ";", ":"):
+                push(MONO_CHAR_PX, brk)
+                brk = False
+                continue
+            if name in (",", "!"):
+                push(MONO_CHAR_PX * 0.1, brk)
+                brk = False
+                continue
+            if name in _MATH_FUNC_NAMES:
+                push(MONO_CHAR_PX * len(name), brk)
+            else:
+                push(MONO_CHAR_PX, brk)          # 그리스 문자·연산자·관계 기호 = 글리프 하나
+            brk = False
+            continue
+        if c in "_^":
+            i += 1
+            if i < n and s[i] == "{":
+                inner, i = _math_group(s, i)
+            else:
+                inner, i = s[i:i + 1], i + 1
+            push(MATH_SCRIPT_RATIO * sum(w for w, _b in _math_atoms(inner)), brk)
+            brk = False
+            continue
+        if c in "{}":
+            i += 1
+            continue
+        if c == " ":
+            j = i
+            while j < n and s[j] == " ":
+                j += 1
+            rel_next = (j < n and (s[j] in _MATH_RELATION_GLYPH
+                                   or re.match(r"\\(" + "|".join(_MATH_RELATION_NAMES) + r")\b", s[j:])))
+            after_comma = i > 0 and s[i - 1] == ","
+            push(MONO_CHAR_PX, brk or after_comma)  # 쉼표 뒤 공백은 그 공백 앞에서 끊긴다(뷰어 2026-09-25)
+            brk = bool(rel_next)                     # 관계 기호 앞 공백은 기호 앞에서 끊긴다
+            i = j
+            continue
+        m = re.match(r"___[A-Z0-9_]+___", s[i:])
+        if m:
+            push(MONO_CHAR_PX * 3, brk)
+            brk = False
+            i += len(m.group(0))
+            continue
+        push(MATH_HANGUL_PX if "가" <= c <= "힣" else MONO_CHAR_PX, brk)
+        brk = False
+        i += 1
+    return atoms
+
+
+def math_line_widest_segment_px(s):
+    """뷰어가 끊어 주는 자리 사이의 가장 넓은 조각(px 추정). 순수 함수 — 테스트가 직접 부른다."""
+    widest = run = 0.0
+    for width, breakable in _math_atoms(str(s or "")):
+        if breakable:
+            widest = max(widest, run)
+            run = 0.0
+        run += width
+    return max(widest, run)
+
+
+def formula_line_too_wide_issues(ch):
+    """폰 카드 폭을 넘기는 못 끊는 수식 조각. 순수 함수 — 테스트가 직접 부른다."""
+    out = []
+
+    def look(where, line):
+        px = math_line_widest_segment_px(line)
+        if px > FMATH_PHONE_CONTENT_PX:
+            out.append(where + ": 못 끊는 조각이 폰 카드 폭을 넘긴다(추정 %dpx > %dpx) — 식 하나에 한 줄로"
+                       " 가르거나 긴 항을 분수·괄호로 묶을 것: %r" % (round(px), FMATH_PHONE_CONTENT_PX, line[:70]))
+
+    for formula in (ch.get("derivation") or {}).get("formulas") or []:
+        fid = "formula " + str(formula.get("id"))
+        for r, row in enumerate(latex_rows(formula.get("latex")), 1):
+            if len(row) == 1:                     # 두 열 선언은 열 폭이 절반이라 안 잰다(못 보는 것)
+                look(fid + "/latex[" + str(r) + "]", row[0])
+        for i, step in enumerate(formula.get("derivationSteps") or [], 1):
+            for eq in step_equations(step):
+                look(fid + "/step[" + str(i) + "]", eq)
+    return out
+
+
 # ★ C1. SI 접두어를 쓸 수 있는데 기본단위로 풀어 씀 (열린 날 2026-07-30 — 사용자 3회째 부류).
 #
 # 사용자 원문: *[발화 생략]*
@@ -2259,11 +2529,18 @@ def prompt_ramp_issues(ch, declared):
       길이는 이미 제 자가 있다 — `audit_convention_drift --check=ox-length-tell`.
       ★ 판정은 **데이터가 스스로 선언한 것**(`oxCorrect`)으로 한다. id 가 `-ox` 로 시작하는지를
         보면 공통 코드가 이름 규약을 알게 되고, 그건 이 리포가 반복해 다친 자리다.
+
+    ★★ **첫 칸 1 은 화면의 첫 문항에만 건다** (2026-09-19 사용자 판정 C8 [발화 생략]).
+      연습(`practice`)을 문제 탭 머리 「빈칸 풀이」로 합친 뒤에는 화면 순서가 practice → problems 라,
+      컬렉션마다 첫 칸 1 을 요구하면 문제 쪽에 한글 준비 문항이 따로 남아 1·2 → 1 → 4 로 내려갔다
+      뛰어올랐다(자 `ramp-skip` 7건). practice 가 있으면 problems 첫 문항에는 첫 칸 1 을 걸지 않는다
+      (문제 쪽이 다시 1 부터 1·2·3·4 로 오르는 장은 그대로 둔다 — 판정 범위는 건너뛰기까지다).
     """
     if ch.get("examMode"):
         return []
     out = []
     lang_axis = declared == "en"          # 과목이 'ko' 면 언어 축이 접힌다(위 주석)
+    seen_by = {}
     for coll in PROMPT_COLLECTIONS:
         items = [i for i in (ch.get(coll) or []) if isinstance(i, dict)
                  and "oxCorrect" not in i]
@@ -2304,14 +2581,19 @@ def prompt_ramp_issues(ch, declared):
                            + str(chars) + "자다 — 상한 " + str(spec["chars"]) + "자")
         if not seen:
             continue
-        if seen[0][2] != 1:
-            out.append(coll + ": 첫 문항 " + seen[0][1] + " 의 ramp 가 " + str(seen[0][2])
-                       + " 다 — **첫 칸은 부담이 0에 가까워야 한다**(ramp 1)")
+        seen_by[coll] = seen
         for (_, prev_id, prev), (_, cur_id, cur) in zip(seen, seen[1:]):
             if cur < prev:
                 out.append(coll + ": ramp 가 역행한다 — " + prev_id + "(" + str(prev) + ") 다음에 "
                            + cur_id + "(" + str(cur) + "). **번호를 따라 자라야 한다**"
                            " (순서를 바꾸거나 칸을 다시 매길 것)")
+    for coll, seen in seen_by.items():
+        first_id, first = seen[0][1], seen[0][2]
+        if coll == "problems" and seen_by.get("practice"):
+            continue      # 빈칸 풀이가 첫 칸을 맡는다. 이음의 건너뛰기는 자 `ramp-skip` 이 잰다
+        if first != 1:
+            out.append(coll + ": 첫 문항 " + first_id + " 의 ramp 가 " + str(first)
+                       + " 다 — **첫 칸은 부담이 0에 가까워야 한다**(ramp 1)")
     return out
 
 
@@ -2734,15 +3016,50 @@ _SVG_NUM = re.compile(r"\d+(?:[.,]\d+)*")
 def iter_chapter_diagrams(node, trail="root"):
     """챕터 안의 모든 diagram 을 (위치, dict) 로 흘린다 — 컬렉션을 열거하지 않는다."""
     if isinstance(node, dict):
-        for dg in node.get("diagrams") or []:
+        for dg in (node.get("diagrams") or []) + (node.get("solutionDiagrams") or []):
             if isinstance(dg, dict):
                 yield str(dg.get("id") or trail), dg
         for key, value in node.items():
-            if key != "diagrams":
+            if key not in ("diagrams", "solutionDiagrams"):
                 yield from iter_chapter_diagrams(value, trail + "/" + str(key))
     elif isinstance(node, list):
         for i, value in enumerate(node):
             yield from iter_chapter_diagrams(value, trail + "[" + str(i) + "]")
+
+
+def solution_diagram_issues(ch):
+    """문제의 해설 전용 그림이 지문 그림과 같은 최소 계약을 지키는지 돌려준다.
+
+    `solutionDiagrams`는 접기 안에만 보일 뿐 SVG 자체는 같은 렌더·감사 경로를 탄다. id가
+    없거나 지문 그림과 id를 겹치면 PNG 증거·변경점 대조가 다른 그림을 가리킬 수 있으므로
+    데이터 린트에서 먼저 막는다.
+    """
+    out = []
+    for q in ch.get("problems") or []:
+        pool = q.get("solutionDiagrams")
+        if pool is None:
+            continue
+        owner = "problem " + str(q.get("id") or "?") + ".solutionDiagrams"
+        if not isinstance(pool, list):
+            out.append(owner + " 는 배열이어야 한다")
+            continue
+        ids = {str(d.get("id")) for d in (q.get("diagrams") or [])
+               if isinstance(d, dict) and str(d.get("id") or "").strip()}
+        for idx, diagram in enumerate(pool):
+            where = owner + "[" + str(idx) + "]"
+            if not isinstance(diagram, dict):
+                out.append(where + " 는 그림 객체여야 한다")
+                continue
+            fig_id = str(diagram.get("id") or "").strip()
+            if not fig_id:
+                out.append(where + ".id 가 비어 있다")
+            elif fig_id in ids:
+                out.append(where + ".id 가 지문/앞선 해설 그림과 겹친다 — " + repr(fig_id))
+            else:
+                ids.add(fig_id)
+            if not str(diagram.get("svg") or "").strip():
+                out.append(where + ".svg 가 비어 있다")
+    return out
 
 
 # ★ C13. **답 슬롯의 값이 같은 삽화에 이미 적혀 있다** (열린 날 2026-08-01, 사용자 지적).
@@ -7779,6 +8096,35 @@ def card_overlap_declared(ch_path):
     return os.path.basename(ch_path) in subject_strict_chapters(ch_path, "card_overlap")
 
 
+def duplicate_key_issues(path):
+    """한 객체에 같은 키가 둘인 자리(`json` 은 앞 값을 조용히 버린다).
+
+    재는 것: 장 파일 원문을 `object_pairs_hook` 으로 다시 읽어 객체마다 겹친 키 이름.
+    문턱: 1건이면 결함 — 앞 값이 화면에서 사라진다(2026-09-25 changeNote 3건, 손 편집이 기존 키 옆에 새 키를 넣었다).
+    못 보는 것: 줄 번호(`python tools/audit_stray_keys.py` 가 짚는다) · 파일이 없거나 JSON 이 깨진 경우(다른 검사 몫).
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return []
+    found = []
+
+    def hook(pairs):
+        seen = set()
+        for k, _ in pairs:
+            if k in seen and k not in found:
+                found.append(k)
+            seen.add(k)
+        return dict(pairs)
+    try:
+        json.loads(text, object_pairs_hook=hook)
+    except ValueError:
+        return []
+    return ["[duplicate_key] 한 객체에 '" + k + "' 키가 둘이다 — 앞 값이 버려진다(둘을 한 값으로 합칠 것 · "
+            "줄 번호는 python tools/audit_stray_keys.py)" for k in found]
+
+
 def lint_chapter(ch, ch_path):
     errors, warnings = [], []
     # 단위 판정 방식은 **과목이 선언**한다(위 UNIT_NOTATION_MODES 주석). 챕터마다 다시 읽어
@@ -7923,6 +8269,9 @@ def lint_chapter(ch, ch_path):
     # C27. 계산 단계를 가로로 이어 붙였다 (2026-08-04, R-21·R-50 — 위 주석이 정본).
     (errors if is_strict_chapter(ch_path, (), "horizontal_step")
      else warnings).extend(horizontal_step_issues(ch))
+    # C75. 못 끊는 수식 조각이 폰 카드 폭을 넘긴다 (2026-09-25, APPSOLIDS11-HSCROLL — 위 주석이 정본).
+    (errors if is_strict_chapter(ch_path, (), "formula_line_wide")
+     else warnings).extend(formula_line_too_wide_issues(ch))
     # C30. 문장을 수식으로 끝내고 마침표를 붙였다 (2026-08-04, R-49 — 위 주석이 정본).
     (errors if is_strict_chapter(ch_path, (), "math_sentence_end")
      else warnings).extend(math_sentence_end_issues(ch))
@@ -7944,10 +8293,16 @@ def lint_chapter(ch, ch_path):
     errors.extend(derivation_section_order_issues(ch))
     errors.extend(reader_environment_issues(ch))
     errors.extend(unsupported_math_delimiter_issues(ch))
+    # E19 — 출력 검사: 뷰어 렌더 함수로 그린 글자에 LaTeX 가 남나(그 모듈 독스트링이 정본).
+    from buildlib.checks_render_output import render_leak_issues  # 순환 임포트 회피
+    errors.extend(render_leak_issues(ch))
     errors.extend(table_math_pipe_issues(ch))
     errors.extend(citation_leak_issues(ch))
     errors.extend(production_file_leak_issues(ch))
-    errors.extend(math_slash_fraction_issues(ch))
+    errors.extend(math_notation_extended_declaration_issues(ch_path))
+    math_errors, math_warnings = math_notation_lint_messages(ch, ch_path)
+    errors.extend(math_errors)
+    warnings.extend(math_warnings)
     errors.extend(split_inline_subscript_issues(ch))
     # C71·C72 — 새 키라 기본 error(면제는 그 과목 strictWaivers 에 사유와 함께).
     (errors if is_strict_chapter(ch_path, (), "quote_pair")
@@ -8018,7 +8373,7 @@ def lint_chapter(ch, ch_path):
     errors.extend(empty_dy_reset_issues(ch))
     # C12 — 첨자를 아예 안 쓴 `h3` 꼴. 다른 첨자 검사는 전부 `_`·`^` 가 **있는** 것만 봐서
     # 이 부류는 여러 세션을 그대로 살아남았다(사용자 재지적 2026-08-01).
-    errors.extend(raw_subscript_issues(ch))
+    # raw_subscript_issues도 위 math_notation_issue_tiers에서 기존/신규로 분리했다.
     # C46 — 첨자에 한글. **지금 데이터가 0건이라 곧바로 error 로 연다**(0건일 때 켜는 것이
     # 이 리포의 정석이다 — 경고로 열면 다시 들어온 것이 경고 더미에 묻힌다).
     # 판정선과 사용자 원문은 위 `hangul_subscript_issues` 주석이 정본.
@@ -8140,6 +8495,22 @@ def lint_chapter(ch, ch_path):
     (errors if is_strict_chapter(ch_path, (), "axis_gap") else warnings).extend(
         m for fid, dg in iter_chapter_diagrams(ch)
         for m in axis_name_gap_issues(fid, str(dg.get("svg") or "")))
+    # 전지 판 간격(E15, 위 `checks_svg.battery_plate_gap_issues` 주석이 정본). 새 검사라
+    # 전 과목 error 로 박으면 손으로 그린 옛 전지가 있는 과목의 빌드가 통째로 멈춘다 — 승격은
+    # 과목별 선언뿐(C36·C37·axis_gap 과 같은 이유).
+    (errors if is_strict_chapter(ch_path, (), "battery_gap") else warnings).extend(
+        m for fid, dg in iter_chapter_diagrams(ch)
+        for m in battery_plate_gap_issues(fid, str(dg.get("svg") or "")))
+    # 회로 소자 비율(E43)·경계 점선(E22) — 위 `checks_svg.circuit_part_ratio_issues`·`boundary_dashed_issues` 주석이 정본.
+    # 새 키라 전 과목 기본 error — 아직 다시 찍지 않은 장은 과목 index.json 의 pendingChapters·strictWaivers 로 선언했다.
+    (errors if is_strict_chapter(ch_path, (), "circuit_part") else warnings).extend(
+        m for fid, dg in iter_chapter_diagrams(ch)
+        for m in circuit_part_ratio_issues(fid, str(dg.get("svg") or "")))
+    (errors if is_strict_chapter(ch_path, (), "boundary_dashed") else warnings).extend(
+        m for fid, dg in iter_chapter_diagrams(ch)
+        for m in boundary_dashed_issues(fid, str(dg.get("svg") or "")))
+    (errors if is_strict_chapter(ch_path, (), "duplicate_key") else warnings).extend(
+        duplicate_key_issues(ch_path))
     for prob in (ch.get("problems") or []):
         where = "problems[" + str(prob.get("id", "?")) + "]"
         spec_out.extend(where + ": " + m for m in answer_slot_count_mismatch(prob))
@@ -8340,6 +8711,7 @@ def lint_chapter(ch, ch_path):
         mode = q.get("figureMode")
         if mode not in ("given", "hint"):
             errors.append(q["id"] + ": figureMode 미선언 — 'given'(해석에 필수) 또는 'hint'(모델링 연습) 중 하나를 명시할 것")
+    errors.extend(solution_diagram_issues(ch))
 
     # ★ 물음의 단위 ↔ 답의 단위 (2026-07-21 신설 → **2026-07-30 방향 반전**).
     #
@@ -8650,6 +9022,11 @@ def lint_chapter(ch, ch_path):
         for why in digit_subscript_ratio_hits(dg.get("id", "?"), dg.get("svg", "") or ""):
             (errors if is_strict_chapter(ch_path, (), "digit_subscript")
              else warnings).append(why)
+        # C47-c. 라벨의 **날것 첨자**(`σx1`·`τx1y1`) — 근거는 `checks_svg.FLAT_SUBSCRIPT_RE` 주석이
+        # 정본. 새 키라 기본 error 다(2026-09-25 APPSOLIDS11-SUBSCRIPT, 재발).
+        for why in flat_subscript_hits(dg.get("id", "?"), dg.get("svg", "") or ""):
+            (errors if is_strict_chapter(ch_path, (), "flat_subscript")
+             else warnings).append(why)
         # C34. 점선이 실선을 덮었는가(위 `dashed_over_solid_issues` 주석이 정본).
         for why in dashed_over_solid_issues(dg.get("svg", "")):
             (errors if is_strict_chapter(ch_path, (), "dash_over_solid")
@@ -8694,6 +9071,8 @@ def lint_chapter(ch, ch_path):
                           for t in missing_targets(dg.get("svg", ""), motion))
             errors.extend(fid + " [motion]: " + why
                           for why in grow_target_issues(dg.get("svg", ""), motion))
+            errors.extend(fid + " [motion]: " + why
+                          for why in shape_target_issues(dg.get("svg", ""), motion))
             for idx, frame_svg in expand_frames(dg.get("svg", ""), motion):
                 check_svg(fid + " [프레임 %d]" % idx, frame_svg, errors, warnings,
                           layout_strict=layout_strict,

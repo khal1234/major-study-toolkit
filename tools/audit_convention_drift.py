@@ -775,7 +775,7 @@ def _collection_text(chapter, names):
     return "\n".join(out)
 
 
-CURRENT_FOLDER = []      # main() 이 과목마다 갈아 끼운다 — 이 검사만 읽는다
+CURRENT_FOLDER = []      # main() 이 과목마다 갈아 끼운다 — 이 검사와 repeated-variable-explanation 이 읽는다
 _ACCUM = {"folder": None, "theory": ""}
 
 
@@ -1713,9 +1713,856 @@ def check_textbook_problems(chapter, chapter_name):
     return []
 
 
+PROMPT_PADDED_NUM = re.compile(r"(?<![\d.])(\d+\.\d*?0)(?![\d])")
+
+
+def check_prompt_padded_zero(chapter, chapter_name):
+    """문항 지문의 주어진 값에 유효숫자용 끝자리 0 이 붙었나 — 후보(2026-09-19).
+
+    재는 것: `practice`·`problems` 의 `prompt`(문자열·{ko,en} 둘 다)에서 소수점 뒤가 0 으로 끝나는 수
+      (`2.00`·`20.0`·`0.500`). 수식 `\\(…\\)` 안도 센다.
+    왜: 사용자 *[발화 생략]*. 지문은 교재처럼 적고 유효숫자는 풀이·답에서만.
+    못 보는 것: 삽화 라벨의 같은 값(지문을 고치면 그림도 같이 본다) · 교재 원문이 실제로 0 을 붙인 값
+      (그때는 사람이 되돌린다) · 풀이틀·빈칸.
+    """
+    out = []
+    for coll in ("practice", "problems"):
+        for item in chapter.get(coll) or []:
+            if not isinstance(item, dict):
+                continue
+            p = item.get("prompt")
+            texts = list(p.values()) if isinstance(p, dict) else [p]
+            hits = []
+            for t in texts:
+                hits += PROMPT_PADDED_NUM.findall(str(t or ""))
+            if hits:
+                out.append((chapter_name, coll + "[" + str(item.get("id") or "?") + "]",
+                            "지문 값에 끝자리 0: " + ", ".join(sorted(set(hits)))
+                            + " — 지문은 교재처럼(2 kg/s), 유효숫자는 풀이·답에서"))
+    return out
+
+
+FIGURE_DECODE = re.compile(r"그림(?:의|에서|에 있는|속)\s?[^.。\n]{0,30}(?:표시|선|화살표|색|빗금|점선|기호)"
+                           r"[^.。\n]{0,20}(?:뜻합니다|나타냅니다|가리킵니다|의미합니다)")
+_DECODE_SKIP_KEYS = {"svg", "noDiagramReason", "lintWaivers", "changeNote", "sourceRef", "reason"}
+
+
+def check_figure_decode(chapter, chapter_name):
+    """본문·유도가 그림의 표시를 풀어 말하나(「그림의 대각선 표시는 … 뜻합니다」) — 후보(2026-09-19).
+
+    재는 것: 장의 산문 문자열 전부(삽화 svg·안 그린 사유·면제·사유·출처는 뺀다)에서 「그림의/에서 … 표시·선·
+      화살표·색·빗금·점선·기호 … 뜻합니다·나타냅니다·가리킵니다·의미합니다」.
+    왜: 사용자 [발화 생략]·「삽화 보면 바로 이해가 되는걸
+      왜 또 산문으로」. 그림의 표시는 그림이 말한다 — 본문은 읽는 법·왜·그래서 무엇을 하나를 쓴다.
+    못 보는 것: 표시 이름 없이 그림 내용을 되풀이하는 문장(「경계로는 열이 넘지 않습니다」 같은 라벨 되읊기)은
+      라벨과 문장을 맞대야 해서 이 자가 못 본다 — 그 축은 `caption-echo`·사람 판정.
+    """
+    out = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k not in _DECODE_SKIP_KEYS:
+                    walk(v, path + "." + k)
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, "%s[%d]" % (path, i))
+        elif isinstance(node, str):
+            m = FIGURE_DECODE.search(node)
+            if m:
+                out.append((chapter_name, path.lstrip("."), "그림 표시를 풀어 말한다: 「" + m.group(0)
+                            + "」 — 그림이 말하는 것은 걷고 왜·그래서만 남긴다"))
+    walk(chapter, "")
+    return out
+
+
+def check_ramp_skip(chapter, chapter_name):
+    """지문 램프가 칸을 건너뛰나(1 → 4) — 후보(2026-09-19).
+
+    재는 것: `practice`·`problems` 각각에서 번호 순 `ramp` 의 이웃 차. 2 이상이면 후보 1건.
+      참/거짓 문항(`oxCorrect`)·시험 모드 장은 C54 와 같이 뺀다.
+    왜: 사용자(응용열 ch07 문제 탭) [발화 생략]. C54 는 역행만
+      막고 건너뛰기는 통과시켰다 — 램프의 뜻(낯선 것을 한 번에 하나씩)은 건너뛰기에서 깨진다.
+      2026-09-19 C8: 두 컬렉션 사이의 이음(빈칸 풀이 끝 → 문제 첫 칸)도 잰다 — 화면에선 한 탭에 이어진다.
+    못 보는 것: 칸 선언이 실제 지문과 맞는지(C54 가 본다).
+    """
+    if chapter.get("examMode"):
+        return []
+    out = []
+    seqs = {}
+    for coll in ("practice", "problems"):
+        seq = [(i.get("id"), i.get("ramp")) for i in (chapter.get(coll) or [])
+               if isinstance(i, dict) and "oxCorrect" not in i and isinstance(i.get("ramp"), int)]
+        seqs[coll] = seq
+        for (pid, a), (cid, b) in zip(seq, seq[1:]):
+            if b - a >= 2:
+                out.append((chapter_name, coll, "램프가 칸을 건너뛴다 — %s(%d) 다음 %s(%d)" % (pid, a, cid, b)))
+    if seqs["practice"] and seqs["problems"]:
+        (pid, a), (cid, b) = seqs["practice"][-1], seqs["problems"][0]
+        if b - a >= 2:
+            out.append((chapter_name, "practice→problems",
+                        "램프가 빈칸 풀이에서 문제로 넘어가며 칸을 건너뛴다 — %s(%d) 다음 %s(%d)" % (pid, a, cid, b)))
+    return out
+
+
+BLANK_GIVEN_WAIVER_KEY = "blank-given-in-prompt"   # 선택형 문항이 사유를 적는 `lintWaivers` 키 — 자 이름과 같게
+
+
+def check_blank_given_in_prompt(chapter, chapter_name):
+    """빈칸 답이 지문에 이미 적혀 있나 — 후보(2026-09-20).
+
+    재는 것: `blanks[].answer` 가운데 숫자가 없는 낱말 답이 그 문항 `prompt` 에 글자 그대로 있는가.
+    왜: 사용자(응용열 ch07 p04) [발화 생략] —
+      지문이 「엑서지 손실을 구하시오」라고 이미 이름을 준 칸이다. 빈칸은 생각할 자리여야 한다.
+    못 보는 것: 동의어·조사 붙은 꼴(「손실로」)은 잡지만 다른 낱말로 적힌 같은 뜻 · 숫자 답(수는 지문 값과 겹쳐도 된다).
+    ★ **닫는 법 둘**(2026-09-24 큐 (36)) — 칸을 걷거나 지문을 고치는 것이 기본이다. 다만 「A 와 B 중 고르시오」처럼
+      지문이 **선택지를 내놓고 고르게 하는** 문항은 답이 선택지 하나라 글자가 겹치는 것이 설계다(생각할 자리는
+      「고르기」). 그런 문항만 그 문항의 `lintWaivers` 에 `BLANK_GIVEN_WAIVER_KEY` 로 사유를 적는다 — 사유 없는
+      줄은 면제가 아니다(`calculator-free-first-rung` 과 같은 장치). 실측: 첫 12건 중 선택형이 대부분이었다.
+    """
+    num = re.compile(r"\d")
+    out = []
+    for coll in ("practice", "problems"):
+        for item in chapter.get(coll) or []:
+            if not isinstance(item, dict):
+                continue
+            lw = item.get("lintWaivers") or {}
+            if isinstance(lw, list):   # 빌드 검사의 목록 꼴 `[{check, target, reason}]` 도 받는다
+                lw = {w.get("check"): w.get("reason") for w in lw if isinstance(w, dict)}
+            if str(lw.get(BLANK_GIVEN_WAIVER_KEY) or "").strip():
+                continue
+            p = item.get("prompt")
+            prompt = " ".join(p.values()) if isinstance(p, dict) else str(p or "")
+            for b in item.get("blanks") or []:
+                ans = str((b or {}).get("answer") or "").strip()
+                if ans and not num.search(ans) and len(ans) >= 2 and ans in prompt:
+                    out.append((chapter_name, "%s[%s].%s" % (coll, item.get("id") or "?", b.get("id") or "?"),
+                                "빈칸 답 「%s」이 지문에 이미 있다 — 칸을 걷거나 지문이 안 준 것을 묻는다" % ans))
+    return out
+
+
+PREREQ_MAX_SENTENCES = 2   # 「이 정도는 알지?」 — 한두 문장 + 링크(content.md 09-18 판정)
+
+
+def check_prereq_heavy(chapter, chapter_name):
+    """장 도입부 「미리 알아야 할 것」이 두 문장을 넘나 — 후보(2026-09-20).
+
+    재는 것: `chapterIntro.prerequisite` 의 「…니다.」 문장 수와 단락 수.
+    문턱: 문장 `PREREQ_MAX_SENTENCES` 초과 또는 단락 둘 이상.
+    왜: 사용자(응용열 ch07) [발화 생략] — 네 단락에 예시 계산까지 있었다. 09-18 판정
+      「이전 과목들이 한 부분이면 이정돈알지? 정도로 가볍게」가 쓰는 순간에는 안 막혔다.
+    못 보는 것: 앞 학기 과목이 그 개념을 실제로 다뤘는지(그렇지 않으면 길어도 정당하다 — 사람이 가른다) ·
+      2-1 과목(복학생 독자라 더 친절해도 된다 — 후보로만 본다).
+    """
+    pre = str((chapter.get("chapterIntro") or {}).get("prerequisite") or "")
+    n = len(ANSWER_SENTENCE.findall(pre))
+    paras = len([p for p in re.split(r"\n\s*\n", pre) if p.strip()])
+    if n > PREREQ_MAX_SENTENCES or paras > 1:
+        return [(chapter_name, "chapterIntro.prerequisite",
+                 "문장 %d개 · 단락 %d개 — 앞 과목이 다룬 것이면 한두 문장 + 과목 간 링크로" % (n, paras))]
+    return []
+
+
+ANSWER_SENTENCE = re.compile(r"(?:니다|요)[.。]")
+ANSWER_SENTENCE_MAX = 1   # 한 줄(라벨 하나)에 문장 하나 — 사용자 [발화 생략]
+
+
+def check_answer_prose(chapter, chapter_name):
+    """문제 답이 라벨 줄이 아니라 산문 문단인가 — 후보(2026-09-20).
+
+    재는 것: `problems[].answer` 를 빈 줄·(a)(b) 로 가른 조각마다 「…니다.」 문장 수. 조각 하나가 두 문장 이상이면 후보.
+    문턱: 한 조각에 문장 하나(`ANSWER_SENTENCE_MAX`). 라벨 꼴 `변위: … \\n\\n 크기: …` 은 조각마다 한 문장이라 통과한다.
+    왜: 2026-09-13 「답과 풀이는 담백하게」 → 공수2 ch07 만 라벨 꼴로 고치고 「다른 과목은 부류 소급 대상」으로 남겼다
+      (`data/공학수학 2/2026-09-13-뷰어-회차-폐지.workorder.md` 43행). 자가 없어 소급이 안 됐고 2026-09-20 재지적
+      「정답이 왜캐 구구절절해? … 답 구구절절 하지 말라 했잖아」.
+    못 보는 것: 종결이 「다.」 평서·수식으로 끝나는 문장 · 한 문장이지만 쉼표로 늘어진 답.
+    """
+    split = re.compile(r"\n\s*\n|(?=\([a-z]\)\s)")
+    out = []
+    for item in chapter.get("problems") or []:
+        if not isinstance(item, dict) or "oxCorrect" in item:
+            continue
+        ans = item.get("answer")
+        texts = list(ans.values()) if isinstance(ans, dict) else [ans]
+        worst = 0
+        for t in texts:
+            for part in split.split(str(t or "")):
+                worst = max(worst, len(ANSWER_SENTENCE.findall(part)))
+        if worst > ANSWER_SENTENCE_MAX:
+            out.append((chapter_name, "problems[%s]" % (item.get("id") or "?"),
+                        "답 한 조각에 문장 %d개 — `라벨: 값` 줄로 나누고 설명은 풀이로" % worst))
+    return out
+
+
+REPEAT_VAR_MIN = 3   # 고른 값 — 사용자 승인 G7 제안(2026-09-24). 선수 과목 유도 카드 셋 이상이 푼 기호는 「이미 익숙하다」로 본다
+_PREREQ_VAR_CACHE = {}
+REPEAT_SEEN = {"cards": 0, "keys": 0}   # 분모 — 이 과목들에서 본 유도 카드·기호 수(0건이 「못 봤다」가 아님을 보인다)
+
+
+def _norm_symbol(key):
+    return re.sub(r"\s+", "", str(key))
+
+
+def _derivation_cards(chapter):
+    """유도 카드 목록 — 장 JSON 은 `derivation.formulas` 에 둔다(`check_derivation_jump` 와 같은 자리)."""
+    d = chapter.get("derivation")
+    cards = d.get("formulas") if isinstance(d, dict) else d
+    return [c for c in (cards or []) if isinstance(c, dict) and isinstance(c.get("variables"), dict)]
+
+
+def _derivation_variable_counts(folder):
+    """한 과목 모든 장의 유도 카드 `variables` 키 → 그 기호를 푼 카드 수. 과목마다 한 번만 센다."""
+    if folder in _PREREQ_VAR_CACHE:
+        return _PREREQ_VAR_CACHE[folder]
+    counts = {}
+    if os.path.isdir(folder):
+        for name in chapter_files(folder):
+            ch = blob(os.path.join(folder, name)) or {}
+            for card in _derivation_cards(ch):
+                for key in {_norm_symbol(k) for k in card["variables"]}:
+                    counts[key] = counts.get(key, 0) + 1
+    _PREREQ_VAR_CACHE[folder] = counts
+    return counts
+
+
+def check_repeated_variable_explanation(chapter, chapter_name):
+    """선수 과목에서 여러 번 풀린 기호를 이 과목 유도 카드가 또 푸나 — 후보(2026-09-24 G7).
+
+    재는 것: 이 과목 `index.json` 의 `prerequisiteSubjects` 각 과목에서 유도 카드 `variables` 키(공백 제거)를
+      몇 장의 카드가 풀었는지 세고, 이 장 유도 카드의 `variables` 키 가운데 그 수가 문턱 이상인 것.
+    문턱: `REPEAT_VAR_MIN`(3) — 고른 값. 사용자 지적 [발화 생략](2026-09-20 G4) ·
+      규칙의 첫 자리는 2026-07-23 ch02.fixes.md D2 「일정 횟수 이상 나온 기호는 빼고」.
+    못 보는 것: 같은 뜻을 다른 LaTeX 로 쓴 기호(`\\dot m` 과 `\\dot{m}`) · 같은 과목 앞 장의 반복 ·
+      선언이 없는 과목(대상 아님, 0건). 기호를 빼야 하는지는 사람이 본다 — 이 장에서 뜻이 바뀌면 다시 푸는 게 맞다.
+    """
+    folder = CURRENT_FOLDER[0] if CURRENT_FOLDER else ""
+    idx = blob(os.path.join(folder, "index.json")) or {}
+    prereqs = idx.get("prerequisiteSubjects") or []
+    if not prereqs:
+        return []
+    data_root = os.path.dirname(folder)
+    seen = {}
+    for name in prereqs:
+        for key, n in _derivation_variable_counts(os.path.join(data_root, name)).items():
+            if n >= REPEAT_VAR_MIN:
+                seen[key] = seen.get(key, []) + ["%s %d회" % (name, n)]
+    out = []
+    for card in _derivation_cards(chapter):
+        REPEAT_SEEN["cards"] += 1
+        REPEAT_SEEN["keys"] += len(card["variables"])
+        hits = [k for k in card["variables"] if _norm_symbol(k) in seen]
+        if hits:
+            out.append((chapter_name, "derivation[%s]" % (card.get("id") or "?"),
+                        "선수 과목에서 여러 번 풀린 기호를 또 푼다: " + ", ".join(
+                            "%s(%s)" % (k, "·".join(seen[_norm_symbol(k)])) for k in hits)))
+    return out
+
+
+FLAT_SUB_SEEN = {"figures": 0}   # 분모 — 본 삽화 수
+
+
+def check_svg_flat_subscript(chapter, chapter_name):
+    """삽화 라벨의 날것 첨자(`σx1`·`τx1y1`) — 판정은 `checks_svg.flat_subscript_hits` 하나다(2026-09-25
+    APPSOLIDS11-SUBSCRIPT). 빌드 C47-c 가 같은 함수를 error 로 돌리므로 이 키는 **소급 잔량을 세는 자**다.
+    못 보는 것은 그 함수 위 주석이 정본(라틴 밑글자 · tspan 안 덩어리).
+    """
+    from buildlib import checks_svg
+    out = []
+    for diagram in figure_balance.iter_diagrams(chapter):
+        FLAT_SUB_SEEN["figures"] += 1
+        for why in checks_svg.flat_subscript_hits(diagram.get("id") or "?", diagram["svg"]):
+            out.append((chapter_name, "figure[%s]" % (diagram.get("id") or "?"), why))
+    return out
+
+
+def check_svg_raw_lt(chapter, chapter_name):
+    """SVG 글자 속 이스케이프 안 한 `<` — XML 로는 깨진 문서다(2026-09-24 큐 (31a)).
+
+    왜: 기계공작법 ch16 `급한 굽힘 (R < 2T)` · ch17 `a′ < a` · ch21 `β < α` 가 그대로 들어 있었다. 뷰어는 HTML
+      파서라 `< ` 를 글자로 읽어 화면은 멀쩡하지만, SVG 를 XML 로 여는 도구(fitz 렌더 검수·외부 편집기)는 그 그림을
+      통째로 못 연다 — ch21 렌더 검수가 「fitz 가 못 열었다」로 미검수로 남은 원인이었다.
+    재는 것: 삽화 svg 안의 `<` 중 태그 시작(`<a`·`</`·`<!`·`<?`)이 아닌 것. 처방은 `&lt;`.
+    못 보는 것: `&` 단독(같은 부류 — 아직 실측 0건이라 안 넣었다).
+    """
+    out = []
+    for diagram in figure_balance.iter_diagrams(chapter):
+        for m in re.finditer(r"<(?![A-Za-z/!?])", diagram["svg"]):
+            snippet = diagram["svg"][max(0, m.start() - 16):m.start() + 12]
+            out.append((chapter_name, "figure[%s]" % (diagram.get("id") or "?"),
+                        "SVG 글자에 이스케이프 안 한 `<` — `&lt;` 로: …%s…" % snippet))
+    return out
+
+
+CIRCUIT_WORDS = ("저항", "전원", "마디", "직렬", "병렬", "전류원", "전압원", "회로",
+                 "resistor", "source", "node", "series", "parallel", "circuit")
+CIRCUIT_SEEN = {"items": 0}   # 분모 — 선언 과목에서 본 문항 수
+CIRCUIT_WAIVER_KINDS = ("답 누설:", "회로 아님:")   # 회로도 면제가 되는 사유 머리말 둘(E41 판정선)
+
+
+def check_circuit_part_ratio(chapter, chapter_name):
+    """회로 소자 비율(E43·E15) — 판정은 `checks_svg.circuit_part_ratio_issues` 하나다(빌드 키 `circuit_part` 와 같은 함수).
+    이 키는 소급 잔량을 세는 자다. 못 보는 것은 그 함수 독스트링이 정본."""
+    from buildlib import checks_svg
+    return [(chapter_name, "figure[%s]" % (d.get("id") or "?"), why)
+            for d in figure_balance.iter_diagrams(chapter)
+            for why in checks_svg.circuit_part_ratio_issues(d.get("id") or "?", d["svg"])]
+
+
+def check_axis_name_gap(chapter, chapter_name):
+    """축 이름–화살촉 0.5em(E11) — 판정은 `checks_svg.axis_name_gap_issues` 하나다(빌드 키 `axis_gap`)."""
+    from buildlib import checks_svg
+    return [(chapter_name, "figure[%s]" % (d.get("id") or "?"), why)
+            for d in figure_balance.iter_diagrams(chapter)
+            for why in checks_svg.axis_name_gap_issues(d.get("id") or "?", d["svg"])]
+
+
+def check_battery_plate_gap(chapter, chapter_name):
+    """전지 판 간격 0.5em(E15) — 판정은 `checks_svg.battery_plate_gap_issues` 하나다(빌드 키 `battery_gap`)."""
+    from buildlib import checks_svg
+    return [(chapter_name, "figure[%s]" % (d.get("id") or "?"), why)
+            for d in figure_balance.iter_diagrams(chapter)
+            for why in checks_svg.battery_plate_gap_issues(d.get("id") or "?", d["svg"])]
+
+
+def check_title_content_gap(chapter, chapter_name):
+    """삽화 제목–내용 ≥ 1.5em(E12) — 판정은 `audit_figure_balance.proximity_rows` 의 'title' 줄이다.
+    못 보는 것은 그 함수 위 주석이 정본(굵기 없이 쓴 제목)."""
+    out = []
+    for d in figure_balance.iter_diagrams(chapter):
+        rows, _den = figure_balance.proximity_rows(d["svg"])
+        for key, text, got, need, fs in rows:
+            if key == "title":
+                out.append((chapter_name, "figure[%s]" % (d.get("id") or "?"),
+                            "제목 %r 이 내용에서 %.2fem — 1.5em 이상" % (text[:20], got / fs if fs else 0.0)))
+    return out
+
+
+def check_boundary_dashed(chapter, chapter_name):
+    """경계(관찰 영역) 사각은 점선(E22) — 판정은 `checks_svg.boundary_dashed_issues` 하나다(빌드 키 `boundary_dashed`)."""
+    from buildlib import checks_svg
+    return [(chapter_name, "figure[%s]" % (d.get("id") or "?"), why)
+            for d in figure_balance.iter_diagrams(chapter)
+            for why in checks_svg.boundary_dashed_issues(d.get("id") or "?", d["svg"])]
+
+
+def check_circuit_problem_without_diagram(chapter, chapter_name):
+    """회로 과목의 회로 문항에 그 문항의 회로도가 없나 — 후보(2026-09-24 EE02-CIRCUITFIG).
+
+    재는 것: 이 과목 `index.json` 이 `"circuitSubject": true` 일 때만, practice·problems 지문에 회로 낱말
+      (`CIRCUIT_WORDS`)이 있고 `diagrams` 가 빈 문항. `noDiagramReason` 이 있어도 후보다 — 이 과목에서는
+      「이론 삽화가 이미 같은 배치를 보인다」가 사유가 안 된다(사용자 [발화 생략]).
+    예외: `diagramWaiver` 사유가 `CIRCUIT_WAIVER_KINDS` 로 **시작할 때만** 뺀다 — 「답 누설:」(그림이 답·과제를 대신)
+      · 「회로 아님:」(도선 한 가닥·일반 개수 세기처럼 값 붙은 회로가 없는 개념). 2026-09-25 E41 판정선 개정: 사용자 [발화 생략] — 「배치가 없다」·「추상 경계」·「배치가 문제를 안 바꾼다」는 면제가 아니라
+      문항을 회로로 다시 쓰라는 신호다(옛 판정선은 「그림을 넣을 수 있나」였다).
+    못 보는 것: 낱말 없이 기호로만 회로를 말하는 지문 · 회로가 아닌데 낱말만 스치는 지문(사람이 판정) ·
+      선언이 없는 과목(대상 아님, 0건) · 머리말이 사유 내용과 맞는가(사람).
+    """
+    folder = CURRENT_FOLDER[0] if CURRENT_FOLDER else ""
+    idx = blob(os.path.join(folder, "index.json")) or {}
+    if idx.get("circuitSubject") is not True:
+        return []
+    out = []
+    for kind in ("practice", "problems"):
+        for item in chapter.get(kind) or []:
+            if not isinstance(item, dict):
+                continue
+            CIRCUIT_SEEN["items"] += 1
+            if item.get("diagrams") or str(item.get("diagramWaiver") or "").strip().startswith(CIRCUIT_WAIVER_KINDS):
+                continue
+            prompt = str(item.get("prompt") or "")
+            low = prompt.lower()
+            hit = [w for w in CIRCUIT_WORDS if w in low]
+            if hit:
+                out.append((chapter_name, "%s[%s]" % (kind, item.get("id") or "?"),
+                            "회로 문항인데 회로도가 없다(낱말: %s)" % ", ".join(hit[:3])))
+    return out
+
+
+def _reader_strings(node, owner, out, skip=frozenset(AUTHOR_ONLY) | {"svg"}):
+    """독자에게 보이는 문자열과 그 주인 id — 저자용 칸·SVG 는 뺀다."""
+    if isinstance(node, dict):
+        oid = node.get("id") or owner
+        for key, value in node.items():
+            if key.startswith("_") or key in skip:
+                continue
+            _reader_strings(value, oid, out, skip)
+    elif isinstance(node, list):
+        for item in node:
+            _reader_strings(item, owner, out, skip)
+    elif isinstance(node, str):
+        out.append((owner, node))
+    return out
+
+
+THIN_NEIGHBOR_SPACE = re.compile(r" \\,|(?<!\\)\\, ")
+TEXT_DOUBLE_SPACE = re.compile(r"\\text\{[^{}]*\s\}\s|\s\\text\{\s")
+# 앞 토막이 한 글자 기호·숫자여야 한다 — `\quad \text{이므로}`·`\times \text{거리}` 의 끝 글자는 명령 이름이라 뺀다(첫 실측 오탐)
+TEXT_KR_UNIT_GAP = re.compile(r"(?:(?<![\\A-Za-z])[A-Za-z]|[0-9])\s+\\text\{[가-힣]")
+THIN_SEEN = {"strings": 0}   # 분모 — `\,` 나 `\text{` 가 든 독자 문자열 수
+
+
+def check_math_space_around_thin(chapter, chapter_name):
+    """수식 안 공백이 두 겹이 되는 꼴 — 후보(2026-09-25 전전 ch01 E29·E36).
+
+    재는 것: 독자 문자열(저자 칸·SVG 제외)에서 ⑴ `\\,` 바로 옆 보통 공백(`i \\, dt`) ⑵ `\\text{…}` 안 가장자리
+      공백과 바깥 공백이 겹친 것(`\\text{식 } n`) ⑶ 변수·숫자 뒤 공백 + `\\text{한글…}`(`n \\text{개}` — 「n개」로 붙인다).
+    왜: `\\,` 은 뷰어가 머리카락 간격으로 그리는데 옆 공백이 그 뜻을 지워 한 칸 여백이 됐다(사용자 [발화 생략]). 뷰어가 ⑴은 이제 걷지만(2026-09-25) 데이터 꼴을 재는 자가 없어 같은 부류 ⑵⑶이 남는다.
+    못 보는 것: `\\quad`·`\\;` 옆 공백(뷰어가 이미 먹는다) · 산문(수식 밖) 「n 개」 · 뜻이 있는 넓은 간격(사람이 판정).
+    """
+    out = []
+    for owner, s in _reader_strings(chapter, chapter_name, []):
+        if "\\," not in s and "\\text{" not in s:
+            continue
+        THIN_SEEN["strings"] += 1
+        kinds = []
+        for name, rx in (("\\, 옆 공백", THIN_NEIGHBOR_SPACE), ("\\text 안팎 공백 겹침", TEXT_DOUBLE_SPACE),
+                         ("기호 뒤 공백 + \\text{한글}", TEXT_KR_UNIT_GAP)):
+            m = rx.search(s)
+            if m:
+                kinds.append("%s «…%s…»" % (name, s[max(0, m.start() - 8):m.end() + 6]))
+        if kinds:
+            out.append((chapter_name, str(owner), " · ".join(kinds)))
+    return out
+
+
+_SYM_SUB = re.compile(r"_\{[^{}]*\}|_[A-Za-z0-9]|[₀-₉ᵢⱼₖₙ]+|['′]+")
+_ROLE_ORDINAL = re.compile(r"첫째|둘째|셋째|넷째|다섯째|첫|두|세|네|[0-9]+\s*(?:번째|번)?|[₀-₉]+|\b[A-Za-z]\b|[ⅠⅡⅢⅣ]")
+ROLE_SEEN = {"cards": 0, "groups": 0}   # 분모 — 본 유도 카드 수 · 첨자만 다른 기호 묶음 수
+
+
+def _base_symbol(key):
+    return re.sub(r"\s+", "", _SYM_SUB.sub("", str(key)))
+
+
+def _role_core(desc):
+    return re.sub(r"[\s·,.()]+", "", _ROLE_ORDINAL.sub("", str(desc)))
+
+
+def check_symbol_list_repeated_role(chapter, chapter_name):
+    """유도 카드 기호 목록에서 첨자만 다른 기호를 같은 설명으로 줄마다 되풀이하나 — 후보(2026-09-25 전전 ch01 E35).
+
+    재는 것: `derivation.formulas[].variables` 에서 첨자(`_1`·`_{AB}`·₁)와 프라임을 뗀 바탕 기호가 같은 키 둘 이상이
+      있고, 그 설명에서 서수(첫째·둘째·1·2)·한 글자 이름을 뗀 나머지가 같으면 후보. 처방은 한 줄로 묶기
+      「v₁, v₂ – 첫째·둘째 저항의 전압 강하」 또는 「vᵢ – i째 저항의 전압 강하」.
+    왜: 사용자 [발화 생략] — 재발인데 원장에 이전 지적이 안 적혀 자가 없었다.
+    못 보는 것: 설명 낱말이 조금씩 다른 되풀이(「첫 저항의 강하」·「두 번째 저항 양단 전압」) · 유도 카드 밖 기호 목록.
+    """
+    out = []
+    for card in _derivation_cards(chapter):
+        ROLE_SEEN["cards"] += 1
+        groups = {}
+        for key, desc in card["variables"].items():
+            groups.setdefault(_base_symbol(key), []).append((key, desc))
+        for base, items in groups.items():
+            # 첨자 붙은 것끼리만 견준다 — 맨 기호 `f`(함수)가 `f_x`·`f_y`(편미분) 묶음을 가리면 안 된다(첫 실측 공수2 ch09)
+            subbed = [(k, d) for k, d in items if re.sub(r"\s+", "", str(k)) != base]
+            if len(subbed) < 2:
+                continue
+            ROLE_SEEN["groups"] += 1
+            by_core = {}
+            for k, d in subbed:
+                core = _role_core(d)
+                if core:
+                    by_core.setdefault(core, []).append(k)
+            for keys in by_core.values():
+                if len(keys) >= 2:
+                    out.append((chapter_name, "derivation[%s]" % (card.get("id") or "?"),
+                                "첨자만 다른 기호를 같은 설명으로 %d줄: %s — 한 줄로 묶는다"
+                                % (len(keys), ", ".join(keys))))
+    return out
+
+
+_STEP_SENTENCE = re.compile(r"(?:니다|요)(?:[.。]|\s*$)")
+_RECAP = re.compile(r"되짚|다시 말해|다시 말하면|정리하면|요컨대|앞에서 본 것처럼")
+STEP_SENTENCE_MAX = 1   # 한 걸음에 문장 하나 — 사용자 [발화 생략](식이 먼저, 말은 한 줄)
+STEP_SEEN = {"steps": 0}   # 분모 — 본 풀이 산문 걸음(풀이틀의 말 줄 · 풀이 개요 항목) 수
+
+
+def _solution_prose_steps(item):
+    """풀이의 말 걸음들 — 풀이틀은 수식 줄(앞 공백)·빈칸 줄을 빼고, 풀이 개요는 항목 그대로."""
+    out = []
+    tpl = item.get("solutionTemplate")
+    if isinstance(tpl, str):
+        for line in tpl.split("\n"):
+            if not line.strip() or line.startswith(" ") or "___BLANK" in line:
+                continue
+            out.append(line.strip())
+    outline = item.get("solutionOutline")
+    if isinstance(outline, list):
+        out.extend(str(s).strip() for s in outline if isinstance(s, str) and s.strip())
+    return out
+
+
+def check_solution_prose_heavy(chapter, chapter_name):
+    """연습·문제 풀이의 한 걸음에 산문이 무겁나 — 후보(2026-09-25 기계공작법 ch10 MFG10-PROSE).
+
+    재는 것: `solutionTemplate` 의 말 줄(수식·빈칸 줄 제외)과 `solutionOutline` 항목마다 「…니다.」 문장 수가
+      `STEP_SENTENCE_MAX` 를 넘거나, 되짚기 낱말(「되짚」·「다시 말해」·「정리하면」)이 있으면 후보.
+    왜: 사용자 [발화 생략](재발) — `answer-prose` 는 답 칸만 봐서 풀이 칸의 산문이 새어 나갔다.
+    문장 수는 **계산 문항**(풀이틀·풀이 개요 어디든 「=」가 있는 것)에서만 센다 — 판단형 문항(정의 판정·분류)은 그 산문이
+      곧 답이라, 문장 수를 재면 추론을 깎게 된다(2-2 중간 첫 실행 유체 ch01 q01~q06 — 사용자 지적의 대상은 [발화 생략]이었다). 판단형도 되짚기 낱말은 센다.
+    못 보는 것: 한 문장이지만 쉼표로 길게 늘어진 걸음 · 「다.」 평서 종결 · 수식 줄 자체가 긴 것(식 한 줄로 줄일 수 있나는 사람이 본다)
+      · 「=」 없이 단위만 펴는 계산.
+    """
+    out = []
+    for kind in ("practice", "problems"):
+        for item in chapter.get(kind) or []:
+            if not isinstance(item, dict):
+                continue
+            steps = _solution_prose_steps(item)
+            calc = "=" in str(item.get("solutionTemplate") or "") + "".join(map(str, item.get("solutionOutline") or []))
+            worst, recap, hit = 0, None, []
+            for step in steps:
+                STEP_SEEN["steps"] += 1
+                n = len(_STEP_SENTENCE.findall(step)) if calc else 0
+                worst = max(worst, n)
+                # 「되짚어 확인합니다 … = …」처럼 식이 든 걸음은 검산이다 — content.md 「확인 단계를 남긴다」(사용자 2026-09-25 [발화 생략])
+                r = "=" not in step and _RECAP.search(step)
+                if r:
+                    recap = recap or step[:40]
+                if n > STEP_SENTENCE_MAX or r:
+                    hit.append(step)
+            if worst > STEP_SENTENCE_MAX or recap:
+                why = []
+                if worst > STEP_SENTENCE_MAX:
+                    why.append("한 걸음에 문장 %d개" % worst)
+                if recap:
+                    why.append("되짚기 «%s…»" % recap)
+                # `--steps` 면 걸린 걸음 원문 — 후보마다 카드를 열지 않게(_step_dump 와 같은 까닭)
+                shown = "".join("\n        ▸ " + h for h in hit) if SHOW_STEPS else ""
+                out.append((chapter_name, "%s[%s]" % (kind, item.get("id") or "?"),
+                            " · ".join(why) + " — 식 한 줄 + 말 한 줄로" + shown))
+    return out
+
+
+_UNIT_CHECK = re.compile(r"단위(?:로|를)\s*(?:확인|검산|맞춰)\s*(?:합니다|해\s?보면|하면|보면)")
+_UNIT_EXPR = re.compile(r"\[[^\]]*[A-Za-zΩ][^\]]*\]")   # [J/s] · [\mathrm{kg}] 꼴 단위식
+UNIT_SEEN = {"steps": 0}   # 분모 — 「단위로 확인합니다」류 걸음 수
+
+
+def _unit_steps(node, owner, out):
+    """(주인 id, 걸음 글 + 그 걸음 식) — `text`+`equations` 걸음은 한 덩어리로, 나머지 문자열은 따로."""
+    if isinstance(node, dict):
+        oid = node.get("id") or owner
+        if isinstance(node.get("text"), str):
+            eqs = node.get("equations") or []
+            out.append((oid, node["text"] + " " + " ".join(e for e in eqs if isinstance(e, str))))
+        for key, value in node.items():
+            if key in ("text", "equations", "svg") or key.startswith("_") or key in AUTHOR_ONLY:
+                continue
+            _unit_steps(value, oid, out)
+    elif isinstance(node, list):
+        for item in node:
+            _unit_steps(item, owner, out)
+    elif isinstance(node, str):
+        out.append((owner, node))
+    return out
+
+
+def check_unit_check_in_prose(chapter, chapter_name):
+    """「단위로 확인합니다」 걸음이 단위식 없이 말로 풀었나 — 후보(2026-09-25 전전 ch01 E32).
+
+    재는 것: 「단위로/를 확인합니다·확인해 보면·검산하면」 문장이 든 걸음(그 걸음의 식 포함)에 `[J/C]·[C/s]` 같은
+      대괄호 단위식이 하나도 없으면 후보.
+    왜: 사용자 [발화 생략] → `[J/C]·[C/s] = [J/s] = W` 단위식으로. 말로 풀면
+      독자가 식으로 다시 옮겨야 한다.
+    못 보는 것: 「단위로 확인」이라는 말 없이 단위를 산문으로 푸는 걸음 · 「확인하십시오」 같은 권고(함정 카드 — 뺐다).
+    """
+    out = []
+    for owner, text in _unit_steps(chapter, chapter_name, []):
+        if not _UNIT_CHECK.search(text):
+            continue
+        UNIT_SEEN["steps"] += 1
+        if not _UNIT_EXPR.search(text):
+            m = _UNIT_CHECK.search(text)
+            out.append((chapter_name, str(owner),
+                        "단위 확인을 말로 풀었다 «…%s…» — [단위]·[단위] = [단위] 식으로" % text[m.start():m.start() + 40]))
+    return out
+
+
+_ASK_TAIL = re.compile(r"([^,.。]*?)(?:을|를)?\s*(?:구하|쓰|판정하|고르|답하)시오")
+_ASK_JOIN = re.compile(r"(?:와|과)\s|\s및\s")   # 기호 뒤 「p [W] 와」처럼 공백 뒤 조사도 센다
+_ASK_PARTS = re.compile(r"\(([a-z])\)")
+BLANK_ASK_SEEN = {"items": 0}   # 분모 — 빈칸이 있는 연습 문항 수
+
+
+def _asked_count(prompt):
+    """지문이 요구하는 양의 수 — (a)(b) 표지가 둘 이상이면 그 수, 없으면 마지막 요구 구절의 「와·과·및」 이음 수 + 1.
+
+    표지가 있으면 이음은 안 센다 — 「(a) …것과 (b) …것의 이름과 이유를」의 「과」는 표지를 잇거나 한 빈칸 안의 짝이다
+    (첫 2-2 실행 기계공작법 ch10-p06·ch11-p05 오탐). 못 보는 것: 표지 하나 안에서 둘을 묻는 꼴.
+    """
+    parts = len(set(_ASK_PARTS.findall(prompt)))
+    if parts >= 2:
+        return parts
+    joined = 0
+    for m in _ASK_TAIL.finditer(prompt):
+        # 조건절(「…일 때」·「…이면」) 안의 이음은 요구가 아니다 — 첫 실측 전전 ch02 「2 kΩ와 3 kΩ 저항이 직렬일 때 등가저항을」
+        clause = re.split(r"(?:때|면|에서|하고)\s", m.group(1))[-1]
+        if " 중 " in clause or clause.endswith(" 중"):
+            continue                              # 「A 와 B 중 고르시오」는 요구가 하나다
+        joined = max(joined, 1 + len(_ASK_JOIN.findall(clause)))
+    return max(parts, joined)
+
+
+def check_blanks_fewer_than_asked(chapter, chapter_name):
+    """지문이 요구한 양을 빈칸이 다 안 받나 — 후보(2026-09-25 전전 ch01 E16).
+
+    재는 것: 연습 문항마다 지문의 요구 수(`(a)(b)` 표지, 또는 마지막 「…을 구하시오」 구절의 「와·과·및」 이음 + 1)가
+      빈칸 수(`blanks` 또는 풀이틀의 `___BLANK_n___`)보다 크면 후보.
+    왜: 「전력 p [W] 와 그 부호를 구하시오」인데 빈칸은 전력만 — 사용자 [발화 생략]. 비수치 요구(부호·방향)를 세는 자가 없었다.
+    못 보는 것: 「과」로 끝나는 낱말(결과·효과)이 이음으로 세이는 오탐 · 쉼표로 나열한 요구 · 한 빈칸이 둘을 받는 꼴(사람이 판정).
+      요구 구절 안의 주어진 값·수식어 이음(「전기 30과 공정열 50을 내는 설비의 이용률」·「크기와 각으로 된 페이저」)도
+      오탐이다 — 2-2 중간 첫 실행 후보 4 중 2(응용열 ch08-p11 · 전전 ch05 phasor-check)가 이 꼴이었다.
+    """
+    out = []
+    for item in chapter.get("practice") or []:
+        if not isinstance(item, dict):
+            continue
+        tpl = str(item.get("solutionTemplate") or "")
+        blanks = len(item.get("blanks") or []) or len(set(re.findall(r"___BLANK_\d+___", tpl)))
+        if not blanks:
+            continue
+        BLANK_ASK_SEEN["items"] += 1
+        asked = _asked_count(str(item.get("prompt") or ""))
+        if asked > blanks:
+            out.append((chapter_name, "practice[%s]" % (item.get("id") or "?"),
+                        "지문 요구 %d · 빈칸 %d — 요구한 양마다 빈칸을" % (asked, blanks)))
+    return out
+
+
+_SVG_TEXT = re.compile(r"<text\b[^>]*>(.*?)</text>", re.S)
+_NUMS = re.compile(r"\d+(?:\.\d+)?")
+_CAPTION_PLACE = re.compile(r"왼쪽|오른쪽|위쪽|아래쪽|가운데|윗줄|아랫줄")
+ECHO_SEEN = {"figures": 0}   # 분모 — 본 문항 삽화 수
+
+
+def _num_seq(text):
+    return tuple(_NUMS.findall(re.sub(r"<[^>]+>", "", str(text))))
+
+
+def check_figure_self_echo(chapter, chapter_name):
+    """문항 삽화가 이미 보인 것을 풀이·캡션이 되읊나 — 후보(2026-09-25 전전 ch01 E17·E38).
+
+    재는 것: ⑴ 연습·문제 삽화의 SVG 글자 가운데 「=」가 든 줄의 숫자 차례(둘 이상)가 풀이틀 한 줄의 숫자 차례와 같으면
+      후보(그림 마지막 단계 「2 + 3 = 1 + 미지수」 ↔ 풀이틀 「2+3=1+i_x」) ⑵ 삽화 캡션이 위치어(왼쪽·오른쪽·가운데…)를
+      둘 이상 써서 그림의 배치를 말로 푸는 꼴.
+    왜: E38 「삽화 보면서 금방 답 나올 얘기면 오른쪽 풀이 없애고 삽화에서 바로 답 구할 수 있게」 · E17 「계속 몇번
+      지적하는거다만」(캡션이 그림의 모양을 되읊는다) — `caption-echo` 는 캡션↔본문만 잰다.
+    못 보는 것: 숫자 없이 말로만 겹치는 풀이 · 위치어 하나로 배치를 푸는 캡션 · 그림 속 설명줄이 그림 모양을 되읊는 꼴.
+    """
+    out = []
+    for kind in ("practice", "problems"):
+        for item in chapter.get(kind) or []:
+            if not isinstance(item, dict):
+                continue
+            tpl_seqs = {s for s in (_num_seq(line.split("___BLANK")[0])
+                                    for line in str(item.get("solutionTemplate") or "").split("\n") if "=" in line)
+                        if len(s) >= 2}
+            for dg in item.get("diagrams") or []:
+                if not isinstance(dg, dict):
+                    continue
+                ECHO_SEEN["figures"] += 1
+                for m in _SVG_TEXT.finditer(str(dg.get("svg") or "")):
+                    seq = _num_seq(m.group(1))
+                    if "=" in m.group(1) and len(seq) >= 2 and seq in tpl_seqs:
+                        out.append((chapter_name, "%s[%s]" % (kind, item.get("id") or "?"),
+                                    "그림 속 식 «%s» 을 풀이틀이 되읊는다 — 풀이를 빼고 그림 단계에 빈칸을"
+                                    % re.sub(r"<[^>]+>", "", m.group(1))[:40]))
+                        break
+                cap = str(dg.get("caption") or "")
+                if len(set(_CAPTION_PLACE.findall(cap))) >= 2:
+                    out.append((chapter_name, "%s[%s]" % (kind, item.get("id") or "?"),
+                                "캡션이 그림 배치를 말로 푼다 «%s…»" % cap[:40]))
+    return out
+
+
+DIFF_SEEN = {"items": 0}   # 분모 — 빈칸 있는 연습 수
+
+
+def check_practice_difficulty_mismatch(chapter, chapter_name):
+    """빈칸 하나·식 한 줄 연습인데 difficulty 가 basic 이 아닌가 — 후보(2026-09-25 전전 ch01 E40).
+
+    재는 것: 연습 문항 가운데 빈칸이 하나이고 풀이틀에서 「=」가 든 줄이 둘 이하인데 `difficulty` 가 basic 이 아닌 것.
+    왜: 사용자 [발화 생략] — 예제 탭은 basic 만 모으는데
+      난도 눈금(content.md 문제 설계 ⑵)이 연습문제 기준이라 연습의 difficulty 를 정하는 자가 없었다.
+    못 보는 것: 한 줄이지만 방법을 골라야 하는 문항(축 C — 사람이 판정해 그대로 둔다) · 빈칸 둘 이상의 쉬운 문항.
+    """
+    out = []
+    for item in chapter.get("practice") or []:
+        if not isinstance(item, dict):
+            continue
+        tpl = str(item.get("solutionTemplate") or "")
+        blanks = len(item.get("blanks") or []) or len(set(re.findall(r"___BLANK_\d+___", tpl)))
+        if not blanks:
+            continue
+        DIFF_SEEN["items"] += 1
+        eq_lines = sum(1 for line in tpl.split("\n") if "=" in line)
+        # 식 두 줄까지 — 원 지적 ch01-p21 이 「2+3=1+i_x / i_x=___」 두 줄이었다(첫 판 한 줄 문턱은 그 자리를 못 봤다)
+        if blanks == 1 and eq_lines <= 2 and item.get("difficulty") not in (None, "basic"):
+            out.append((chapter_name, "practice[%s]" % (item.get("id") or "?"),
+                        "빈칸 1 · 식 %d줄인데 difficulty=%s — 예제(basic) 후보" % (eq_lines, item.get("difficulty"))))
+    return out
+
+
+SLIDE_SEEN = {"items": 0}   # 분모 — 그림이 있는 연습 수
+
+
+def check_practice_steps_not_slided(chapter, chapter_name):
+    """그림이 있고 풀이가 두 걸음 이상인 연습에 슬라이드 단계가 없나 — 후보(2026-09-25 전전 ch01 E44).
+
+    재는 것: 연습 문항에 삽화가 있고, 풀이틀의 걸음(빈 줄이 아닌 줄) 또는 풀이 개요 항목이 둘 이상인데 어느 삽화에도
+      `spotlight`(짚어 보기 단계)·`motion` 이 없으면 후보.
+    왜: 사용자 [발화 생략]·「위 4번도 그렇고」 — 슬라이드 규정이 유도 카드에만 있었다.
+    못 보는 것: 슬라이드가 있지만 단계가 풀이 걸음과 안 맞는 꼴 · 한 걸음이라도 그림이 복잡한 문항(사람이 판정).
+    """
+    out = []
+    for item in chapter.get("practice") or []:
+        if not isinstance(item, dict):
+            continue
+        dgs = [d for d in item.get("diagrams") or [] if isinstance(d, dict)]
+        if not dgs:
+            continue
+        SLIDE_SEEN["items"] += 1
+        steps = [l for l in str(item.get("solutionTemplate") or "").split("\n") if l.strip()]
+        steps_n = max(len(steps), len(item.get("solutionOutline") or []))
+        slided = any(d.get("spotlight") or d.get("motion") for d in dgs)
+        if steps_n >= 2 and not slided:
+            out.append((chapter_name, "practice[%s]" % (item.get("id") or "?"),
+                        "그림 있음 · 풀이 %d걸음 · 슬라이드 없음 — 짚어 보기 단계로" % steps_n))
+    return out
+
+
+_INNER_LINK = re.compile(r"\[\[(ch\d+):([^|\]]+)\|")
+ADJ_SEEN = {"links": 0}   # 분모 — 같은 장 안 링크 수
+
+
+def check_link_to_adjacent_figure(chapter, chapter_name):
+    """같은 카드 안에 있는 삽화로 링크를 거나 — 후보(2026-09-25 전전 ch01 E21).
+
+    재는 것: 이론 절·유도 카드마다 그 항목이 가진 삽화 id 를 모으고, 같은 항목의 독자 문자열이 같은 장
+      `[[chNN:그 삽화 id|…]]` 로 링크하면 후보. 바로 보이는 대상은 링크하지 않는다.
+    왜: 「돌 수 있는 고리가 둘이다 — 그림으로 말하면」이 바로 아래 삽화로 링크를 건다 — 사용자 [발화 생략]. content.md 링크 규칙이 「좁은 앵커로 착지」만 말하고 「이미 보이는 대상」을 안 말했다.
+    못 보는 것: 같은 화면이지만 다른 항목에 있는 삽화(바로 다음 절 첫 그림) · 절 id 로 거는 링크.
+    """
+    out = []
+    theory = chapter.get("theory")
+    theory = theory.get("sections") if isinstance(theory, dict) else theory
+    deriv = chapter.get("derivation")
+    deriv = deriv.get("formulas") if isinstance(deriv, dict) else deriv
+    for item in list(theory or []) + list(deriv or []):
+        if not isinstance(item, dict):
+            continue
+        own = {d.get("id") for d in figure_balance.iter_diagrams(item) if d.get("id")}
+        for _, text in _reader_strings(item, item.get("id"), []):
+            for m in _INNER_LINK.finditer(text):
+                if m.group(1) != chapter_name:
+                    continue
+                ADJ_SEEN["links"] += 1
+                if m.group(2) in own:
+                    out.append((chapter_name, str(item.get("id") or "?"),
+                                "같은 카드의 삽화 %s 로 링크 — 바로 보이는 대상은 링크하지 않는다" % m.group(2)))
+    return out
+
+
+_EQ_SPACING = re.compile(r"\s+|\\[,;:!]|\\q?quad")
+CHAIN_SEEN = {"pairs": 0}   # 분모 — 좌변이 같은 이웃 걸음 쌍
+
+
+def _eq_norm(s):
+    return _EQ_SPACING.sub("", s)
+
+
+def check_deriv_step_skips_chain(chapter, chapter_name):
+    """유도 걸음이 앞 걸음의 식을 안 적고 두 번 옮기나 — 후보(2026-09-25 전전 ch01 E31).
+
+    재는 것: 이웃한 두 유도 걸음에서 뒤 걸음 첫 등식의 좌변이 앞 걸음 마지막 등식의 좌변과 같은데, 뒤 등식에
+      「=」가 둘 이상(한 줄에 두 번 옮김)이고 앞 걸음의 우변이 그 줄에 없으면 후보. 원식을 먼저 적고
+      (p = dw/dt = …) 대입은 다음 줄로 — 원장 2026-08-29 응용열 「원식 → 적용 두 단계」.
+    왜: 「p = dw/dt」 다음 장이 곧바로 「p = (dw/dq)(dq/dt) = vi」 — 사용자 [발화 생략](재발).
+    못 보는 것: 좌변을 바꿔 적는 걸음(v = … 다음 p = …) · 한 걸음 안의 여러 줄 사이 건너뜀 · 산문으로 한 건너뜀.
+      `\\Rightarrow` 가 든 줄은 옮김이 아니라 「조건 ⇒ 결과」라 안 센다(첫 실행 전전 ch02 wye-delta 확인 줄 오탐).
+    """
+    out = []
+
+    def lhs_rhs(eq):
+        if "\\Rightarrow" in eq or "\\implies" in eq:
+            return None
+        parts = _eq_norm(eq).split("=")
+        return (parts[0], parts[-1], len(parts)) if len(parts) >= 2 else None
+
+    def walk(node, owner):
+        if isinstance(node, dict):
+            steps = node.get("derivationSteps")
+            if isinstance(steps, list):
+                prev = None
+                for i, st in enumerate(steps):
+                    eqs = [e for e in (st.get("equations") or []) if isinstance(e, str) and "=" in e] \
+                        if isinstance(st, dict) else []
+                    if not eqs:
+                        continue
+                    first = lhs_rhs(eqs[0])
+                    if prev and first and first[0] and first[0] == prev[0]:
+                        CHAIN_SEEN["pairs"] += 1
+                        if first[2] >= 3 and prev[1] and prev[1] not in _eq_norm(eqs[0]):
+                            out.append((chapter_name, "%s 걸음 %d" % (node.get("id") or owner, i + 1),
+                                        "앞 걸음 우변 없이 한 줄에 두 번 옮김 — 원식을 먼저 적고 대입은 다음 줄로"))
+                    prev = lhs_rhs(eqs[-1])
+            for v in node.values():
+                walk(v, node.get("id") or owner)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v, owner)
+
+    walk(chapter, "?")
+    return out
+
+
+WIDE_SEEN = {"lines": 0}   # 분모 — 본 유도 수식 줄(latex 홑줄 · 걸음 equations) 수
+
+
+def check_formula_line_too_wide(chapter, chapter_name):
+    """못 끊는 수식 조각이 폰 카드 폭을 넘긴다 — 판정은 `checks_content.formula_line_too_wide_issues` 하나다
+    (2026-09-25 응고 ch11 APPSOLIDS11-HSCROLL). 빌드 C75 가 같은 함수를 error 로 돌리므로 이 키는 **소급 잔량을
+    세는 자**다. 문턱·못 보는 것은 그 함수 위 주석이 정본.
+    """
+    from buildlib import checks_content as cc
+    for formula in (chapter.get("derivation") or {}).get("formulas") or []:
+        WIDE_SEEN["lines"] += sum(1 for row in cc.latex_rows(formula.get("latex")) if len(row) == 1)
+        WIDE_SEEN["lines"] += sum(len(cc.step_equations(st)) for st in formula.get("derivationSteps") or [])
+    return [(chapter_name, why.split(":", 1)[0], why.split(":", 1)[1].strip())
+            for why in cc.formula_line_too_wide_issues(chapter)]
+
+
 FULL_LIST = False        # `--full` 이 켠다 — 화면 상한 12건을 푼다(고치려면 전체가 필요하다)
 
 CHECKS = {
+    "math-space-around-thin": check_math_space_around_thin,
+    "symbol-list-repeated-role": check_symbol_list_repeated_role,
+    "solution-prose-heavy": check_solution_prose_heavy,
+    "unit-check-in-prose": check_unit_check_in_prose,
+    "blanks-fewer-than-asked": check_blanks_fewer_than_asked,
+    "figure-self-echo": check_figure_self_echo,
+    "practice-difficulty-mismatch": check_practice_difficulty_mismatch,
+    "practice-steps-not-slided": check_practice_steps_not_slided,
+    "link-to-adjacent-figure": check_link_to_adjacent_figure,
+    "deriv-step-skips-chain": check_deriv_step_skips_chain,
+    "svg-raw-lt": check_svg_raw_lt,
+    "svg-flat-subscript": check_svg_flat_subscript,
+    "formula-line-too-wide": check_formula_line_too_wide,
+    "circuit-problem-without-diagram": check_circuit_problem_without_diagram,
+    "circuit-part-ratio": check_circuit_part_ratio,
+    "boundary-dashed": check_boundary_dashed,
+    "axis-name-gap": check_axis_name_gap,
+    "battery-plate-gap": check_battery_plate_gap,
+    "title-content-gap": check_title_content_gap,
+    "repeated-variable-explanation": check_repeated_variable_explanation,
+    "blank-given-in-prompt": check_blank_given_in_prompt,
+    "answer-prose": check_answer_prose,
+    "prereq-heavy": check_prereq_heavy,
+    "prompt-padded-zero": check_prompt_padded_zero,
+    "figure-decode": check_figure_decode,
+    "ramp-skip": check_ramp_skip,
     "practice-prompt-language": check_practice_prompt_language,
     "expected-echo": check_expected_echo,
     "formula-summary-card": check_formula_summary_card,
@@ -1840,6 +2687,44 @@ def main():
         # 분모 — 후보 수만으로는 「basic 을 몇 개 보고 그만큼인가」를 모른다.
         print("  " + CALC_WAIVER_KEY + " 분모 — basic 문항 " + str(CALC_SEEN["basic"])
               + "개 · 그중 면제 " + str(CALC_SEEN["waived"]) + "개")
+    if "repeated-variable-explanation" in active:
+        often = sum(1 for counts in _PREREQ_VAR_CACHE.values() for n in counts.values() if n >= REPEAT_VAR_MIN)
+        declared = [os.path.basename(f) for f in subjects()
+                    if (blob(os.path.join(f, "index.json")) or {}).get("prerequisiteSubjects")]
+        print("  repeated-variable-explanation 분모 — 선언 과목 " + str(len(declared)) + "개 · 선수 과목 "
+              + str(len(_PREREQ_VAR_CACHE)) + "개 · 선언 과목 유도 카드 " + str(REPEAT_SEEN["cards"])
+              + "장 · 기호 " + str(REPEAT_SEEN["keys"]) + "개 · 선수 과목에서 "
+              + str(REPEAT_VAR_MIN) + "회 이상 풀린 기호 " + str(often) + "개")
+    if "math-space-around-thin" in active:
+        print("  math-space-around-thin 분모 — `\\,`·`\\text{` 가 든 독자 문자열 " + str(THIN_SEEN["strings"]) + "개")
+    if "link-to-adjacent-figure" in active:
+        print("  link-to-adjacent-figure 분모 — 같은 장 안 링크 " + str(ADJ_SEEN["links"]) + "개")
+    if "deriv-step-skips-chain" in active:
+        print("  deriv-step-skips-chain 분모 — 좌변이 같은 이웃 유도 걸음 " + str(CHAIN_SEEN["pairs"]) + "쌍")
+    if "practice-steps-not-slided" in active:
+        print("  practice-steps-not-slided 분모 — 그림 있는 연습 " + str(SLIDE_SEEN["items"]) + "개")
+    if "practice-difficulty-mismatch" in active:
+        print("  practice-difficulty-mismatch 분모 — 빈칸 있는 연습 " + str(DIFF_SEEN["items"]) + "개")
+    if "figure-self-echo" in active:
+        print("  figure-self-echo 분모 — 문항 삽화 " + str(ECHO_SEEN["figures"]) + "개")
+    if "svg-flat-subscript" in active:
+        print("  svg-flat-subscript 분모 — 삽화 " + str(FLAT_SUB_SEEN["figures"]) + "개")
+    if "formula-line-too-wide" in active:
+        print("  formula-line-too-wide 분모 — 유도 수식 줄 " + str(WIDE_SEEN["lines"]) + "개")
+    if "blanks-fewer-than-asked" in active:
+        print("  blanks-fewer-than-asked 분모 — 빈칸 있는 연습 " + str(BLANK_ASK_SEEN["items"]) + "개")
+    if "unit-check-in-prose" in active:
+        print("  unit-check-in-prose 분모 — 「단위로 확인」 걸음 " + str(UNIT_SEEN["steps"]) + "개")
+    if "solution-prose-heavy" in active:
+        print("  solution-prose-heavy 분모 — 풀이 말 걸음 " + str(STEP_SEEN["steps"]) + "개")
+    if "symbol-list-repeated-role" in active:
+        print("  symbol-list-repeated-role 분모 — 유도 카드 " + str(ROLE_SEEN["cards"]) + "장 · 첨자만 다른 기호 묶음 "
+              + str(ROLE_SEEN["groups"]) + "개")
+    if "circuit-problem-without-diagram" in active:
+        declared = [os.path.basename(f) for f in subjects()
+                    if (blob(os.path.join(f, "index.json")) or {}).get("circuitSubject") is True]
+        print("  circuit-problem-without-diagram 분모 — 선언 과목 " + str(len(declared)) + "개 · 본 문항 "
+              + str(CIRCUIT_SEEN["items"]) + "개")
     if scanned == 0:
         print("★ 훑은 과목이 0개다 — 이 「0건」은 «없다»가 아니라 «못 봤다»이다.")
         return 1

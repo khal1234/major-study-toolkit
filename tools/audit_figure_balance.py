@@ -41,7 +41,8 @@ from buildlib.checks_content import (  # noqa: E402
 )
 from buildlib.checks_svg import (  # noqa: E402
     _attr, _distance, _effective, _fraction_bars, _path_polyline, _svg_segments, _svg_texts,
-    _text_bbox, _segment_to_rect_distance, arrow_geometry, fraction_unit_boxes,
+    _text_bbox, _segment_to_rect_distance, _stroked_ellipse_segments, arrow_geometry,
+    fraction_unit_boxes,
     BOX_CENTER_MAX_RATIO, BOX_CENTER_TOL_EM, LABEL_PAIR_RATIO_MAX, figure_box_centering,
     figure_label_pair_gap_hits, symbol_below_caption_rows,
     FIGURE_BALANCE_TOL_PX, figure_vertical_extent,
@@ -109,7 +110,7 @@ def iter_diagrams(node):
     삽화는 태생적으로 사각지대였다 — 원인은 「배열이 아니라 단수 하나」라는 스키마 차이다).
     """
     if isinstance(node, dict):
-        for diagram in node.get("diagrams") or []:
+        for diagram in (node.get("diagrams") or []) + (node.get("solutionDiagrams") or []):
             if isinstance(diagram, dict) and diagram.get("svg"):
                 yield diagram
         fig = node.get("figure")
@@ -646,13 +647,176 @@ def _required_gap(box, fs, regions, unit_box=None):
 
 
 def _texts_with_weight(svg):
-    """_svg_texts 결과에 bold 여부를 붙인다 — 원본에 font-weight가 없어서 직접 읽는다."""
+    """_svg_texts 결과에 bold·axis_name 여부를 붙인다 — 원본에 font-weight 가 없어서 직접 읽는다."""
     out = []
     for text in _svg_texts(svg):
         tag = svg[text["pos"]:svg.find(">", text["pos"]) + 1]
         text["bold"] = "font-weight='700'" in tag or 'font-weight="700"' in tag
+        text["axis_name"] = "class='axis-name'" in tag or 'class="axis-name"' in tag
         out.append(text)
     return out
+
+
+# ── 근접성 위계 (2026-09-24 · 설계도 `docs/2026-09-24-전전-ch01-E10-E26-설계도.md` 2절) ──
+# 사용자 원문은 규격 `docs/삽화-규격.md` [발화 생략] 절. 재는 것 셋:
+#   ⑴ 라벨–대상 **상한** — 라벨(굵지 않음·캡션 아님·칸 밖·패널 제목 아님)의 최근접 선분 거리 ≤ 1.0em.
+#   ⑴' 화살표 라벨은 **수직으로만** 뗀다 — 라벨 중심의 수선 발이 꼬리–끝점 구간 안(판정 2026-09-24 E13).
+#   ⑵ 최근접 대상이 **자기 대상**인가 — 유채색 라벨만 잰다: 같은 색 선분보다 다른 색 선분이 더 가까우면 위반.
+#   ⑶ 제목–내용 ≥ 1.5em — 굵기 700 이고 한글 음절 2개 이상인 글(제목)의 최근접 선분·글자 거리.
+# 못 보는 것: 무채색 라벨의 자기 대상(색 말고는 대상 표지가 없다 — E14 `+`·`−` 는 ⑴ 로만 잡힌다) ·
+#   `transform` 을 먹인 도형의 색 판정(⑵ 는 path·line 원좌표만 본다) · 제목이 굵기 없이 쓰인 그림.
+PROX_LABEL_MAX_EM = 1.0      # 고른 값: 규격 「여백·라벨」 기본 1.0em 을 상한으로 겸한다(설계도 2절, 사용자 09-24)
+PROX_TITLE_MIN_EM = 1.5      # 고른 값: 설계도 2절 — 내용끼리 0.5em 의 3배, 사용자 [발화 생략]
+PROX_TITLE_HANGUL_MIN = 2    # 굵은 기호(벡터 문자)와 제목을 가르는 선 — 한글 음절 둘이면 말이다
+PROX_NEUTRAL_CHROMA = 24     # RGB 채널 최대-최소가 이 이하면 무채색(잉크·회색)으로 본다 — 이 리포 잉크 #1f2933 은 20
+PROX_SHAFT_TOUCH_PX = 1.5    # 고른 값: 생성기 좌표가 소수 둘째 자리라 끝점–촉 꼭짓점 오차는 0.01 — 선 굵기 2 의 3/4 까지 허용
+
+
+def _rgb(color):
+    c = (color or "").strip().lower()
+    if re.fullmatch(r"#[0-9a-f]{3}", c):
+        c = "#" + "".join(ch * 2 for ch in c[1:])
+    if not re.fullmatch(r"#[0-9a-f]{6}", c):
+        return None
+    return tuple(int(c[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def _is_chromatic(color):
+    rgb = _rgb(color)
+    return rgb is not None and max(rgb) - min(rgb) > PROX_NEUTRAL_CHROMA
+
+
+def _colored_segments(svg):
+    """(선분, stroke 색) — path·line 만, 변환은 안 먹인다(위 「못 보는 것」)."""
+    out = []
+    for m in re.finditer(r"<(path|line)\b([^>]*?)/?>", svg):
+        a = m.group(2)
+        color = (_effective(svg, m.start(), a, "stroke") or "").strip().lower()
+        if color in ("", "none"):
+            continue
+        if m.group(1) == "line":
+            segs = [tuple(_float_attr(a, k, 0) for k in ("x1", "y1", "x2", "y2"))]
+        else:
+            dstr = _attr(a, "d")
+            segs = _path_polyline(dstr) if dstr else []
+        out.extend((s, color) for s in segs)
+    return out
+
+
+def proximity_rows(svg):
+    """근접성 위계 세 판정. `(위반 행 목록, 분모 dict)` — 순수 함수(테스트가 직접 부른다).
+
+    행 = (판정 키 'far'|'foreign'|'title', 글자, 잰 값 px, 요구 px, fs).
+    """
+    rows = []
+    den = {"far": 0, "oblique": 0, "foreign": 0, "title": 0}
+    # 원·타원 테두리도 대상이다 — 빼면 전원 기호(원) 옆 `+`·`−` 가 도선까지 거리로 재진다(첫 실행 25.9px 오탐).
+    segments = _svg_segments(svg) + _stroked_ellipse_segments(svg)
+    if not segments:
+        return rows, den
+    # 화살표 = (꼬리, 끝점, 그 화살표에 속한 선분들). 자루 = 화살촉 밑변 중앙에 한 끝이 닿는 선분.
+    arrows = []
+    for base, tip, pts in _filled_triangles(svg):
+        own_segs = {s for s in segments
+                    if all(any(_distance(e, p) <= PROX_SHAFT_TOUCH_PX for p in pts)
+                           for e in ((s[0], s[1]), (s[2], s[3])))}
+        tail = tip
+        for s in segments:
+            for e, o in (((s[0], s[1]), (s[2], s[3])), ((s[2], s[3]), (s[0], s[1]))):
+                if _distance(e, base) <= PROX_SHAFT_TOUCH_PX and s not in own_segs:
+                    own_segs.add(s)
+                    tail = o
+        arrows.append((tail, tip, own_segs))
+    regions = _closed_regions(svg)
+    colored = _colored_segments(svg)
+    texts = _texts_with_weight(svg)
+    bars = _fraction_bars(svg)
+    boxes = [_text_bbox(t) for t in texts]
+    for i, text in enumerate(texts):
+        box, fs = boxes[i], text["fs"]
+        own = {seg for (gs, ge), seg in bars if gs <= text["pos"] < ge}
+        ranked = min(((_segment_to_rect_distance(s, box), s) for s in segments if s not in own),
+                     default=None, key=lambda p: p[0])
+        if ranked is None:
+            continue
+        near, near_seg = ranked
+        if text["bold"] and _hangul_count(text["s"]) >= PROX_TITLE_HANGUL_MIN:
+            den["title"] += 1
+            gaps = [near]
+            for j, other in enumerate(boxes):
+                if j == i:
+                    continue
+                dx = max(other[0] - box[2], box[0] - other[2], 0.0)
+                dy = max(other[1] - box[3], box[1] - other[3], 0.0)
+                gaps.append(math.hypot(dx, dy))
+            got, want = min(gaps), PROX_TITLE_MIN_EM * fs
+            if want - got > GAP_TOL_PX:
+                rows.append(("title", text["s"][:24], got, want, fs))
+            continue
+        if text["bold"] or _is_caption(text):
+            continue
+        cx, cy = (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
+        inside = any(_point_in_polygon((cx, cy), r["pts"]) for r in regions)
+        if not inside and not _is_panel_title(box, fs, regions):
+            den["far"] += 1
+            want = PROX_LABEL_MAX_EM * fs
+            if near - want > GAP_TOL_PX:
+                rows.append(("far", text["s"][:24], near, want, fs))
+            owner = next((a for a in arrows if near_seg in a[2]), None)
+            if owner is not None and not text.get("axis_name"):
+                # 축 이름(class='axis-name')은 여기서 뺀다(2026-09-24 세션 3 신고, i-v 그림 오탐) —
+                # 축 이름–화살촉 거리는 `checks_svg.axis_name_gap_issues` 가 따로 재는 몫이라,
+                # 한 라벨이 두 자에 다른 규격으로 걸리면 어느 쪽을 따라야 할지 갈린다.
+                # 수선의 발이 꼬리–끝점 구간 밖이면 사선으로 뗀 것이다(판정 2026-09-24 E13).
+                (tx, ty), (hx, hy) = owner[0], owner[1]
+                ax, ay = hx - tx, hy - ty
+                length2 = ax * ax + ay * ay
+                if length2 > 1e-9:
+                    den["oblique"] += 1
+                    t = ((cx - tx) * ax + (cy - ty) * ay) / length2
+                    over = max(-t, t - 1.0, 0.0) * math.sqrt(length2)
+                    if over > GAP_TOL_PX:
+                        rows.append(("oblique", text["s"][:24], over, 0.0, fs))
+        fill = text.get("fill", "")
+        if _is_chromatic(fill):
+            mine = [s for s, c in colored if c == fill]
+            others = [s for s, c in colored if c != fill]
+            if mine and others:
+                den["foreign"] += 1
+                d_mine = min(_segment_to_rect_distance(s, box) for s in mine)
+                d_other = min(_segment_to_rect_distance(s, box) for s in others)
+                if d_mine - d_other > GAP_TOL_PX:
+                    rows.append(("foreign", text["s"][:24], d_mine, d_other, fs))
+    return rows, den
+
+
+PROX_KEYS = {"far": f"라벨–대상 상한 {PROX_LABEL_MAX_EM:g}em 초과",
+             "oblique": "화살표 라벨 사선 오프셋(수선 발이 자루 밖)",
+             "foreign": "최근접이 다른 색 대상",
+             "title": f"제목–내용 {PROX_TITLE_MIN_EM:g}em 미만"}
+
+
+def proximity_report(chapter_paths, verbose=True):
+    """챕터들의 근접성 위반을 찍고 (삽화 수, 분모, 위반 수) 를 돌려준다."""
+    figs = 0
+    den = {k: 0 for k in PROX_KEYS}
+    hits = {k: 0 for k in PROX_KEYS}
+    for path in chapter_paths:
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for diagram in iter_diagrams(data):
+            figs += 1
+            rows, d = proximity_rows(diagram["svg"])
+            for k in den:
+                den[k] += d[k]
+            for key, s, got, want, fs in rows:
+                hits[key] += 1
+                if verbose:
+                    print(f"  {Path(path).parent.name}/{Path(path).stem} {diagram.get('id') or '?':34}"
+                          f" [{PROX_KEYS[key]}] {s!r} 잰 값 {got:5.1f} · 기준 {want:5.1f} (fs {fs:g})")
+    return figs, den, hits
 
 
 def audit(chapter_path, wanted=None):
@@ -960,6 +1124,37 @@ def sweep_all():
     return 0
 
 
+def proximity_main(args):
+    """근접성 위계 — 과목별 분모·후보 수를 함께 낸다(0 이 «없다» 가 아니게)."""
+    if args.all:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import audit_content                                                 # noqa: E402
+        subjects = audit_content.subject_dirs()
+    elif args.chapter:
+        subjects = None
+    else:
+        sys.exit("chapter 를 주거나 --all 을 줄 것")
+    total_f, total_d, total_h = 0, {k: 0 for k in PROX_KEYS}, {k: 0 for k in PROX_KEYS}
+    groups = ([(os.path.basename(f), [os.path.join(f, n) for n in sorted(os.listdir(f))
+                                      if re.fullmatch(r"ch\d{2}\.json", n)]) for f in subjects]
+              if subjects is not None else [("", [ROOT / args.chapter])])
+    for name, paths in groups:
+        figs, den, hits = proximity_report(paths, verbose=not args.fail_only or not args.all)
+        total_f += figs
+        for k in PROX_KEYS:
+            total_d[k] += den[k]
+            total_h[k] += hits[k]
+        if name:
+            print(f"-- {name}: 삽화 {figs} · " + " · ".join(
+                f"{PROX_KEYS[k]} {hits[k]}/{den[k]}" for k in PROX_KEYS))
+    print(f"\n합계 — 삽화 {total_f}개" + (f" · 훑은 과목 {len(groups)}개" if subjects else "")
+          + " · " + " · ".join(f"{PROX_KEYS[k]} {total_h[k]}건 / 분모 {total_d[k]}"
+                               for k in PROX_KEYS))
+    if total_f == 0:
+        sys.exit("삽화를 한 개도 안 봤다 — 순회 범위를 확인할 것(0 이 «없다» 가 아니다)")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="삽화 세로 균형·라벨 간격 감사 (읽기 전용)")
     parser.add_argument("chapter", nargs="?",
@@ -970,9 +1165,13 @@ def main():
     parser.add_argument("--fail-only", action="store_true",
                         help="위반을 세는 절만 낸다 — 참고용 5개 절(칸 안·라벨 순서·밀도·"
                              "화살촉 끝점·화살표 크기)을 생략해 출력을 1/3 로 줄인다")
+    parser.add_argument("--proximity", action="store_true",
+                        help="근접성 위계 세 판정(라벨 상한·자기 대상·제목 간격)만 — chapter 또는 --all")
     global FAIL_ONLY
     args = parser.parse_args()
     FAIL_ONLY = args.fail_only
+    if args.proximity:
+        return proximity_main(args)
     if args.all:
         return sweep_all()
     if not args.chapter:

@@ -95,7 +95,8 @@ data/**/*.txt
 /site/index.html
 # 전 과목이 공유하는 뷰어 자산(viewer.<해시>.css|js) — 템플릿에서 빌드가 뽑아 쓴다.
 # **과목이 아니다.** 위 목록은 과목마다 한 줄인데 이건 하나뿐이라, 과목을 추가해도 여기는 안 는다.
-/site/_assets/
+/site/_assets/*
+!/site/_assets/viewer.*
 /site/기계요소설계/
 /site/시스템제어/
 /site/계측공학/
@@ -151,3 +152,6 @@ tools/watch_and_build*.log
 
 # 2026-09-07 평탄화. 워크트리가 이 폴더 자체가 되면서 **git 디렉터리가 작업 트리 안으로** 들어왔다.
 /.bare/
+
+# 2026-09-24 헤드리스 야간 루프(tools/headless_round.ps1)의 회차 로그. 커밋하지 않는다.
+/outputs/headless/

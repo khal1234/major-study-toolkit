@@ -56,12 +56,13 @@ def subjects(rev="HEAD"):
       인계 문서가 잡은 셋(`discover_data_dir`·`audit_convention_drift`·`backup_bundle`)과
       **같은 부류의 넷째**다. 회귀는 그때 `subject_dir()`(첫 과목 하나)만 재고 있어서 초록이었다.
       → 이제 전 과목을 돌려주고, **훑은 과목 수를 화면에 찍으며 0이면 exit 1** 이다.
-    ★ 숨김 폴더(`.textbook-fingerprint` 등)는 과목이 아니다.
+    ★ 숨김 폴더(`.textbook-fingerprint` 등)는 과목이 아니다. `_` 로 시작하는 폴더(`_공통표`, 2026-09-24)도
+      과목 사이 한 벌이라 과목이 아니다 — index.json 이 없어 「못 읽는다」가 된다.
     """
     out = []
     for line in git("ls-tree", "--name-only", rev, "data/").splitlines():
         name = line.strip().rstrip("/")
-        if name and name != "data" and not name.split("/")[-1].startswith("."):
+        if name and name != "data" and not name.split("/")[-1].startswith((".", "_")):
             out.append(name)
     return sorted(out)
 

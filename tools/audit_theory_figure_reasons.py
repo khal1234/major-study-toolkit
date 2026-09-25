@@ -150,14 +150,22 @@ def chapter_reason_text(data):
 def uncovered_sections(data, sections):
     """삽화도 사유도 없는 절의 id 목록. 순수 함수.
 
-    한 절이 「덮였다」로 보는 길은 셋이다 —
+    한 절이 「덮였다」로 보는 길은 넷이다 —
     ⑴ 그 절에 삽화가 있다 ⑵ 그 절에 사유 키가 채워져 있다
-    ⑶ **챕터 수준 사유가 그 절 id 를 담고 있다**(이미 쓴 사유를 그대로 인정하는 자리다).
+    ⑶ **챕터 수준 사유가 그 절 id 를 담고 있다**(이미 쓴 사유를 그대로 인정하는 자리다)
+    ⑷ **`chapterSummary` 를 선언한 장 끝 요약 절**(2026-09-20).
+
+    ⑷ 는 `SUMMARY_CHAPTER_FROM`(ch90~) 과 **같은 판정선을 절 단위로 편 것**이다 — 요약은
+    배우는 절이 아니라 그 장에서 이미 그린 것을 글로 줄인 자리라 새 삽화가 붙지 않는다.
+    범위는 id 짐작이 아니라 데이터가 스스로 선언한 `chapterSummary` 다. 실측: 2026-09-14~19 에
+    들어온 장 끝 요약 18개가 미판정 절 22 중 18 을 차지해 진짜 넷(전전 ch03)을 덮고 있었다.
     """
     blanket = chapter_reason_text(data)
     out = []
     for s in sections:
         if s.get("diagrams"):
+            continue
+        if s.get("chapterSummary"):
             continue
         if any(_filled(s.get(k)) for k in REASON_KEYS):
             continue

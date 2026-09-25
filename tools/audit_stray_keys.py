@@ -114,6 +114,95 @@ def duplicate_keys(text):
     return found
 
 
+def locate_duplicate_key(text, target_key):
+    """`target_key` 가 같은 객체 안에서 두 번 나오는 **줄 번호 쌍**을 낸다(없으면 `None`). 순수 함수.
+
+    ★ `duplicate_keys()` 는 있다/없다만 말한다 — 큰 파일에서 「어디」를 못 찾으면 사람이
+    수백 줄을 손으로 훑어야 한다(2026-09-24 실측, 전전 ch01 2000줄). 문자열을 직접 따라가며
+    **객체 깊이마다 이 키를 본 줄 번호**를 스택으로 든다 — JSON 문자열 안의 `{`·`"` 는 건너뛴다
+    (이스케이프도 처리). `json` 모듈의 `object_pairs_hook` 은 이 위치 정보를 안 준다.
+    """
+    seen_at_depth = [None]           # depth 0(파일 최상위 객체) 부터
+    line = 1
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "\n":
+            line += 1
+            i += 1
+            continue
+        if c == '"':
+            start_line = line
+            j = i + 1
+            while j < n and text[j] != '"':
+                if text[j] == "\\":
+                    j += 1
+                elif text[j] == "\n":
+                    line += 1
+                j += 1
+            key = text[i + 1:j]
+            j += 1
+            if key == target_key:
+                k = j
+                while k < n and text[k] in " \t\r\n":
+                    if text[k] == "\n":
+                        line += 1
+                    k += 1
+                if k < n and text[k] == ":":
+                    prior = seen_at_depth[-1]
+                    if prior is not None:
+                        return (prior, start_line)
+                    seen_at_depth[-1] = start_line
+            i = j
+            continue
+        if c == "{":
+            seen_at_depth.append(None)
+            i += 1
+            continue
+        if c == "}":
+            if len(seen_at_depth) > 1:
+                seen_at_depth.pop()
+            i += 1
+            continue
+        i += 1
+    return None
+
+
+MERGEABLE = ("changeNote",)       # 이어 붙여도 뜻이 안 바뀌는 누적 기록만 — 나머지 키는 사람이 고른다
+
+
+def merge_duplicate_note(text, key):
+    """같은 객체의 `key` 둘을 뒤쪽 자리 하나로 합친다(뒤 값 · 앞 값). 순수 함수 — 못 합치면 `None`.
+
+    재는 것: `locate_duplicate_key` 의 줄 쌍. 두 줄이 각각 `"key": "…"` 한 줄이고 앞 줄이 쉼표로
+    끝날 때만 고친다(앞 줄을 지워도 쉼표가 안 깨진다). 합친 결과가 JSON 으로 안 읽히면 `None`.
+    """
+    loc = locate_duplicate_key(text, key)
+    if not loc:
+        return None
+    lines = text.split("\n")
+    a, b = loc
+    head = '"' + key + '":'
+    la, lb = lines[a - 1].strip(), lines[b - 1].rstrip("\r")
+    if not (la.startswith(head) and la.endswith(",") and lb.strip().startswith(head)):
+        return None
+    va = json.loads("{" + la.rstrip(",") + "}")[key]
+    body = lb.strip()
+    comma = body.endswith(",")
+    vb = json.loads("{" + body.rstrip(",") + "}")[key]
+    if not (isinstance(va, str) and isinstance(vb, str)):
+        return None
+    indent = lb[: len(lb) - len(lb.lstrip())]
+    lines[b - 1] = indent + head + " " + json.dumps(vb + " · " + va, ensure_ascii=False) + ("," if comma else "")
+    del lines[a - 1]
+    out = "\n".join(lines)
+    try:
+        json.loads(out)
+    except ValueError:
+        return None
+    return out
+
+
 def is_stray(key, haystack):
     """이 키를 읽는 코드가 소스 뭉치에 있는가 — 없으면 **아무도 안 읽는다**. 순수 함수."""
     if key in KNOWN_DYNAMIC:
@@ -128,11 +217,14 @@ def is_stray(key, haystack):
 def main(argv):
     only = None
     fail_only = False
+    merge = False
     for arg in argv[1:]:
         if arg.startswith("--only="):
             only = arg.split("=", 1)[1]
         elif arg == "--fail-only":
             fail_only = True
+        elif arg == "--merge-notes":
+            merge = True
 
     haystack = _source_haystack()
     dirs = audit_content.subject_dirs()
@@ -153,8 +245,18 @@ def main(argv):
             except (OSError, ValueError):
                 continue
             chapters += 1
+            if merge:
+                for key in [k for k in duplicate_keys(text) if k in MERGEABLE]:
+                    fixed = merge_duplicate_note(text, key)
+                    if fixed is not None:
+                        with open(os.path.join(d, name), "w", encoding="utf-8", newline="") as fh:
+                            fh.write(fixed)
+                        print("[합침] " + subject + " " + name[:-5] + " — " + key)
+                        text = fixed
             for key in duplicate_keys(text):
-                dupes.append(subject + " " + name[:-5] + " — " + key)
+                loc = locate_duplicate_key(text, key)
+                where = (" (줄 %d · %d)" % loc) if loc else ""
+                dupes.append(subject + " " + name[:-5] + " — " + key + where)
             keys = {}
             _walk_keys(data, keys)
             for k, n in keys.items():

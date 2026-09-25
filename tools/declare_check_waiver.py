@@ -3,7 +3,8 @@ r"""새 검사를 열 때 **아직 못 따라온 과목·챕터의 선언**을 �
 
     python tools/declare_check_waiver.py --key=prompt_ramp --why="…" --except=<과목>,<과목>
     python tools/declare_check_waiver.py --key=prompt_ramp --pending=<과목> --chapters=ch08,ch09 --why="…"
-    …위 둘 다 `--apply` 를 붙여야 실제로 쓴다(기본은 무엇이 바뀌는지만 본다).
+    python tools/declare_check_waiver.py --key=formula_line_wide --pending-map="과목:ch01,ch02;과목2:ch05" --why="…"
+    …위 셋 다 `--apply` 를 붙여야 실제로 쓴다(기본은 무엇이 바뀌는지만 본다).
 
 ★ **왜 열렸나.** AGENTS 「close 의 정의」가 *[발화 생략]* 로
   기본값을 뒤집었다. 옳은 기본값인데, 그 대가로 **검사를 하나 열 때마다 아직 못 따라온
@@ -93,12 +94,37 @@ def save_text(path, text, where, key):
         fh.write(text)
 
 
+def _chapter_files(spec):
+    return [c.strip() if c.strip().endswith(".json") else c.strip() + ".json"
+            for c in (spec or "").split(",") if c.strip()]
+
+
+def pending_map(args):
+    """{과목: [chNN.json…]} — `--pending`+`--chapters`(한 과목) 와 `--pending-map`(여러 과목) 을 한 표로.
+
+    ★ `--pending-map` 은 2026-09-25 에 열렸다: 새 검사 하나(C75)가 17과목에 걸렸는데 한 과목씩 `--apply` 하면
+      `bulk_apply_guard` 가 요구하는 「빈 트리」를 17번 만들어야 했다(병렬 세션 중엔 창이 거의 안 열린다).
+      형식 `과목:ch01,ch02;과목2:ch05` — 과목 안 구분은 쉼표, 과목 사이는 세미콜론.
+    """
+    out = {}
+    if args.pending:
+        for s in args.pending.split(","):
+            if s.strip():
+                out[s.strip()] = _chapter_files(args.chapters)
+    for entry in (getattr(args, "pending_map", "") or "").split(";"):
+        if ":" not in entry:
+            continue
+        subject, chapters = entry.split(":", 1)
+        if subject.strip():
+            out.setdefault(subject.strip(), [])
+            out[subject.strip()] += [c for c in _chapter_files(chapters) if c not in out[subject.strip()]]
+    return out
+
+
 def plan(args):
     """[(과목, 경로, 자리, 값, 사유)] — 순수에 가깝게. 무엇이 바뀌는지 먼저 낸다."""
     skip = {s.strip() for s in (args.exclude or "").split(",") if s.strip()}
-    want = {s.strip() for s in (args.pending or "").split(",") if s.strip()}
-    chapters = [c.strip() if c.strip().endswith(".json") else c.strip() + ".json"
-                for c in (args.chapters or "").split(",") if c.strip()]
+    want = pending_map(args)
     rows = []
     for folder in subject_dirs(os.path.join(ROOT, "data")):
         subject = os.path.basename(folder)
@@ -110,7 +136,7 @@ def plan(args):
             if subject not in want:
                 continue
             have = (idx.get("pendingChapters") or {}).get(args.key) or []
-            add = [c for c in chapters if c not in have]
+            add = [c for c in want[subject] if c not in have]
             if add:
                 rows.append((subject, path, "pendingChapters", add, args.why))
             continue
@@ -130,12 +156,16 @@ def main():
                     help="이 과목들은 건드리지 않는다(= 검사를 켤 과목)")
     ap.add_argument("--pending", default="", help="이 과목의 pendingChapters 에 적는다")
     ap.add_argument("--chapters", default="", help="--pending 과 함께 — chNN,chNN")
+    ap.add_argument("--pending-map", dest="pending_map", default="",
+                    help="여러 과목을 한 번에 — `과목:ch01,ch02;과목2:ch05`(pending_map 독스트링)")
     ap.add_argument("--apply", action="store_true")
     args = ap.parse_args()
     if not args.why.strip():
         sys.exit("--why 가 비었다 — 사유 없는 면제는 면제가 아니다")
     if args.pending and not args.chapters:
         sys.exit("--pending 에는 --chapters 가 필요하다")
+    if args.pending_map and not pending_map(args):
+        sys.exit("--pending-map 형식이 틀렸다 — `과목:ch01,ch02;과목2:ch05`")
 
     rows = plan(args)
     if not rows:

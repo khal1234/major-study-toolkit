@@ -69,7 +69,24 @@ def _shared_site_root():
     return ROOT
 
 
-SHARED_ROOT = _shared_site_root()
+def _template_root():
+    """템플릿 정본 경로. 격리 검증은 main 폴백 대신 명시한 사본을 쓴다.
+
+    평소에는 main의 공통 템플릿을 계속 공유한다. 다만 공통 템플릿을 고치는 브랜치에서
+    그 사본을 검증할 때는 ``JEONGRI_TEMPLATE_ROOT``를 준다. 이 스위치가 없으면
+    수정 전 main을 읽어 테스트가 초록이어도 산출물에는 수정이 없는 거짓 통과가 된다.
+    """
+    forced = os.environ.get("JEONGRI_TEMPLATE_ROOT")
+    if not forced:
+        return _shared_site_root()
+    root = os.path.abspath(forced)
+    required = os.path.join(root, "site", "template")
+    if not os.path.isdir(required):
+        raise ValueError("JEONGRI_TEMPLATE_ROOT에 site/template가 없다: " + root)
+    return root
+
+
+SHARED_ROOT = _template_root()
 
 
 def _shared_or_local(*parts):
@@ -79,6 +96,10 @@ def _shared_or_local(*parts):
 
 TEMPLATE = _shared_or_local("site", "template", "viewer.template.html")
 TABLES_TEMPLATE = _shared_or_local("site", "template", "tables.template.html")
+# 과목 사이 한 벌인 표(물질 무관 격자). `_` 로 시작하는 폴더는 chNN.json 이 없어 과목으로 안 잡힌다
+#   (`audit_content.subject_dirs`).
+COMMON_TABLES = os.path.join(ROOT, "data", "_공통표")
+COMMON_COMPRESSIBILITY = os.path.join(COMMON_TABLES, "compressibility.json")
 # ★★ **두 화면이 함께 쓰는 조각** (신설 2026-08-18). 스포트라이트 튜토리얼은 챕터 뷰어와
 #   별책 표 뷰어 **둘 다**에서 돈다 — 두 템플릿에 같은 코드를 두면 그 순간 두 벌이 되고
 #   한쪽만 고쳐진다(이 리포가 «재사용 = 복제 = 갈라짐» 으로 여러 번 닫은 자리).
@@ -362,9 +383,9 @@ def build_chapter(template, subject, cfg, ch_path, chapter_nav, review_enabled, 
     # 쓰였고 링크는 그 밖에 있었다 — 플래그가 없어서가 아니라 **한 곳에만 적용**해서 난 결함이다.
     # 템플릿에 과목 이름을 하드코딩하지 않는다: 공통 파일은 과목을 몰라야 한다
     # (serve_site.vbs 가 포트를 폴더 이름으로 정하는 것과 같은 원칙).
-    steam_link = ('<a class="steam-table-link" href="tables.html" target="_blank"'
-                  ' rel="noopener">수증기 표</a>') if cfg.get("steamTables") else ""
-    html = html.replace("{{STEAM_LINK}}", steam_link)
+    # 2026-09-24 E18: 그 플래그(`steamTables`)는 `appendices` 선언으로 일반화됐다 — 링크와
+    # 페이지 생성이 여전히 **한 선언**을 본다(`appendix_links` · `build_appendix_page`).
+    html = html.replace("{{STEAM_LINK}}", appendix_links(subject, cfg))
     # 실험 페이지 단추 — `index.json` 의 그 장 항목 `labs: [{href, title}]` 가 정본이다
     # (2026-09-12, 사용자 *[발화 생략]*).
     # 과목 이름은 여기 없다 — 장 항목이 선언한 것만 붙는다.
@@ -436,7 +457,137 @@ def build_chapter(template, subject, cfg, ch_path, chapter_nav, review_enabled, 
             f.write(html)
     return out_path, mirror
 
-def build_tables_page(subject):
+_TABLES_LABEL_CACHE = {}
+
+
+def tables_label(subject):
+    """물성표 화면의 이름 — 물만 싣는 표는 「수증기 표」, 다른 물질(냉매·공기)도 싣는 표는 「상태량 표」.
+
+    재는 것: `data/<과목>/tables/steam.json` 에 `substances` 가 있는가(데이터가 정한다 — 과목 이름을 모른다).
+    왜: 사용자(2026-09-20) [발화 생략].
+    """
+    if subject not in _TABLES_LABEL_CACHE:
+        path = os.path.join(ROOT, "data", subject, "tables", "steam.json")
+        try:
+            with open(path, encoding="utf-8") as fh:
+                many = bool(json.load(fh).get("substances"))
+        except OSError:
+            many = False
+        _TABLES_LABEL_CACHE[subject] = "상태량 표" if many else "수증기 표"
+    return _TABLES_LABEL_CACHE[subject]
+
+
+# ── 부록 — 과목이 선언한 참조표 페이지 (신설 2026-09-24, 설계도 E18) ─────────────
+#
+# 사용자(전전 ch01 인박스 E18): *[발화 생략]*. 판정(2026-09-24 *[발화 생략]*):
+# 틀은 전 과목, 내용은 과목 선언.
+#
+# ★ 선언 = `SUBJECT_CONFIG[과목]["appendices"] = [{id, title, file}]`. `file` 은 `data/<과목>/`
+#   기준 경로이고 페이지는 `site/<과목>/<id>.html` 에 나온다. **링크와 페이지가 같은 목록을 본다** —
+#   2026-07-28 에 링크만 게이트 밖이라 공학수학 화면에 수증기 표가 떴던 부류를 구조로 막는다.
+# ★ 종류는 파일이 정한다: `steam.json` 이면 기존 물성표 뷰어(`build_tables_page`, 이름은
+#   `tables_label` 이 데이터로 정하므로 `title` 을 안 적는다), 그 밖은 범용 표
+#   (`{sections:[{heading, note?, columns, rows}]}`, 칸은 글자 또는 `{"svg": …}`).
+# 잠금 `test_checks.py::test_appendices_are_one_declaration`.
+
+APPENDIX_TEMPLATE = _shared_or_local("site", "template", "appendix.template.html")
+_APPENDIX_ID_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+
+
+def appendices_of(cfg):
+    """과목 설정의 부록 선언 목록(없으면 빈 목록). 형식이 틀리면 조용히 넘기지 않고 던진다."""
+    items = list((cfg or {}).get("appendices") or [])
+    seen = set()
+    for it in items:
+        aid = it.get("id", "")
+        if not _APPENDIX_ID_RE.match(aid) or aid in seen:
+            raise ValueError("appendices: id 가 비었거나 겹치거나 형식 밖이다: %r" % aid)
+        seen.add(aid)
+        if not it.get("file"):
+            raise ValueError("appendices[%s]: file 이 없다" % aid)
+        if not is_steam_appendix(it) and not it.get("title"):
+            raise ValueError("appendices[%s]: 범용 표는 title 이 있어야 한다" % aid)
+    return items
+
+
+def is_steam_appendix(item):
+    return os.path.basename(item.get("file", "")) == "steam.json"
+
+
+def appendix_title(subject, item):
+    return tables_label(subject) if is_steam_appendix(item) else item["title"]
+
+
+def appendix_links(subject, cfg):
+    """뷰어 머리의 부록 링크들. 선언 순서 그대로."""
+    return "".join(
+        '<a class="steam-table-link" href="' + it["id"] + '.html" target="_blank"'
+        ' rel="noopener">' + _htmlmod.escape(appendix_title(subject, it), quote=False) + '</a>'
+        for it in appendices_of(cfg))
+
+
+def render_appendix_body(data):
+    """범용 부록 JSON → 본문 HTML. 순수 함수 — 테스트가 직접 부른다.
+
+    글자 칸은 이스케이프한다. `{"svg": …}` 칸만 그대로 싣는다(생성기 산출물 — 손으로 쓰지 않는다).
+    """
+    out = []
+    for sec in data.get("sections") or []:
+        cols = sec.get("columns") or []
+        out.append('<section class="appx-section">')
+        out.append("<h2>" + _htmlmod.escape(sec.get("heading", ""), quote=False) + "</h2>")
+        if sec.get("note"):
+            out.append('<p class="appx-note">' + _htmlmod.escape(sec["note"], quote=False) + "</p>")
+        out.append('<div class="appx-wrap"><table><thead><tr>')
+        out.extend("<th>" + _htmlmod.escape(c, quote=False) + "</th>" for c in cols)
+        out.append("</tr></thead><tbody>")
+        for row in sec.get("rows") or []:
+            if len(row) != len(cols):
+                raise ValueError("부록 표 %r: 칸 수 %d ≠ 머리 %d — %r"
+                                 % (sec.get("heading"), len(row), len(cols), row))
+            out.append("<tr>")
+            for cell in row:
+                if isinstance(cell, dict):
+                    if not str(cell.get("svg", "")).lstrip().startswith("<svg"):
+                        raise ValueError("부록 표 %r: 사전 칸은 {\"svg\": \"<svg…\"} 만 된다"
+                                         % sec.get("heading"))
+                    out.append('<td class="appx-sym">' + cell["svg"] + "</td>")
+                else:
+                    out.append("<td>" + _htmlmod.escape(str(cell), quote=False) + "</td>")
+            out.append("</tr>")
+        out.append("</tbody></table></div></section>")
+    if not out:
+        raise ValueError("부록 JSON 에 sections 가 없다")
+    return "\n".join(out)
+
+
+def build_appendix_page(subject, item):
+    """선언 하나 → `site/<과목>/<id>.html`. 물성표는 기존 뷰어로 보낸다."""
+    if is_steam_appendix(item):
+        return build_tables_page(subject, page_id=item["id"])
+    src = os.path.join(ROOT, "data", subject, item["file"])
+    with open(src, encoding="utf-8") as fh:
+        data = json.load(fh)
+    body = render_appendix_body(data)
+    template = open(APPENDIX_TEMPLATE, encoding="utf-8").read()
+    html = (strip_dev_comments(template)
+            .replace("{{SUBJECT}}", _htmlmod.escape(subject, quote=False))
+            .replace("{{TITLE}}", _htmlmod.escape(item["title"], quote=False))
+            .replace("{{SOURCE}}", _htmlmod.escape(data.get("source", ""), quote=False))
+            .replace("{{BODY}}", body))
+    if "{{" in html:
+        raise ValueError(APPENDIX_TEMPLATE + ": unfilled template marker remains")
+    for c in BAD_CHARS:
+        if c in html:
+            raise ValueError(src + ": control char " + hex(ord(c)) + " found")
+    out_path = os.path.join(out_root(), "site", subject, item["id"] + ".html")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(html)
+    return out_path
+
+
+def build_tables_page(subject, page_id="tables"):
     """과목별 물성표 페이지(site/<과목>/tables.html) 생성. `subject`는 `data/<과목>/` 폴더 이름.
 
     ★ **과목 이름을 하드코딩하지 않는다** (2026-09-03 결함 수정 — AGENTS 「공통 도구에 과목별
@@ -463,8 +614,18 @@ def build_tables_page(subject):
         if "</script" in tut_json.lower():
             raise ValueError(tut_path + ": data contains '</script' — cannot inject safely")
 
+    # 압축성 선도 격자는 물질과 무관해 과목 사이 한 벌(`data/_공통표/`, `gen_compressibility.py`)이다 —
+    #   표 페이지를 여는 과목은 전부 같은 격자를 받는다. 파일이 없으면 `null` 이고 그 탭이 안 뜬다.
+    z_path = COMMON_COMPRESSIBILITY
+    z_json = "null"
+    if os.path.isfile(z_path):
+        with open(z_path, encoding="utf-8") as fh:
+            z_json = json.dumps(json.load(fh), ensure_ascii=False)
+
     html = (strip_dev_comments(include_parts(template))
+            .replace("{{COMPRESS_JSON}}", z_json)
             .replace("{{SUBJECT}}", subject)
+            .replace("{{TABLES_LABEL}}", tables_label(subject))
             .replace("{{STEAM_JSON}}", steam_json)
             .replace("{{TUTORIAL_JSON}}", tut_json))
     if "{{" in html:
@@ -477,7 +638,7 @@ def build_tables_page(subject):
     if "var STEAM = " not in html:
         raise ValueError(TABLES_TEMPLATE + ": reinjection marker broken")
 
-    out_path = os.path.join(out_root(), "site", subject, "tables.html")
+    out_path = os.path.join(out_root(), "site", subject, page_id + ".html")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(html)
